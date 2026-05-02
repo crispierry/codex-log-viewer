@@ -1,0 +1,43 @@
+name: Bug report
+description: Report incorrect parsing, analytics, CLI, or dashboard behavior.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please do not paste unsanitized Codex logs. Use small redacted snippets or synthetic fixtures.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What went wrong?
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: input
+    id: codex-version
+    attributes:
+      label: Codex version
+      placeholder: "codex-cli 0.128.0-alpha.1"
+  - type: textarea
+    id: fixture
+    attributes:
+      label: Sanitized fixture or event shape
+      description: Paste only redacted, minimal JSONL snippets.
+      render: json
+  - type: textarea
+    id: notes
+    attributes:
+      label: Additional context

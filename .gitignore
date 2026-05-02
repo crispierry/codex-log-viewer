@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+build/
+coverage/
+
+# Local environment
+.env
+.env.*
+!.env.example
+
+# OS/editor files
+.DS_Store
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# Local Codex/private log material
+fixtures/private/
+*.local.jsonl
+*.secret.jsonl
+codex-logs/
+
+# Runtime caches
+.turbo/
+.vite/
+.cache/

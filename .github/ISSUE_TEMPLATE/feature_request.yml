@@ -1,0 +1,40 @@
+name: Feature request
+description: Suggest a parser, analytics, CLI, dashboard, or export feature.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to understand or do with Codex logs?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Parser
+        - Analytics
+        - Dashboard
+        - CLI
+        - Exports
+        - Privacy/redaction
+        - Documentation
+        - Other
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: textarea
+    id: privacy
+    attributes:
+      label: Privacy considerations
+      description: Would this expose, store, export, or transform sensitive log content?
