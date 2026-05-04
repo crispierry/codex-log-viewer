@@ -1,4 +1,4 @@
-import { StrictMode, useEffect, useMemo, useState, type ReactNode } from "react";
+import { StrictMode, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 
@@ -98,6 +98,9 @@ function App() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const [refreshKey, setRefreshKey] = useState(0);
+  const projectsRequestId = useRef(0);
+  const summaryRequestId = useRef(0);
+  const detailRequestId = useRef(0);
 
   const queryString = useMemo(
     () => buildQuery({ project, since, until, paths }),
@@ -105,16 +108,27 @@ function App() {
   );
 
   useEffect(() => {
+    const requestId = projectsRequestId.current + 1;
+    projectsRequestId.current = requestId;
     const pathQuery = buildPathQuery(paths);
     fetchJson<{ projects: ProjectListItem[] }>(`/api/projects?${pathQuery}`)
-      .then((data) => setProjects(data.projects))
-      .catch((fetchError: Error) => setError(fetchError.message));
+      .then((data) => {
+        if (projectsRequestId.current !== requestId) return;
+        setProjects(data.projects);
+      })
+      .catch((fetchError: Error) => {
+        if (projectsRequestId.current !== requestId) return;
+        setError(fetchError.message);
+      });
   }, [paths, refreshKey]);
 
   useEffect(() => {
+    const requestId = summaryRequestId.current + 1;
+    summaryRequestId.current = requestId;
     setLoading(true);
     fetchJson<{ summary: ProjectSummary }>(`/api/summary?${queryString}`)
       .then((data) => {
+        if (summaryRequestId.current !== requestId) return;
         setSummary(data.summary);
         setError(undefined);
         if (selectedSessionId && !data.summary.sessions.some((session) => session.sessionId === selectedSessionId)) {
@@ -122,22 +136,39 @@ function App() {
           setSessionDetail(undefined);
         }
       })
-      .catch((fetchError: Error) => setError(fetchError.message))
-      .finally(() => setLoading(false));
-  }, [queryString, refreshKey, selectedSessionId]);
+      .catch((fetchError: Error) => {
+        if (summaryRequestId.current !== requestId) return;
+        setError(fetchError.message);
+      })
+      .finally(() => {
+        if (summaryRequestId.current !== requestId) return;
+        setLoading(false);
+      });
+  }, [queryString, refreshKey]);
 
   useEffect(() => {
     if (!selectedSessionId) {
       setSessionDetail(undefined);
       return;
     }
+    const requestId = detailRequestId.current + 1;
+    detailRequestId.current = requestId;
     const detailQuery = new URLSearchParams(queryString);
     detailQuery.set("sessionId", selectedSessionId);
     setDetailLoading(true);
     fetchJson<SessionDetail>(`/api/session?${detailQuery.toString()}`)
-      .then((data) => setSessionDetail(data))
-      .catch((fetchError: Error) => setError(fetchError.message))
-      .finally(() => setDetailLoading(false));
+      .then((data) => {
+        if (detailRequestId.current !== requestId) return;
+        setSessionDetail(data);
+      })
+      .catch((fetchError: Error) => {
+        if (detailRequestId.current !== requestId) return;
+        setError(fetchError.message);
+      })
+      .finally(() => {
+        if (detailRequestId.current !== requestId) return;
+        setDetailLoading(false);
+      });
   }, [selectedSessionId, queryString]);
 
   const filteredSessions = useMemo(() => {
@@ -155,15 +186,41 @@ function App() {
 
   function applyPaths() {
     setPaths(pathDraft.split(/\n|,/).map((path) => path.trim()).filter(Boolean));
+    beginFilterChange();
     setProject("All Projects");
-    setSelectedSessionId(undefined);
   }
 
   function resetPaths() {
     setPathDraft("");
     setPaths([]);
+    beginFilterChange();
     setProject("All Projects");
+  }
+
+  function selectProject(nextProject: string) {
+    beginFilterChange();
+    setProject(nextProject);
+  }
+
+  function selectSession(sessionId: string) {
+    detailRequestId.current += 1;
+    setSessionDetail(undefined);
+    setSelectedSessionId(sessionId);
+  }
+
+  function clearSelection() {
+    detailRequestId.current += 1;
     setSelectedSessionId(undefined);
+    setSessionDetail(undefined);
+    setDetailLoading(false);
+    setSessionQuery("");
+  }
+
+  function beginFilterChange() {
+    clearSelection();
+    setSummary(undefined);
+    setError(undefined);
+    setLoading(true);
   }
 
   function exportUrl(format: "json" | "csv") {
@@ -180,7 +237,10 @@ function App() {
           <p>Everything runs locally. Pick sources, explore projects, inspect sessions, and export from here.</p>
         </div>
         <div className="toolbar">
-          <button type="button" onClick={() => setRefreshKey((value) => value + 1)}>
+          <button type="button" onClick={() => {
+            clearSelection();
+            setRefreshKey((value) => value + 1);
+          }}>
             Refresh
           </button>
           <a className="button" href={exportUrl("json")}>JSON</a>
@@ -212,7 +272,7 @@ function App() {
           <Panel title="Filters">
             <label>
               Project
-              <select value={project} onChange={(event) => setProject(event.target.value)}>
+              <select value={project} onChange={(event) => selectProject(event.target.value)}>
                 <option>All Projects</option>
                 {projects.map((item) => (
                   <option key={item.project}>{item.project}</option>
@@ -221,11 +281,25 @@ function App() {
             </label>
             <label>
               Since
-              <input type="date" value={since} onChange={(event) => setSince(event.target.value)} />
+              <input
+                type="date"
+                value={since}
+                onChange={(event) => {
+                  beginFilterChange();
+                  setSince(event.target.value);
+                }}
+              />
             </label>
             <label>
               Until
-              <input type="date" value={until} onChange={(event) => setUntil(event.target.value)} />
+              <input
+                type="date"
+                value={until}
+                onChange={(event) => {
+                  beginFilterChange();
+                  setUntil(event.target.value);
+                }}
+              />
             </label>
           </Panel>
 
@@ -234,7 +308,7 @@ function App() {
               <button
                 type="button"
                 className={project === "All Projects" ? "projectItem active" : "projectItem"}
-                onClick={() => setProject("All Projects")}
+                onClick={() => selectProject("All Projects")}
               >
                 <span>All Projects</span>
                 <strong>{formatNumber(projects.reduce((sum, item) => sum + item.totalTokens, 0))}</strong>
@@ -244,7 +318,7 @@ function App() {
                   type="button"
                   key={item.project}
                   className={project === item.project ? "projectItem active" : "projectItem"}
-                  onClick={() => setProject(item.project)}
+                  onClick={() => selectProject(item.project)}
                 >
                   <span>{item.project}</span>
                   <strong>{formatNumber(item.totalTokens)}</strong>
@@ -256,6 +330,8 @@ function App() {
 
         <section className="content">
           {error ? <div className="error">{error}</div> : null}
+
+          {!summary && loading ? <div className="empty compact">Scanning selected logs</div> : null}
 
           {summary ? (
             <>
@@ -301,7 +377,7 @@ function App() {
                   <SessionTable
                     sessions={filteredSessions}
                     selectedSessionId={selectedSessionId}
-                    onSelect={setSelectedSessionId}
+                    onSelect={selectSession}
                   />
                 </Panel>
 

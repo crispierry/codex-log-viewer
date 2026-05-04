@@ -21,6 +21,7 @@ export async function startServer(options: ServerOptions = {}): Promise<{ url: s
   const host = options.host ?? "127.0.0.1";
   const port = options.port ?? 3210;
   const webDir = options.webDir ?? defaultWebDir();
+  const keepAlive = setInterval(() => undefined, 60_000);
 
   const server = createServer(async (request, response) => {
     try {
@@ -37,7 +38,13 @@ export async function startServer(options: ServerOptions = {}): Promise<{ url: s
   const actualPort = typeof address === "object" && address ? address.port : port;
   return {
     url: `http://${host}:${actualPort}`,
-    close: () => new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())))
+    close: () =>
+      new Promise((resolve, reject) =>
+        server.close((error) => {
+          clearInterval(keepAlive);
+          return error ? reject(error) : resolve();
+        })
+      )
   };
 }
 
