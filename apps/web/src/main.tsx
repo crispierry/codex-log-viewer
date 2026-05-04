@@ -103,14 +103,14 @@ function App() {
   const detailRequestId = useRef(0);
 
   const queryString = useMemo(
-    () => buildQuery({ project, since, until, paths }),
-    [project, since, until, paths]
+    () => buildQuery({ project, since, until, paths, refreshKey }),
+    [project, since, until, paths, refreshKey]
   );
 
   useEffect(() => {
     const requestId = projectsRequestId.current + 1;
     projectsRequestId.current = requestId;
-    const pathQuery = buildPathQuery(paths);
+    const pathQuery = buildPathQuery(paths, refreshKey);
     fetchJson<{ projects: ProjectListItem[] }>(`/api/projects?${pathQuery}`)
       .then((data) => {
         if (projectsRequestId.current !== requestId) return;
@@ -311,7 +311,10 @@ function App() {
                 onClick={() => selectProject("All Projects")}
               >
                 <span>All Projects</span>
-                <strong>{formatNumber(projects.reduce((sum, item) => sum + item.totalTokens, 0))}</strong>
+                <strong aria-label={`${formatNumber(projects.reduce((sum, item) => sum + item.totalTokens, 0))} total tokens`}>
+                  <span>{formatNumber(projects.reduce((sum, item) => sum + item.totalTokens, 0))}</span>
+                  <em>tokens</em>
+                </strong>
               </button>
               {projects.map((item) => (
                 <button
@@ -321,7 +324,10 @@ function App() {
                   onClick={() => selectProject(item.project)}
                 >
                   <span>{item.project}</span>
-                  <strong>{formatNumber(item.totalTokens)}</strong>
+                  <strong aria-label={`${formatNumber(item.totalTokens)} tokens`}>
+                    <span>{formatNumber(item.totalTokens)}</span>
+                    <em>tokens</em>
+                  </strong>
                 </button>
               ))}
             </div>
@@ -590,23 +596,26 @@ function buildQuery({
   project,
   since,
   until,
-  paths
+  paths,
+  refreshKey
 }: {
   project: string;
   since: string;
   until: string;
   paths: string[];
+  refreshKey: number;
 }): string {
-  const query = new URLSearchParams(buildPathQuery(paths));
+  const query = new URLSearchParams(buildPathQuery(paths, refreshKey));
   if (project !== "All Projects") query.set("project", project);
   if (since) query.set("since", since);
   if (until) query.set("until", until);
   return query.toString();
 }
 
-function buildPathQuery(paths: string[]): string {
+function buildPathQuery(paths: string[], refreshKey = 0): string {
   const query = new URLSearchParams();
   for (const path of paths) query.append("path", path);
+  if (refreshKey > 0) query.set("refresh", String(refreshKey));
   return query.toString();
 }
 

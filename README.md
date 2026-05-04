@@ -107,6 +107,7 @@ npm run build
 - [Fixture guidelines](docs/fixture-guidelines.md)
 - [Milestones](docs/milestones.md)
 - [Usage](docs/usage.md)
+- [UI test plan](docs/ui-test-plan.md)
 
 ## Development Principles
 

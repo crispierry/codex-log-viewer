@@ -241,8 +241,23 @@ textarea {
 }
 
 .projectItem strong {
+  display: grid;
+  justify-items: end;
+  gap: 1px;
   color: #2f7d8c;
+}
+
+.projectItem strong span {
   font-size: 12px;
+}
+
+.projectItem strong em {
+  color: #657285;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0;
 }
 
 .projectItem.active,

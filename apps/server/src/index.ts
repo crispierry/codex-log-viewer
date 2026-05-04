@@ -6,6 +6,7 @@ import {
   loadCorpus,
   summaryToCsv,
   summarizeParsedCorpus,
+  type LoadedCorpus,
   type SummaryOptions
 } from "@codex-log-viewer/analytics";
 
@@ -16,6 +17,14 @@ export interface ServerOptions {
   webDir?: string;
   openUrl?: boolean;
 }
+
+interface CorpusCacheEntry {
+  expiresAt: number;
+  promise: Promise<LoadedCorpus>;
+}
+
+const corpusCache = new Map<string, CorpusCacheEntry>();
+const CACHE_TTL_MS = 30_000;
 
 export async function startServer(options: ServerOptions = {}): Promise<{ url: string; close: () => Promise<void> }> {
   const host = options.host ?? "127.0.0.1";
@@ -56,13 +65,13 @@ async function handleRequest(request: IncomingMessage, response: ServerResponse,
   }
 
   if (url.pathname === "/api/projects") {
-    const corpus = await loadCorpus({ paths: pathsFromQuery(url, options.paths) });
+    const corpus = await loadCachedCorpus(url, options.paths);
     sendJson(response, 200, { projects: corpus.projects });
     return;
   }
 
   if (url.pathname === "/api/summary") {
-    const loaded = await loadCorpus({ paths: pathsFromQuery(url, options.paths) });
+    const loaded = await loadCachedCorpus(url, options.paths);
     const summaryOptions = summaryOptionsFromQuery(url, options.paths);
     const project = url.searchParams.get("project");
     sendJson(response, 200, {
@@ -75,7 +84,7 @@ async function handleRequest(request: IncomingMessage, response: ServerResponse,
   }
 
   if (url.pathname === "/api/sessions") {
-    const loaded = await loadCorpus({ paths: pathsFromQuery(url, options.paths) });
+    const loaded = await loadCachedCorpus(url, options.paths);
     const summary = summarizeParsedCorpus(loaded.corpus, summaryOptionsFromQuery(url, options.paths));
     sendJson(response, 200, { sessions: summary.sessions });
     return;
@@ -87,7 +96,7 @@ async function handleRequest(request: IncomingMessage, response: ServerResponse,
       sendJson(response, 400, { error: "sessionId is required" });
       return;
     }
-    const loaded = await loadCorpus({ paths: pathsFromQuery(url, options.paths) });
+    const loaded = await loadCachedCorpus(url, options.paths);
     const file = loaded.corpus.files.find((candidate) => candidate.sessionId === sessionId);
     const session = loaded.corpus.sessions.find((candidate) => candidate.sessionId === sessionId);
     if (!file) {
@@ -113,7 +122,7 @@ async function handleRequest(request: IncomingMessage, response: ServerResponse,
   }
 
   if (url.pathname === "/api/export") {
-    const loaded = await loadCorpus({ paths: pathsFromQuery(url, options.paths) });
+    const loaded = await loadCachedCorpus(url, options.paths);
     const summary = summarizeParsedCorpus(loaded.corpus, summaryOptionsFromQuery(url, options.paths));
     const format = url.searchParams.get("format") === "csv" ? "csv" : "json";
     const filename = `codex-log-viewer-${summary.project.replaceAll(/[^a-z0-9-]+/gi, "-").toLowerCase()}.${format}`;
@@ -128,6 +137,28 @@ async function handleRequest(request: IncomingMessage, response: ServerResponse,
   await serveStatic(url.pathname, response, options.webDir ?? defaultWebDir());
 }
 
+function loadCachedCorpus(url: URL, fallbackPaths?: string[]): Promise<LoadedCorpus> {
+  const paths = pathsFromQuery(url, fallbackPaths);
+  const forceRefresh = url.searchParams.has("refresh");
+  const key = cacheKey(paths);
+  const now = Date.now();
+  const cached = corpusCache.get(key);
+
+  if (!forceRefresh && cached && cached.expiresAt > now) {
+    return cached.promise;
+  }
+
+  const promise = loadCorpus({ paths }).catch((error) => {
+    corpusCache.delete(key);
+    throw error;
+  });
+  corpusCache.set(key, {
+    expiresAt: now + CACHE_TTL_MS,
+    promise
+  });
+  return promise;
+}
+
 function summaryOptionsFromQuery(url: URL, fallbackPaths?: string[]): SummaryOptions {
   return {
     paths: pathsFromQuery(url, fallbackPaths),
@@ -140,6 +171,10 @@ function summaryOptionsFromQuery(url: URL, fallbackPaths?: string[]): SummaryOpt
 function pathsFromQuery(url: URL, fallbackPaths?: string[]): string[] | undefined {
   const queryPaths = url.searchParams.getAll("path").filter(Boolean);
   return queryPaths.length > 0 ? queryPaths : fallbackPaths;
+}
+
+function cacheKey(paths: string[] | undefined): string {
+  return paths && paths.length > 0 ? [...paths].sort().join("\n") : "__default__";
 }
 
 async function serveStatic(pathname: string, response: ServerResponse, webDir: string): Promise<void> {

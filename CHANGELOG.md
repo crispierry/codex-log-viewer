@@ -14,3 +14,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Promoted project selection, source paths, exports, searchable sessions, and session details into the dashboard.
 - Updated documentation to reflect the dashboard-first product workflow.
 - Fixed dashboard filter/session state races so project selections and session details update reliably.
+- Added browser regression coverage and a UI test plan for dashboard workflows.

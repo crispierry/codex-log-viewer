@@ -13,12 +13,15 @@
   "scripts": {
     "build": "npm run build -w @codex-log-viewer/parser && npm run build -w @codex-log-viewer/analytics && npm run build -w @codex-log-viewer/server && npm run build -w @codex-log-viewer/cli && npm run build -w @codex-log-viewer/web",
     "test": "npm run test -w @codex-log-viewer/parser && npm run test -w @codex-log-viewer/analytics",
+    "test:e2e": "playwright test",
+    "test:all": "npm test && npm run lint && npm run test:e2e",
     "lint": "npm run build",
     "dev": "npm run dev -w @codex-log-viewer/web",
     "serve": "npm run build && npm run start -w @codex-log-viewer/server",
     "cli": "npm run build -w @codex-log-viewer/parser && npm run build -w @codex-log-viewer/analytics && npm run build -w @codex-log-viewer/server && npm run build -w @codex-log-viewer/cli && node apps/cli/dist/index.js"
   },
   "devDependencies": {
+    "@playwright/test": "^1.59.1",
     "@types/node": "^24.0.0",
     "@vitejs/plugin-react": "^5.0.0",
     "typescript": "^5.9.0",

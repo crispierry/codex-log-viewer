@@ -30,3 +30,5 @@ codex-logs/
 .vite/
 .cache/
 *.tsbuildinfo
+test-results/
+playwright-report/
