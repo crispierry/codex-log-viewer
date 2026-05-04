@@ -41,12 +41,14 @@ The product should answer:
 - [x] Break metrics down by model and session
 - [x] Export JSON and CSV summaries
 - [x] Render a local dashboard from the same analytics layer
+- [x] Select data sources, projects, date ranges, exports, and sessions from the front end
+- [x] Inspect session details from the front end
 
 ## Post-MVP Enhancements
 
 - Git-root based grouping
 - User-defined alias configuration file
-- Raw event inspector in the dashboard
+- Full raw event payload explorer in the dashboard
 - Redacted detailed export mode
 - API-equivalent cost estimates
 - Persistent local cache for very large histories

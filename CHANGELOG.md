@@ -11,3 +11,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Added TypeScript parser, analytics package, CLI, local dashboard server, and React dashboard.
 - Added sanitized Codex fixture coverage and unit tests.
 - Added GitHub Actions CI.
+- Promoted project selection, source paths, exports, searchable sessions, and session details into the dashboard.

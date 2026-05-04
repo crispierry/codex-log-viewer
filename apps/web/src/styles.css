@@ -16,10 +16,40 @@ body {
   margin: 0;
 }
 
+button,
+.button,
+select,
+input,
+textarea {
+  font: inherit;
+}
+
+button,
+.button {
+  min-height: 36px;
+  border: 1px solid #b9c7d7;
+  border-radius: 6px;
+  padding: 7px 11px;
+  color: #172233;
+  background: #fff;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+button:hover,
+.button:hover {
+  background: #eef4f7;
+}
+
+button.secondary {
+  color: #4f5f73;
+  background: #f6f8fb;
+}
+
 main {
-  width: min(1440px, 100%);
+  width: min(1720px, 100%);
   margin: 0 auto;
-  padding: 24px;
+  padding: 20px;
 }
 
 .topbar {
@@ -27,11 +57,12 @@ main {
   align-items: flex-start;
   justify-content: space-between;
   gap: 24px;
-  margin-bottom: 22px;
+  margin-bottom: 18px;
 }
 
 h1,
 h2,
+h3,
 p {
   margin: 0;
 }
@@ -42,13 +73,31 @@ h1 {
 }
 
 h2 {
-  font-size: 16px;
-  margin-bottom: 16px;
+  font-size: 15px;
+  margin-bottom: 14px;
+}
+
+h3 {
+  font-size: 13px;
+  margin: 18px 0 8px;
 }
 
 p {
   color: #657285;
   margin-top: 4px;
+}
+
+.toolbar,
+.row,
+.tableTools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.toolbar {
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .status {
@@ -60,11 +109,22 @@ p {
   font-size: 13px;
 }
 
-.controls {
+.workspace {
   display: grid;
-  grid-template-columns: minmax(240px, 1fr) repeat(2, minmax(160px, 220px));
+  grid-template-columns: 320px minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.sidebar {
+  display: grid;
   gap: 12px;
-  margin-bottom: 18px;
+  position: sticky;
+  top: 16px;
+}
+
+.content {
+  min-width: 0;
 }
 
 label {
@@ -76,14 +136,26 @@ label {
 }
 
 select,
-input {
-  min-height: 40px;
+input,
+textarea {
+  width: 100%;
+  min-height: 38px;
   border: 1px solid #c9d3df;
   border-radius: 6px;
   padding: 8px 10px;
   color: #18212f;
   background: #fff;
-  font: inherit;
+}
+
+textarea {
+  min-height: 118px;
+  resize: vertical;
+  line-height: 1.35;
+}
+
+.hint {
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .error {
@@ -110,7 +182,7 @@ input {
 }
 
 .metric {
-  min-height: 92px;
+  min-height: 88px;
   padding: 14px;
   display: grid;
   align-content: space-between;
@@ -122,7 +194,7 @@ input {
 }
 
 .metric strong {
-  font-size: 25px;
+  font-size: 24px;
   overflow-wrap: anywhere;
 }
 
@@ -136,9 +208,47 @@ input {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.sessionsGrid {
+  grid-template-columns: minmax(0, 1.35fr) minmax(360px, 0.65fr);
+}
+
 .panel {
-  padding: 16px;
+  padding: 15px;
   overflow: hidden;
+}
+
+.projectList {
+  display: grid;
+  gap: 6px;
+  max-height: 340px;
+  overflow: auto;
+}
+
+.projectItem {
+  width: 100%;
+  min-height: 44px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  text-align: left;
+}
+
+.projectItem span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.projectItem strong {
+  color: #2f7d8c;
+  font-size: 12px;
+}
+
+.projectItem.active,
+tr.selected {
+  background: #e8f3f5;
+  border-color: #85b8c0;
 }
 
 .bars {
@@ -190,6 +300,29 @@ input {
   border-radius: 6px;
 }
 
+.empty.compact {
+  height: 120px;
+}
+
+.tableTools {
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.tableTools input {
+  max-width: 280px;
+}
+
+.tableTools span {
+  color: #657285;
+  font-size: 13px;
+}
+
+.tableScroll {
+  max-height: 520px;
+  overflow: auto;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
@@ -208,12 +341,113 @@ th {
   color: #54647a;
   font-weight: 720;
   background: #f7f9fb;
+  position: sticky;
+  top: 0;
 }
 
 td {
   color: #253244;
-  max-width: 360px;
+  max-width: 340px;
   overflow-wrap: anywhere;
+}
+
+tbody tr {
+  cursor: pointer;
+}
+
+tbody tr:hover {
+  background: #f4f8fa;
+}
+
+.inspector {
+  display: grid;
+  gap: 10px;
+}
+
+dl {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+dl div {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 8px;
+}
+
+dt {
+  color: #657285;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chips span {
+  border: 1px solid #d4dce7;
+  border-radius: 999px;
+  padding: 4px 8px;
+  color: #405064;
+  background: #f8fafc;
+  font-size: 12px;
+}
+
+.messageList {
+  display: grid;
+  gap: 8px;
+  max-height: 420px;
+  overflow: auto;
+}
+
+.message {
+  border: 1px solid #dce4ee;
+  border-radius: 6px;
+  padding: 9px;
+  background: #fbfcfd;
+}
+
+.message.user {
+  border-color: #b7d7dd;
+}
+
+.message strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #405064;
+  font-size: 12px;
+}
+
+.message p {
+  color: #18212f;
+  white-space: pre-wrap;
+}
+
+details {
+  margin-top: 8px;
+}
+
+summary {
+  cursor: pointer;
+  color: #405064;
+  font-weight: 700;
+}
+
+pre {
+  overflow: auto;
+  border: 1px solid #dce4ee;
+  border-radius: 6px;
+  padding: 10px;
+  background: #f8fafc;
 }
 
 .footnote {
@@ -222,19 +456,39 @@ td {
   padding: 4px 0 24px;
 }
 
-@media (max-width: 900px) {
-  main {
-    padding: 16px;
-  }
-
-  .topbar {
-    display: grid;
-  }
-
-  .controls,
-  .metrics,
-  .grid.two {
+@media (max-width: 1100px) {
+  .workspace,
+  .grid.two,
+  .sessionsGrid {
     grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    position: static;
   }
 }
 
+@media (max-width: 760px) {
+  main {
+    padding: 14px;
+  }
+
+  .topbar,
+  .toolbar,
+  .row {
+    display: grid;
+    justify-content: stretch;
+  }
+
+  .metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .tableTools {
+    display: grid;
+  }
+
+  .tableTools input {
+    max-width: none;
+  }
+}

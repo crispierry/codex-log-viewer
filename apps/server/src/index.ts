@@ -1,11 +1,10 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { createReadStream, existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   loadCorpus,
-  projectsFromCorpus,
+  summaryToCsv,
   summarizeParsedCorpus,
   type SummaryOptions
 } from "@codex-log-viewer/analytics";
@@ -75,6 +74,50 @@ async function handleRequest(request: IncomingMessage, response: ServerResponse,
     return;
   }
 
+  if (url.pathname === "/api/session") {
+    const sessionId = url.searchParams.get("sessionId");
+    if (!sessionId) {
+      sendJson(response, 400, { error: "sessionId is required" });
+      return;
+    }
+    const loaded = await loadCorpus({ paths: pathsFromQuery(url, options.paths) });
+    const file = loaded.corpus.files.find((candidate) => candidate.sessionId === sessionId);
+    const session = loaded.corpus.sessions.find((candidate) => candidate.sessionId === sessionId);
+    if (!file) {
+      sendJson(response, 404, { error: "Session not found" });
+      return;
+    }
+    sendJson(response, 200, {
+      session,
+      file: {
+        filePath: file.filePath,
+        sessionId: file.sessionId,
+        lineCount: file.lineCount
+      },
+      turns: file.turns,
+      messages: file.messages,
+      tokenUsage: file.tokenUsage,
+      taskTimings: file.taskTimings,
+      toolEvents: file.toolEvents,
+      unknownEvents: file.unknownEvents,
+      warnings: file.warnings
+    });
+    return;
+  }
+
+  if (url.pathname === "/api/export") {
+    const loaded = await loadCorpus({ paths: pathsFromQuery(url, options.paths) });
+    const summary = summarizeParsedCorpus(loaded.corpus, summaryOptionsFromQuery(url, options.paths));
+    const format = url.searchParams.get("format") === "csv" ? "csv" : "json";
+    const filename = `codex-log-viewer-${summary.project.replaceAll(/[^a-z0-9-]+/gi, "-").toLowerCase()}.${format}`;
+    if (format === "csv") {
+      sendText(response, 200, summaryToCsv(summary), "text/csv; charset=utf-8", filename);
+      return;
+    }
+    sendText(response, 200, `${JSON.stringify(summary, null, 2)}\n`, "application/json; charset=utf-8", filename);
+    return;
+  }
+
   await serveStatic(url.pathname, response, options.webDir ?? defaultWebDir());
 }
 
@@ -122,6 +165,20 @@ function sendJson(response: ServerResponse, statusCode: number, value: unknown):
   response.end(JSON.stringify(value, null, 2));
 }
 
+function sendText(
+  response: ServerResponse,
+  statusCode: number,
+  value: string,
+  contentTypeValue: string,
+  filename?: string
+): void {
+  response.writeHead(statusCode, {
+    "content-type": contentTypeValue,
+    ...(filename ? { "content-disposition": `attachment; filename="${filename}"` } : {})
+  });
+  response.end(value);
+}
+
 function contentType(filePath: string): string {
   switch (extname(filePath)) {
     case ".html":
@@ -149,4 +206,3 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const server = await startServer({ port });
   process.stdout.write(`Codex Log Viewer running at ${server.url}\n`);
 }
-

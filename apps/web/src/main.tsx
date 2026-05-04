@@ -1,4 +1,4 @@
-import { StrictMode, useEffect, useMemo, useState } from "react";
+import { StrictMode, useEffect, useMemo, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 
@@ -67,149 +67,262 @@ interface ProjectSummary {
   sessions: SessionSummary[];
 }
 
+interface SessionDetail {
+  file: {
+    filePath: string;
+    sessionId: string;
+    lineCount: number;
+  };
+  session?: unknown;
+  turns: Array<{ turnId: string; model?: string; effort?: string; cwd?: string; timestamp?: string }>;
+  messages: Array<{ role: string; sourceEvent: string; content: string; timestamp?: string; phase?: string }>;
+  tokenUsage: Array<{ timestamp?: string; usage: TokenUsage; cumulativeUsage?: TokenUsage }>;
+  taskTimings: Array<{ turnId: string; durationMs?: number; timeToFirstTokenMs?: number }>;
+  toolEvents: unknown[];
+  unknownEvents: unknown[];
+  warnings: unknown[];
+}
+
 function App() {
   const [projects, setProjects] = useState<ProjectListItem[]>([]);
   const [project, setProject] = useState("All Projects");
   const [since, setSince] = useState("");
   const [until, setUntil] = useState("");
+  const [pathDraft, setPathDraft] = useState("");
+  const [paths, setPaths] = useState<string[]>([]);
+  const [sessionQuery, setSessionQuery] = useState("");
+  const [selectedSessionId, setSelectedSessionId] = useState<string | undefined>();
+  const [sessionDetail, setSessionDetail] = useState<SessionDetail | undefined>();
   const [summary, setSummary] = useState<ProjectSummary | undefined>();
   const [loading, setLoading] = useState(true);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState<string | undefined>();
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const queryString = useMemo(
+    () => buildQuery({ project, since, until, paths }),
+    [project, since, until, paths]
+  );
 
   useEffect(() => {
-    fetchJson<{ projects: ProjectListItem[] }>("/api/projects")
+    const pathQuery = buildPathQuery(paths);
+    fetchJson<{ projects: ProjectListItem[] }>(`/api/projects?${pathQuery}`)
       .then((data) => setProjects(data.projects))
       .catch((fetchError: Error) => setError(fetchError.message));
-  }, []);
+  }, [paths, refreshKey]);
 
   useEffect(() => {
-    const query = new URLSearchParams();
-    if (project !== "All Projects") query.set("project", project);
-    if (since) query.set("since", since);
-    if (until) query.set("until", until);
     setLoading(true);
-    fetchJson<{ summary: ProjectSummary }>(`/api/summary?${query.toString()}`)
+    fetchJson<{ summary: ProjectSummary }>(`/api/summary?${queryString}`)
       .then((data) => {
         setSummary(data.summary);
         setError(undefined);
+        if (selectedSessionId && !data.summary.sessions.some((session) => session.sessionId === selectedSessionId)) {
+          setSelectedSessionId(undefined);
+          setSessionDetail(undefined);
+        }
       })
       .catch((fetchError: Error) => setError(fetchError.message))
       .finally(() => setLoading(false));
-  }, [project, since, until]);
+  }, [queryString, refreshKey, selectedSessionId]);
 
-  const topSessions = useMemo(() => summary?.sessions.slice(0, 15) ?? [], [summary]);
+  useEffect(() => {
+    if (!selectedSessionId) {
+      setSessionDetail(undefined);
+      return;
+    }
+    const detailQuery = new URLSearchParams(queryString);
+    detailQuery.set("sessionId", selectedSessionId);
+    setDetailLoading(true);
+    fetchJson<SessionDetail>(`/api/session?${detailQuery.toString()}`)
+      .then((data) => setSessionDetail(data))
+      .catch((fetchError: Error) => setError(fetchError.message))
+      .finally(() => setDetailLoading(false));
+  }, [selectedSessionId, queryString]);
+
+  const filteredSessions = useMemo(() => {
+    const sessions = summary?.sessions ?? [];
+    const query = sessionQuery.trim().toLowerCase();
+    if (!query) return sessions;
+    return sessions.filter((session) =>
+      [session.sessionId, session.project, session.cwd, session.filePath, session.models.join(" ")]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(query)
+    );
+  }, [summary, sessionQuery]);
+
+  function applyPaths() {
+    setPaths(pathDraft.split(/\n|,/).map((path) => path.trim()).filter(Boolean));
+    setProject("All Projects");
+    setSelectedSessionId(undefined);
+  }
+
+  function resetPaths() {
+    setPathDraft("");
+    setPaths([]);
+    setProject("All Projects");
+    setSelectedSessionId(undefined);
+  }
+
+  function exportUrl(format: "json" | "csv") {
+    const exportQuery = new URLSearchParams(queryString);
+    exportQuery.set("format", format);
+    return `/api/export?${exportQuery.toString()}`;
+  }
 
   return (
     <main>
       <header className="topbar">
         <div>
           <h1>Codex Log Viewer</h1>
-          <p>Local project analytics from Codex JSONL sessions</p>
+          <p>Everything runs locally. Pick sources, explore projects, inspect sessions, and export from here.</p>
         </div>
-        <div className="status">{loading ? "Scanning logs" : "Ready"}</div>
+        <div className="toolbar">
+          <button type="button" onClick={() => setRefreshKey((value) => value + 1)}>
+            Refresh
+          </button>
+          <a className="button" href={exportUrl("json")}>JSON</a>
+          <a className="button" href={exportUrl("csv")}>CSV</a>
+          <span className="status">{loading ? "Scanning" : "Ready"}</span>
+        </div>
       </header>
 
-      <section className="controls" aria-label="Filters">
-        <label>
-          Project
-          <select value={project} onChange={(event) => setProject(event.target.value)}>
-            <option>All Projects</option>
-            {projects.map((item) => (
-              <option key={item.project}>{item.project}</option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Since
-          <input type="date" value={since} onChange={(event) => setSince(event.target.value)} />
-        </label>
-        <label>
-          Until
-          <input type="date" value={until} onChange={(event) => setUntil(event.target.value)} />
-        </label>
-      </section>
-
-      {error ? <div className="error">{error}</div> : null}
-
-      {summary ? (
-        <>
-          <section className="metrics" aria-label="Summary metrics">
-            <Metric label="Sessions" value={summary.totals.sessions} />
-            <Metric label="User messages" value={summary.totals.userMessages} />
-            <Metric label="Unique messages" value={summary.totals.uniqueUserMessages} />
-            <Metric label="Total tokens" value={summary.tokens.totalTokens} />
-            <Metric label="Input tokens" value={summary.tokens.inputTokens} />
-            <Metric label="Cached input" value={summary.tokens.cachedInputTokens} />
-            <Metric label="Output tokens" value={summary.tokens.outputTokens} />
-            <Metric label="Reasoning tokens" value={summary.tokens.reasoningOutputTokens} />
-          </section>
-
-          <section className="grid two">
-            <Panel title="Messages By Day">
-              <BarChart buckets={summary.messagesByDay} valueKey="count" />
-            </Panel>
-            <Panel title="Messages By Hour">
-              <BarChart buckets={summary.messagesByHour.slice(-48)} valueKey="count" dense />
-            </Panel>
-          </section>
-
-          <section className="grid two">
-            <Panel title="Tokens By Day">
-              <BarChart buckets={summary.tokensByDay} valueKey="tokens" />
-            </Panel>
-            <Panel title="Models">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Model</th>
-                    <th>Turns</th>
-                    <th>Tokens</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {summary.models.map((model) => (
-                    <tr key={model.model}>
-                      <td>{model.model}</td>
-                      <td>{formatNumber(model.turns)}</td>
-                      <td>{formatNumber(model.tokens.totalTokens)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </Panel>
-          </section>
-
-          <Panel title="Sessions">
-            <table>
-              <thead>
-                <tr>
-                  <th>Session</th>
-                  <th>Project</th>
-                  <th>User Msgs</th>
-                  <th>Tokens</th>
-                  <th>Last Seen</th>
-                </tr>
-              </thead>
-              <tbody>
-                {topSessions.map((session) => (
-                  <tr key={session.sessionId}>
-                    <td title={session.filePath}>{session.sessionId}</td>
-                    <td>{session.project}</td>
-                    <td>{formatNumber(session.userMessages)}</td>
-                    <td>{formatNumber(session.totalTokens)}</td>
-                    <td>{session.lastSeen ? new Date(session.lastSeen).toLocaleString() : ""}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      <section className="workspace">
+        <aside className="sidebar">
+          <Panel title="Source">
+            <label>
+              Log paths
+              <textarea
+                value={pathDraft}
+                onChange={(event) => setPathDraft(event.target.value)}
+                placeholder="Default: ~/.codex/sessions and ~/.codex/archived_sessions"
+              />
+            </label>
+            <div className="row">
+              <button type="button" onClick={applyPaths}>Apply</button>
+              <button type="button" className="secondary" onClick={resetPaths}>Default</button>
+            </div>
+            <p className="hint">
+              Add one file or directory per line. The local server reads these paths; the browser never reads files directly.
+            </p>
           </Panel>
 
-          <section className="footnote">
-            Unknown events: {formatNumber(summary.totals.unknownEvents)} · Parse warnings:{" "}
-            {formatNumber(summary.totals.parseWarnings)}
-          </section>
-        </>
-      ) : null}
+          <Panel title="Filters">
+            <label>
+              Project
+              <select value={project} onChange={(event) => setProject(event.target.value)}>
+                <option>All Projects</option>
+                {projects.map((item) => (
+                  <option key={item.project}>{item.project}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Since
+              <input type="date" value={since} onChange={(event) => setSince(event.target.value)} />
+            </label>
+            <label>
+              Until
+              <input type="date" value={until} onChange={(event) => setUntil(event.target.value)} />
+            </label>
+          </Panel>
+
+          <Panel title="Projects">
+            <div className="projectList">
+              <button
+                type="button"
+                className={project === "All Projects" ? "projectItem active" : "projectItem"}
+                onClick={() => setProject("All Projects")}
+              >
+                <span>All Projects</span>
+                <strong>{formatNumber(projects.reduce((sum, item) => sum + item.totalTokens, 0))}</strong>
+              </button>
+              {projects.map((item) => (
+                <button
+                  type="button"
+                  key={item.project}
+                  className={project === item.project ? "projectItem active" : "projectItem"}
+                  onClick={() => setProject(item.project)}
+                >
+                  <span>{item.project}</span>
+                  <strong>{formatNumber(item.totalTokens)}</strong>
+                </button>
+              ))}
+            </div>
+          </Panel>
+        </aside>
+
+        <section className="content">
+          {error ? <div className="error">{error}</div> : null}
+
+          {summary ? (
+            <>
+              <section className="metrics" aria-label="Summary metrics">
+                <Metric label="Sessions" value={summary.totals.sessions} />
+                <Metric label="User messages" value={summary.totals.userMessages} />
+                <Metric label="Unique messages" value={summary.totals.uniqueUserMessages} />
+                <Metric label="Total tokens" value={summary.tokens.totalTokens} />
+                <Metric label="Fresh input" value={summary.tokens.freshInputTokens} />
+                <Metric label="Cached input" value={summary.tokens.cachedInputTokens} />
+                <Metric label="Output tokens" value={summary.tokens.outputTokens} />
+                <Metric label="Reasoning tokens" value={summary.tokens.reasoningOutputTokens} />
+              </section>
+
+              <section className="grid two">
+                <Panel title="Messages By Day">
+                  <BarChart buckets={summary.messagesByDay} valueKey="count" />
+                </Panel>
+                <Panel title="Messages By Hour">
+                  <BarChart buckets={summary.messagesByHour.slice(-72)} valueKey="count" dense />
+                </Panel>
+              </section>
+
+              <section className="grid two">
+                <Panel title="Tokens By Day">
+                  <BarChart buckets={summary.tokensByDay} valueKey="tokens" />
+                </Panel>
+                <Panel title="Models">
+                  <ModelTable models={summary.models} />
+                </Panel>
+              </section>
+
+              <section className="grid sessionsGrid">
+                <Panel title="Sessions">
+                  <div className="tableTools">
+                    <input
+                      value={sessionQuery}
+                      onChange={(event) => setSessionQuery(event.target.value)}
+                      placeholder="Search sessions"
+                    />
+                    <span>{formatNumber(filteredSessions.length)} sessions</span>
+                  </div>
+                  <SessionTable
+                    sessions={filteredSessions}
+                    selectedSessionId={selectedSessionId}
+                    onSelect={setSelectedSessionId}
+                  />
+                </Panel>
+
+                <Panel title="Session Details">
+                  {detailLoading ? <div className="empty compact">Loading session</div> : null}
+                  {!detailLoading && !sessionDetail ? (
+                    <div className="empty compact">Select a session</div>
+                  ) : null}
+                  {!detailLoading && sessionDetail ? <SessionInspector detail={sessionDetail} /> : null}
+                </Panel>
+              </section>
+
+              <section className="footnote">
+                Unknown events: {formatNumber(summary.totals.unknownEvents)} · Parse warnings:{" "}
+                {formatNumber(summary.totals.parseWarnings)} · Generated:{" "}
+                {new Date(summary.generatedAt).toLocaleString()}
+              </section>
+            </>
+          ) : null}
+        </section>
+      </section>
     </main>
   );
 }
@@ -223,12 +336,139 @@ function Metric({ label, value }: { label: string; value: number }) {
   );
 }
 
-function Panel({ title, children }: { title: string; children: React.ReactNode }) {
+function Panel({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="panel">
       <h2>{title}</h2>
       {children}
     </section>
+  );
+}
+
+function ModelTable({ models }: { models: ModelBucket[] }) {
+  if (models.length === 0) return <div className="empty compact">No model data</div>;
+  return (
+    <table>
+      <thead>
+        <tr>
+          <th>Model</th>
+          <th>Turns</th>
+          <th>Tokens</th>
+        </tr>
+      </thead>
+      <tbody>
+        {models.map((model) => (
+          <tr key={model.model}>
+            <td>{model.model}</td>
+            <td>{formatNumber(model.turns)}</td>
+            <td>{formatNumber(model.tokens.totalTokens)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function SessionTable({
+  sessions,
+  selectedSessionId,
+  onSelect
+}: {
+  sessions: SessionSummary[];
+  selectedSessionId?: string;
+  onSelect: (sessionId: string) => void;
+}) {
+  if (sessions.length === 0) return <div className="empty compact">No sessions in range</div>;
+  return (
+    <div className="tableScroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Session</th>
+            <th>Project</th>
+            <th>User Msgs</th>
+            <th>Tokens</th>
+            <th>Last Seen</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sessions.map((session) => (
+            <tr
+              key={session.sessionId}
+              className={selectedSessionId === session.sessionId ? "selected" : undefined}
+              onClick={() => onSelect(session.sessionId)}
+            >
+              <td title={session.filePath}>{session.sessionId}</td>
+              <td>{session.project}</td>
+              <td>{formatNumber(session.userMessages)}</td>
+              <td>{formatNumber(session.totalTokens)}</td>
+              <td>{session.lastSeen ? new Date(session.lastSeen).toLocaleString() : ""}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function SessionInspector({ detail }: { detail: SessionDetail }) {
+  const userMessages = detail.messages.filter((message) => message.role === "user");
+  const assistantMessages = detail.messages.filter((message) => message.role === "assistant");
+  const totalTokens = detail.tokenUsage.reduce((sum, item) => sum + item.usage.totalTokens, 0);
+
+  return (
+    <div className="inspector">
+      <dl>
+        <div>
+          <dt>File</dt>
+          <dd>{detail.file.filePath}</dd>
+        </div>
+        <div>
+          <dt>Lines</dt>
+          <dd>{formatNumber(detail.file.lineCount)}</dd>
+        </div>
+        <div>
+          <dt>Turns</dt>
+          <dd>{formatNumber(detail.turns.length)}</dd>
+        </div>
+        <div>
+          <dt>Messages</dt>
+          <dd>{formatNumber(userMessages.length)} user · {formatNumber(assistantMessages.length)} assistant</dd>
+        </div>
+        <div>
+          <dt>Tokens</dt>
+          <dd>{formatNumber(totalTokens)}</dd>
+        </div>
+      </dl>
+
+      <h3>Turns</h3>
+      <div className="chips">
+        {detail.turns.map((turn) => (
+          <span key={turn.turnId} title={turn.cwd}>{turn.model ?? "unknown"} · {turn.effort ?? "effort"}</span>
+        ))}
+      </div>
+
+      <h3>Messages</h3>
+      <div className="messageList">
+        {detail.messages.slice(0, 20).map((message, index) => (
+          <article key={`${message.timestamp}-${index}`} className={`message ${message.role}`}>
+            <strong>{message.role}</strong>
+            <p>{message.content || message.sourceEvent}</p>
+          </article>
+        ))}
+      </div>
+
+      <details>
+        <summary>Parser diagnostics</summary>
+        <pre>{JSON.stringify({
+          tokenEvents: detail.tokenUsage.length,
+          taskTimings: detail.taskTimings.length,
+          toolEvents: detail.toolEvents.length,
+          unknownEvents: detail.unknownEvents.length,
+          warnings: detail.warnings.length
+        }, null, 2)}</pre>
+      </details>
+    </div>
   );
 }
 
@@ -270,6 +510,30 @@ async function fetchJson<T>(url: string): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+function buildQuery({
+  project,
+  since,
+  until,
+  paths
+}: {
+  project: string;
+  since: string;
+  until: string;
+  paths: string[];
+}): string {
+  const query = new URLSearchParams(buildPathQuery(paths));
+  if (project !== "All Projects") query.set("project", project);
+  if (since) query.set("since", since);
+  if (until) query.set("until", until);
+  return query.toString();
+}
+
+function buildPathQuery(paths: string[]): string {
+  const query = new URLSearchParams();
+  for (const path of paths) query.append("path", path);
+  return query.toString();
+}
+
 function formatNumber(value: number): string {
   return new Intl.NumberFormat("en-US").format(value);
 }
@@ -279,4 +543,3 @@ createRoot(document.getElementById("root")!).render(
     <App />
   </StrictMode>
 );
-

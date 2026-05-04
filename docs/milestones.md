@@ -75,7 +75,7 @@ Exit criteria:
 
 - A user can inspect one project and date range without using the CLI.
 
-Status: complete for aggregate metrics, charts, model breakdown, and sessions table. Raw event inspection remains a post-MVP enhancement.
+Status: complete for aggregate metrics, charts, model breakdown, source selection, project selection, exports, sessions table, and session details. Full raw payload exploration remains a post-MVP enhancement.
 
 ## Milestone 4: Public Release
 
