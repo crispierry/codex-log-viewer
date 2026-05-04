@@ -14,6 +14,8 @@ Exit criteria:
 
 - A contributor can understand the goal, privacy posture, and first implementation path from docs alone.
 
+Status: complete.
+
 ## Milestone 1: Parser MVP
 
 Goal: parse Codex rollout files into normalized records.
@@ -34,6 +36,8 @@ Exit criteria:
 
 - `summary` can scan a directory and report sessions, known events, unknown events, and parse warnings.
 
+Status: complete for the first supported event set.
+
 ## Milestone 2: WBD Parity Analytics
 
 Goal: reproduce the WBD Celebration metrics from local Codex logs.
@@ -50,6 +54,8 @@ Goal: reproduce the WBD Celebration metrics from local Codex logs.
 Exit criteria:
 
 - The tool reproduces the WBD seven-day report within agreed tolerance.
+
+Status: partially complete. The analytics engine exists; WBD parity still needs a dedicated validation pass against local logs.
 
 ## Milestone 3: Dashboard MVP
 
@@ -68,6 +74,8 @@ Goal: make analytics explorable visually.
 Exit criteria:
 
 - A user can inspect one project and date range without using the CLI.
+
+Status: complete for aggregate metrics, charts, model breakdown, and sessions table. Raw event inspection remains a post-MVP enhancement.
 
 ## Milestone 4: Public Release
 

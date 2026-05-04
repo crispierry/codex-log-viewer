@@ -1,12 +1,13 @@
 # Architecture
 
-## Recommended Stack
+## Stack
 
-The first implementation should be a TypeScript monorepo:
+The first implementation is a TypeScript monorepo:
 
 - `packages/parser`: Codex JSONL parsing and normalization
 - `packages/analytics`: project grouping, aggregation, bucketing, exports
 - `apps/cli`: command-line access to parser and analytics
+- `apps/server`: local HTTP server for dashboard assets and API
 - `apps/web`: local dashboard
 - `fixtures/codex`: sanitized JSONL fixtures
 
@@ -71,6 +72,15 @@ Initial views:
 - token trend and model breakdown
 - sessions table
 - raw event inspector
+
+### Server
+
+Responsibilities:
+
+- serve the built dashboard from `apps/web/dist`
+- expose `/api/projects`, `/api/summary`, and `/api/sessions`
+- read local Codex files from Node rather than from browser code
+- default to `127.0.0.1:3210`
 
 ## Storage
 

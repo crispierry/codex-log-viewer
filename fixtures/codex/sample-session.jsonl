@@ -1,0 +1,10 @@
+{"timestamp":"2026-04-27T19:01:00.745Z","type":"session_meta","payload":{"id":"sample-session-1","timestamp":"2026-04-27T19:01:00.745Z","cwd":"/Users/example/projects/sample-app","originator":"Codex Desktop","cli_version":"0.128.0-alpha.1","source":"vscode","model_provider":"openai"}}
+{"timestamp":"2026-04-27T19:01:00.746Z","type":"turn_context","payload":{"turn_id":"turn-1","cwd":"/Users/example/projects/sample-app","current_date":"2026-04-27","timezone":"America/Los_Angeles","model":"gpt-5.5","effort":"medium","collaboration_mode":{"mode":"default"}}}
+{"timestamp":"2026-04-27T19:01:00.746Z","type":"event_msg","payload":{"type":"task_started","turn_id":"turn-1","started_at":1777316460,"model_context_window":258400,"collaboration_mode_kind":"default"}}
+{"timestamp":"2026-04-27T19:01:00.747Z","type":"event_msg","payload":{"type":"user_message","message":"Create a parser test for the sample fixture\n","images":[],"local_images":[],"text_elements":[]}}
+{"timestamp":"2026-04-27T19:01:01.000Z","type":"event_msg","payload":{"type":"token_count","info":null,"rate_limits":{"limit_id":"codex","primary":{"used_percent":9}}}}
+{"timestamp":"2026-04-27T19:01:11.360Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":16808,"cached_input_tokens":6528,"output_tokens":469,"reasoning_output_tokens":62,"total_tokens":17277},"last_token_usage":{"input_tokens":16808,"cached_input_tokens":6528,"output_tokens":469,"reasoning_output_tokens":62,"total_tokens":17277},"model_context_window":258400},"rate_limits":{"limit_id":"codex","primary":{"used_percent":9}}}}
+{"timestamp":"2026-04-27T19:01:12.000Z","type":"event_msg","payload":{"type":"agent_message","message":"I added the parser test fixture.","phase":"final_answer"}}
+{"timestamp":"2026-04-27T19:01:13.000Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"turn-1","completed_at":1777316473,"duration_ms":13000,"time_to_first_token_ms":500,"last_agent_message":"I added the parser test fixture."}}
+{"timestamp":"2026-04-27T19:01:14.000Z","type":"event_msg","payload":{"type":"future_event","value":"preserved"}}
+this is not json

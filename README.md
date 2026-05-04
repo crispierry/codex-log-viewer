@@ -6,21 +6,90 @@ The goal is to help developers understand how they use Codex across projects: me
 
 ## Status
 
-This project is in the planning and foundation stage.
+This project has a working v0 implementation:
 
-The first implementation target is a parser and analytics core that can reproduce the WBD Celebration usage report from local Codex `rollout-*.jsonl` files. Once the metrics are trustworthy, the dashboard and CLI will sit on top of the same shared data layer.
+- TypeScript parser for Codex `rollout-*.jsonl` logs
+- Shared analytics engine
+- CLI summaries and exports
+- Local dashboard server
+- React dashboard
+- Sanitized fixtures and tests
+- GitHub Actions CI
 
 ## Planned Features
 
 - Parse Codex JSONL sessions from `~/.codex/sessions` and `~/.codex/archived_sessions`
-- Group sessions by project, git root, worktree, or user-defined alias
+- Group sessions by project path and Codex worktree name
 - Count messages by project, session, day, and hour
 - Count unique normalized user messages
 - Track total, input, cached input, fresh input, output, and reasoning tokens
-- Break usage down by model, reasoning effort, source, and originator
+- Break usage down by model
 - Export summaries as JSON and CSV
-- Provide a local web dashboard with charts and raw-event inspection
+- Provide a local web dashboard with charts and session tables
 - Keep all parsing and analysis local by default
+
+## Quick Start
+
+```sh
+npm install
+npm run build
+npm run cli -- projects
+npm run cli -- summary --project codex-log-viewer
+npm run cli -- serve
+```
+
+The dashboard server starts on [http://127.0.0.1:3210](http://127.0.0.1:3210) by default.
+
+## CLI
+
+The CLI scans `~/.codex/sessions` and `~/.codex/archived_sessions` by default.
+
+```sh
+npm run cli -- projects
+npm run cli -- summary --project WBD-Celebration --since 2026-04-22 --until 2026-04-29
+npm run cli -- sessions --project WBD-Celebration
+npm run cli -- export --format json --output usage.json --project WBD-Celebration
+npm run cli -- export --format csv --output usage.csv --project WBD-Celebration
+```
+
+Use `--path <file-or-dir>` to scan a specific fixture, export, or alternate Codex home:
+
+```sh
+npm run cli -- summary --path fixtures/codex/sample-session.jsonl
+```
+
+After installing from a future package release, the intended binary name is:
+
+```sh
+codex-log-viewer summary
+```
+
+## Dashboard
+
+Build and serve the local dashboard:
+
+```sh
+npm run serve
+```
+
+The dashboard is served by a local Node process. Browser code does not directly access your filesystem; it calls the local API provided by the server.
+
+For dashboard frontend development:
+
+```sh
+npm run start -w @codex-log-viewer/server
+npm run dev -w @codex-log-viewer/web
+```
+
+The Vite dev server proxies `/api` to `http://127.0.0.1:3210`.
+
+## Verification
+
+```sh
+npm run lint
+npm test
+npm run build
+```
 
 ## Documentation
 
@@ -31,6 +100,7 @@ The first implementation target is a parser and analytics core that can reproduc
 - [Privacy and redaction](docs/privacy-and-redaction.md)
 - [Fixture guidelines](docs/fixture-guidelines.md)
 - [Milestones](docs/milestones.md)
+- [Usage](docs/usage.md)
 
 ## Development Principles
 
@@ -39,6 +109,12 @@ The first implementation target is a parser and analytics core that can reproduc
 - Schema-tolerant: Codex logs are evolving, so unknown events should be preserved, counted, and surfaced.
 - Fixture-driven: every supported event shape should have a sanitized fixture and test.
 - Honest metrics: distinguish exact log-derived values from estimates or incomplete data.
+
+## Privacy
+
+Codex logs may contain prompts, source code, file paths, terminal output, and secrets. The default workflow is local-only. Do not commit unsanitized logs or paste private sessions into public issues.
+
+See [Privacy and Redaction](docs/privacy-and-redaction.md).
 
 ## License
 

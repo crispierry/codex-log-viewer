@@ -1,0 +1,25 @@
+{
+  "name": "@codex-log-viewer/cli",
+  "version": "0.1.0",
+  "description": "CLI for Codex Log Viewer.",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "codex-log-viewer": "dist/index.js"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@codex-log-viewer/analytics": "0.1.0",
+    "@codex-log-viewer/parser": "0.1.0",
+    "@codex-log-viewer/server": "0.1.0"
+  }
+}

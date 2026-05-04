@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "composite": true
+  },
+  "references": [
+    { "path": "../../packages/parser" },
+    { "path": "../../packages/analytics" },
+    { "path": "../server" }
+  ],
+  "include": ["src/**/*.ts"]
+}

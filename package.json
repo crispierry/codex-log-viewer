@@ -1,0 +1,32 @@
+{
+  "name": "codex-log-viewer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local-first parser and analytics dashboard for OpenAI Codex session logs.",
+  "license": "MIT",
+  "type": "module",
+  "packageManager": "npm@11.12.0",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "npm run build -w @codex-log-viewer/parser && npm run build -w @codex-log-viewer/analytics && npm run build -w @codex-log-viewer/server && npm run build -w @codex-log-viewer/cli && npm run build -w @codex-log-viewer/web",
+    "test": "npm run test -w @codex-log-viewer/parser && npm run test -w @codex-log-viewer/analytics",
+    "lint": "npm run build",
+    "dev": "npm run dev -w @codex-log-viewer/web",
+    "serve": "npm run build && npm run start -w @codex-log-viewer/server",
+    "cli": "npm run build -w @codex-log-viewer/parser && npm run build -w @codex-log-viewer/analytics && npm run build -w @codex-log-viewer/server && npm run build -w @codex-log-viewer/cli && node apps/cli/dist/index.js"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "typescript": "^5.9.0",
+    "vite": "^7.0.0",
+    "vitest": "^4.0.0"
+  },
+  "dependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  }
+}

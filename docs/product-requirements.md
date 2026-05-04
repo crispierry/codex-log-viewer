@@ -31,16 +31,25 @@ The product should answer:
 
 ## MVP Requirements
 
-- Discover session logs from `~/.codex/sessions`, `~/.codex/archived_sessions`, and user-provided paths
-- Parse JSONL line by line with malformed-line warnings
-- Normalize session metadata, turns, messages, token usage, task timing, and raw unknown events
-- Group sessions by project path, git root, and alias map
-- Calculate message counts and unique user-message counts
-- Calculate day and hour buckets in a selected timezone
-- Calculate total, input, cached input, fresh input, output, and reasoning tokens
-- Break metrics down by model and session
-- Export JSON and CSV summaries
-- Render a local dashboard from the same analytics layer
+- [x] Discover session logs from `~/.codex/sessions`, `~/.codex/archived_sessions`, and user-provided paths
+- [x] Parse JSONL line by line with malformed-line warnings
+- [x] Normalize session metadata, turns, messages, token usage, task timing, and raw unknown events
+- [x] Group sessions by project path and Codex worktree name
+- [x] Calculate message counts and unique user-message counts
+- [x] Calculate day and hour buckets
+- [x] Calculate total, input, cached input, fresh input, output, and reasoning tokens
+- [x] Break metrics down by model and session
+- [x] Export JSON and CSV summaries
+- [x] Render a local dashboard from the same analytics layer
+
+## Post-MVP Enhancements
+
+- Git-root based grouping
+- User-defined alias configuration file
+- Raw event inspector in the dashboard
+- Redacted detailed export mode
+- API-equivalent cost estimates
+- Persistent local cache for very large histories
 
 ## Non-Goals For MVP
 

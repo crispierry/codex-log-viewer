@@ -35,6 +35,23 @@ See [Fixture Guidelines](docs/fixture-guidelines.md).
 
 ## Development Setup
 
-Implementation tooling is not committed yet. Until the TypeScript workspace lands, documentation-only changes can be reviewed directly.
+```sh
+npm install
+npm run lint
+npm test
+npm run build
+```
 
-The planned stack is documented in [Architecture](docs/architecture.md).
+Run the CLI through the root helper:
+
+```sh
+npm run cli -- summary --path fixtures/codex/sample-session.jsonl
+```
+
+Run the dashboard:
+
+```sh
+npm run serve
+```
+
+The stack is documented in [Architecture](docs/architecture.md).

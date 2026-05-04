@@ -8,3 +8,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Added project foundation documentation.
 - Added research and roadmap for Codex log parsing and analytics.
+- Added TypeScript parser, analytics package, CLI, local dashboard server, and React dashboard.
+- Added sanitized Codex fixture coverage and unit tests.
+- Added GitHub Actions CI.

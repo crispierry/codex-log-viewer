@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "declaration": true,
+    "sourceMap": true,
+    "declarationMap": true,
+    "baseUrl": ".",
+    "paths": {
+      "@codex-log-viewer/parser": ["packages/parser/src/index.ts"],
+      "@codex-log-viewer/analytics": ["packages/analytics/src/index.ts"],
+      "@codex-log-viewer/server": ["apps/server/src/index.ts"]
+    }
+  }
+}

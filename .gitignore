@@ -29,3 +29,4 @@ codex-logs/
 .turbo/
 .vite/
 .cache/
+*.tsbuildinfo
