@@ -78,9 +78,10 @@ The product should answer:
 - Project attribution can be ambiguous across worktrees and copied repos
 - Public fixtures can accidentally leak sensitive content if guidelines are weak
 
-## Open Product Decisions
+## Product Decisions
 
-- Whether project grouping should default to exact cwd, nearest git root, or repo name
-- Whether raw event inspection should be enabled by default or require a privacy acknowledgement
-- Whether API-equivalent cost estimates should be included in MVP
-- Whether the first release should be CLI-first, dashboard-first, or both
+- The dashboard is the primary product workflow.
+- The CLI remains as an automation and debugging fallback.
+- Project grouping currently defaults to project path/Codex worktree name.
+- Session details are visible after explicit session selection.
+- Full raw payload exploration, redacted detailed exports, API-equivalent cost estimates, and git-root grouping are post-MVP enhancements.

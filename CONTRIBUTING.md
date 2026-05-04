@@ -11,7 +11,7 @@ This project will handle local agent session logs that can contain private code,
 - Add parser tests around known rollout records
 - Improve project attribution rules
 - Improve redaction utilities and fixture-sanitizing scripts
-- Add dashboard accessibility and responsive-layout improvements once the UI exists
+- Improve dashboard accessibility, responsive layout, and session-inspection workflows
 
 ## Fixture Safety
 
@@ -42,16 +42,16 @@ npm test
 npm run build
 ```
 
-Run the CLI through the root helper:
-
-```sh
-npm run cli -- summary --path fixtures/codex/sample-session.jsonl
-```
-
 Run the dashboard:
 
 ```sh
 npm run serve
+```
+
+Run the CLI fallback through the root helper:
+
+```sh
+npm run cli -- summary --path fixtures/codex/sample-session.jsonl
 ```
 
 The stack is documented in [Architecture](docs/architecture.md).

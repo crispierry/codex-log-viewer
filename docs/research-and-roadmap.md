@@ -2,6 +2,10 @@
 
 Date: 2026-05-02
 
+## Implementation Status
+
+This document is the initial research and execution map. The repository now has a working dashboard-first v0 implementation with a TypeScript parser, analytics package, local server/API, React dashboard, CLI fallback, fixtures, tests, and CI. Treat this file as historical context plus roadmap background; current usage is documented in [Usage](usage.md).
+
 ## Goal
 
 Build an open source, local-first tool for parsing Codex session logs and showing project-level usage analytics:
@@ -90,7 +94,7 @@ Compute message counts, unique normalized user messages, day/hour buckets in loc
 
 Start with a local web UI. First screen should be the actual analytics tool: project selector, date range, metric cards, day/hour charts, model breakdown, sessions table, and raw-event drilldown.
 
-5. CLI
+5. CLI fallback
 
 Provide `codex-log-viewer summary`, `projects`, `sessions`, and `export --format json|csv` commands so the parser is useful without the UI.
 
@@ -146,7 +150,7 @@ Milestone 3: dashboard MVP
 - local Vite dashboard
 - project selector and date range
 - metric cards, day/hour charts, model chart, sessions table
-- raw event inspector for selected session/turn
+- session details for selected session/turn, with full raw payload exploration as a later enhancement
 
 Milestone 4: public polish
 
@@ -156,10 +160,10 @@ Milestone 4: public polish
 - GitHub Actions CI
 - first tagged release
 
-## Open Questions
+## Open Questions And Follow-Ups
 
 - Should the tool focus only on Codex at first, or design the data model to support Claude/Gemini later?
-- Should we ship as a local web app, a desktop app, a VS Code extension, or CLI-first with dashboard optional?
+- Should we eventually ship as a desktop app or VS Code extension in addition to the local web app?
 - Do we want to estimate API-equivalent cost, even though Codex product/subscription billing can differ?
 - How aggressively should we redact message contents by default in exports?
 - Should project grouping default to exact `cwd`, git root, repo name, or a user-defined alias map?

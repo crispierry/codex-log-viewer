@@ -13,6 +13,16 @@ The first implementation is a TypeScript monorepo:
 
 TypeScript keeps the parser easy to contribute to and lets the CLI and dashboard share the same code. If performance becomes a real blocker, a Rust scanner can be introduced behind the same normalized data contract.
 
+## Product Flow
+
+Codex Log Viewer is dashboard-first. The normal user flow is:
+
+1. Start the local server with `npm run serve`.
+2. Open `http://127.0.0.1:3210`.
+3. Use the dashboard to select sources, projects, date ranges, sessions, and exports.
+
+The CLI remains available for automation and test smoke checks, but it is not the primary product interface.
+
 ## Data Flow
 
 ```mermaid
@@ -22,7 +32,7 @@ flowchart LR
   C --> D["Normalized records"]
   C --> E["Parse warnings"]
   D --> F["Analytics engine"]
-  F --> G["CLI summaries"]
+  F --> G["Dashboard API"]
   F --> H["Dashboard"]
   F --> I["JSON/CSV exports"]
   D --> J["Raw event inspector"]
@@ -54,7 +64,7 @@ Responsibilities:
 
 ### CLI
 
-Initial commands:
+Supported commands:
 
 - `summary`: show project/date usage summary
 - `projects`: list discovered projects
@@ -63,22 +73,24 @@ Initial commands:
 
 ### Web
 
-Initial views:
+Current views:
 
+- source path controls
 - project selector
 - date range controls
 - metric cards
 - messages by day/hour charts
 - token trend and model breakdown
 - sessions table
-- raw event inspector
+- session details with turns, messages, token events, warnings, and unknown-event counts
+- JSON and CSV exports
 
 ### Server
 
 Responsibilities:
 
 - serve the built dashboard from `apps/web/dist`
-- expose `/api/projects`, `/api/summary`, and `/api/sessions`
+- expose `/api/projects`, `/api/summary`, `/api/sessions`, `/api/session`, and `/api/export`
 - read local Codex files from Node rather than from browser code
 - default to `127.0.0.1:3210`
 

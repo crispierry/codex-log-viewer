@@ -36,16 +36,20 @@ Do not replace field names or remove nesting just to sanitize content. The parse
 
 ## Dashboard Privacy
 
-The dashboard should make raw event views clearly separate from aggregate metrics. Future UI work should consider:
+The dashboard makes session details separate from aggregate metrics. It currently shows parsed message content and parser diagnostics when a user selects a session, so users should treat the dashboard as a local private view.
 
-- collapsed raw payloads by default
+Future UI work should consider:
+
+- collapsed full raw payloads by default
 - redacted export mode by default
-- clear labels when raw content is visible
-- warnings before exporting transcripts
+- clear labels when message content or raw payloads are visible
+- warnings before exporting transcripts or detailed session content
 
 ## Exports
 
-Export modes should eventually include:
+Current exports are aggregate summary exports and respect the active source, project, and date filters.
+
+Future export modes should include:
 
 - aggregate-only export
 - redacted detail export

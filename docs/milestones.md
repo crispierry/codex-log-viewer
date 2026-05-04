@@ -62,14 +62,16 @@ Status: partially complete. The analytics engine exists; WBD parity still needs 
 Goal: make analytics explorable visually.
 
 - local Vite/React app
+- source path controls
 - project selector
 - date range selector
+- JSON and CSV export buttons
 - metric cards
 - messages by day/hour charts
 - token usage charts
 - model breakdown
 - sessions table
-- raw event inspector
+- session details
 
 Exit criteria:
 
