@@ -18,6 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Added packaged macOS app creation with bundled local engine, bundled Node runtime, app icon, zip artifact, and checksum.
 - Added packaged app and native UI smoke tests.
 - Added Finder-style and relocated packaged app launch verification.
+- Added packaged app missing-engine failure verification.
 - Added ephemeral-token authentication for the private local API.
 - Added redacted JSON exports by default, with explicit raw JSON for private local use.
 - Added synthetic parser event-shape coverage and search performance benchmarking.

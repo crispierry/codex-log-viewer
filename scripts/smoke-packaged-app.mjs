@@ -29,10 +29,21 @@ assertNoLeakedEngine(appPath);
 await runOpenSmoke(appPath, "Finder-style launch");
 assertNoLeakedEngine(appPath);
 await runRelocatedSmoke();
+await runMissingEngineSmoke();
 
 console.log("Packaged app smoke test passed.");
 
 async function runSmoke(label, targetAppPath = appPath, sourceFixturePath = fixturePath) {
+  const { exitCode, stdout, stderr } = await runExecutableSmoke(targetAppPath, sourceFixturePath);
+  if (exitCode !== 0) {
+    throw new Error(`Packaged app smoke test failed during ${label} with exit code ${exitCode}\n${stderr}${stdout}`);
+  }
+  if (!stdout.includes("Codex Log Viewer packaged smoke workflow passed.")) {
+    throw new Error(`Packaged app smoke test did not report success during ${label}\n${stderr}${stdout}`);
+  }
+}
+
+async function runExecutableSmoke(targetAppPath, sourceFixturePath = fixturePath) {
   const executablePath = executablePathFor(targetAppPath);
   const child = spawn(executablePath, [], {
     cwd: tmpdir(),
@@ -53,21 +64,8 @@ async function runSmoke(label, targetAppPath = appPath, sourceFixturePath = fixt
     stderr += chunk;
   });
 
-  const timeout = setTimeout(() => {
-    child.kill();
-  }, 30_000);
-
-  const exitCode = await new Promise((resolvePromise) => {
-    child.once("exit", (code) => resolvePromise(code ?? 1));
-  });
-  clearTimeout(timeout);
-
-  if (exitCode !== 0) {
-    throw new Error(`Packaged app smoke test failed during ${label} with exit code ${exitCode}\n${stderr}${stdout}`);
-  }
-  if (!stdout.includes("Codex Log Viewer packaged smoke workflow passed.")) {
-    throw new Error(`Packaged app smoke test did not report success during ${label}\n${stderr}${stdout}`);
-  }
+  const exitCode = await waitForExitCode(child, 30_000);
+  return { exitCode, stdout, stderr };
 }
 
 async function runOpenSmoke(targetAppPath, label, sourceFixturePath = fixturePath) {
@@ -133,6 +131,31 @@ async function runRelocatedSmoke() {
     assertNoLeakedEngine(relocatedAppPath);
   } finally {
     terminateLeakedAppProcesses(executablePathFor(relocatedAppPath));
+    await rm(tempDir, { recursive: true, force: true });
+  }
+}
+
+async function runMissingEngineSmoke() {
+  const tempDir = await mkdtemp(`${tmpdir()}/codex-log-viewer-missing-engine-smoke-`);
+  const brokenAppPath = join(tempDir, "Codex Log Viewer.app");
+  const brokenFixturePath = join(tempDir, "sample-session.jsonl");
+
+  try {
+    execFileSync("ditto", [appPath, brokenAppPath], { stdio: "ignore" });
+    await copyFile(fixturePath, brokenFixturePath);
+    await rm(join(brokenAppPath, "Contents/Resources/engine/apps/server/dist/index.js"), { force: true });
+
+    const { exitCode, stdout, stderr } = await runExecutableSmoke(brokenAppPath, brokenFixturePath);
+    const diagnostics = `${stderr}${stdout}`;
+    if (exitCode === 0) {
+      throw new Error("Packaged app missing-engine smoke unexpectedly succeeded.");
+    }
+    if (!diagnostics.includes("The app cannot find the local parser engine")) {
+      throw new Error(`Packaged app missing-engine smoke did not report the expected diagnostic.\n${diagnostics}`);
+    }
+    assertNoLeakedEngine(brokenAppPath);
+  } finally {
+    terminateLeakedAppProcesses(executablePathFor(brokenAppPath));
     await rm(tempDir, { recursive: true, force: true });
   }
 }
