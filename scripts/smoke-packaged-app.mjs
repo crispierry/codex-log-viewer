@@ -1,5 +1,7 @@
 import { execFileSync, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -24,6 +26,8 @@ if (!existsSync(fixturePath)) {
 await runSmoke("first launch");
 assertNoLeakedEngine();
 await runSmoke("second launch");
+assertNoLeakedEngine();
+await runOpenSmoke();
 assertNoLeakedEngine();
 
 console.log("Packaged app smoke test passed.");
@@ -59,6 +63,78 @@ async function runSmoke(label) {
   if (exitCode !== 0) {
     throw new Error(`Packaged app smoke test failed during ${label} with exit code ${exitCode}\n${stderr}${stdout}`);
   }
+  if (!stdout.includes("Codex Log Viewer packaged smoke workflow passed.")) {
+    throw new Error(`Packaged app smoke test did not report success during ${label}\n${stderr}${stdout}`);
+  }
+}
+
+async function runOpenSmoke() {
+  const tempDir = await mkdtemp(`${tmpdir()}/codex-log-viewer-open-smoke-`);
+  const stdoutPath = `${tempDir}/stdout.log`;
+  const stderrPath = `${tempDir}/stderr.log`;
+  let launcherStdout = "";
+  let launcherStderr = "";
+
+  try {
+    const child = spawn(
+      "open",
+      [
+        "-n",
+        "-W",
+        "-o",
+        stdoutPath,
+        "--stderr",
+        stderrPath,
+        "--env",
+        "CODEX_LOG_VIEWER_SMOKE=1",
+        "--env",
+        `CODEX_LOG_VIEWER_SMOKE_FIXTURE=${fixturePath}`,
+        appPath
+      ],
+      { stdio: ["ignore", "pipe", "pipe"] }
+    );
+    child.stdout.on("data", (chunk) => {
+      launcherStdout += chunk;
+    });
+    child.stderr.on("data", (chunk) => {
+      launcherStderr += chunk;
+    });
+    const exitCode = await waitForExitCode(child, 30_000);
+    const stdout = await readFileIfExists(stdoutPath);
+    const stderr = await readFileIfExists(stderrPath);
+    const diagnostics = [stderr, stdout, launcherStderr, launcherStdout].filter(Boolean).join("");
+
+    if (exitCode !== 0) {
+      throw new Error(`Packaged app Finder-style launch failed with exit code ${exitCode}\n${diagnostics}`);
+    }
+    if (!stdout.includes("Codex Log Viewer packaged smoke workflow passed.")) {
+      throw new Error(`Packaged app Finder-style launch did not report success.\n${diagnostics}`);
+    }
+  } finally {
+    terminateLeakedAppProcesses();
+    await rm(tempDir, { recursive: true, force: true });
+  }
+}
+
+function waitForExitCode(child, timeoutMs) {
+  return new Promise((resolvePromise) => {
+    const timeout = setTimeout(() => {
+      child.kill();
+      resolvePromise(1);
+    }, timeoutMs);
+    child.once("exit", (code) => {
+      clearTimeout(timeout);
+      resolvePromise(code ?? 1);
+    });
+  });
+}
+
+async function readFileIfExists(filePath) {
+  try {
+    return await readFile(filePath, "utf8");
+  } catch {
+    return "";
+  }
 }
 
 function assertNoLeakedEngine() {
@@ -71,5 +147,13 @@ function assertNoLeakedEngine() {
 
   if (leaks.length > 0) {
     throw new Error(`Packaged app left local engine processes running:\n${leaks.join("\n")}`);
+  }
+}
+
+function terminateLeakedAppProcesses() {
+  try {
+    execFileSync("pkill", ["-f", executablePath], { stdio: "ignore" });
+  } catch {
+    // No matching process is the expected case after a passing smoke run.
   }
 }

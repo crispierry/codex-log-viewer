@@ -91,6 +91,7 @@ enum AppSmokeRunner {
       if projects.isEmpty || search.totalMatches == 0 || jsonExport.isEmpty || csvExport.isEmpty {
         throw AppSmokeError.unexpected("Packaged app smoke workflow returned empty data.")
       }
+      FileHandle.standardOutput.write(Data("Codex Log Viewer packaged smoke workflow passed.\n".utf8))
       return 0
     } catch {
       let message = "Codex Log Viewer smoke check failed: \(error.localizedDescription)\n"

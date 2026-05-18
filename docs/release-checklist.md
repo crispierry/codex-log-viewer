@@ -22,7 +22,7 @@ npm run release:mac
 git diff --check
 ```
 
-On macOS, `npm run release:mac` builds `Codex Log Viewer.app`, launches the packaged smoke workflow twice, checks that the local engine exits, and runs a native UI smoke check against sanitized fixtures.
+On macOS, `npm run release:mac` builds `Codex Log Viewer.app`, launches the packaged smoke workflow twice, verifies a Finder-style `.app` launch, checks that the local engine exits, and runs a native UI smoke check against sanitized fixtures.
 
 ## Private Reference Parity
 
