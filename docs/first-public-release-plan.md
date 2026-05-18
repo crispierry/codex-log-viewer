@@ -34,11 +34,13 @@ Implemented for v0.1:
 - redacted JSON exports by default with explicit raw JSON for private local use
 - search benchmark with documented threshold and future SQLite FTS5 trigger
 - private-reference parity harness with a sanitized fixture reference report
+- public GitHub repository settings: description, topics, private vulnerability reporting, and protected `main` with required `verify` and `macos-app` checks
 
 External release prerequisites:
 
 - Developer ID certificate and notarytool keychain profile are required to produce a notarized public macOS artifact.
 - A maintainer should run the private-log parity check locally with a private reference report, without committing private inputs or outputs.
+- PR #8 is blocked only on the configured review requirement before merge/tag.
 
 ## Current State
 
@@ -403,7 +405,7 @@ Before tagging the first public version, run and record:
 - [x] Export privacy modes are documented and tested.
 - [x] Issue templates warn against raw logs.
 - [x] Security policy explains private vulnerability reporting.
-- [ ] CI branch protection is enabled after publishing to GitHub.
+- [x] CI branch protection is enabled after publishing to GitHub.
 - [x] GitHub release artifacts are generated from CI.
 - [x] Known limitations are documented honestly.
 
