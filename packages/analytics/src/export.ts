@@ -1,5 +1,25 @@
 import type { ProjectSummary } from "./types.js";
 
+export function redactedProjectSummary(summary: ProjectSummary): ProjectSummary {
+  return {
+    ...summary,
+    filters: {
+      ...summary.filters,
+      paths: summary.filters.paths.map(() => "[redacted]")
+    },
+    sessions: summary.sessions.map((session) => ({
+      ...session,
+      filePath: "[redacted]",
+      cwd: session.cwd ? "[redacted]" : undefined
+    }))
+  };
+}
+
+export function summaryToJson(summary: ProjectSummary, options: { redacted?: boolean } = {}): string {
+  const exportSummary = options.redacted ? redactedProjectSummary(summary) : summary;
+  return `${JSON.stringify(exportSummary, null, 2)}\n`;
+}
+
 export function summaryToCsv(summary: ProjectSummary): string {
   const rows = [
     ["metric", "value"],
@@ -29,4 +49,3 @@ function csvCell(value: string | number): string {
   }
   return stringValue;
 }
-

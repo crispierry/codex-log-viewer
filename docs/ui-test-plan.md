@@ -57,6 +57,27 @@ npm run build:mac
 
 Covers Swift compilation for the native macOS app.
 
+### Packaged App Smoke
+
+Run:
+
+```sh
+npm run package:mac
+npm run smoke:mac-package
+```
+
+Covers packaged app launch, bundled engine discovery, health/API access, fixture scan, cross-project search, session detail loading, JSON/CSV export endpoints, repeated launch, and child-engine shutdown.
+
+### Native UI Smoke
+
+Run:
+
+```sh
+npm run smoke:mac-ui
+```
+
+Covers packaged native window launch through macOS accessibility automation using sanitized fixture paths and ephemeral settings. This is a smoke check, not a full replacement for deeper XCUITest coverage.
+
 ## Manual macOS App Checklist
 
 Run:

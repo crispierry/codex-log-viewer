@@ -1,4 +1,4 @@
-export { summaryToCsv } from "./export.js";
+export { redactedProjectSummary, summaryToCsv, summaryToJson } from "./export.js";
 export { listProjects, projectContextForSession, projectNameForCwd, sessionsById } from "./project.js";
 export {
   loadCorpus,

@@ -15,10 +15,16 @@ There is intentionally no browser dashboard or Electron shell. Codex logs live o
 
 ## Product Flow
 
-The normal user flow is:
+The source-build user flow is:
 
 1. Start the app with `npm run app:mac`.
 2. Use the native app to select sources, projects, date ranges, message searches, sessions, and exports.
+
+The packaged user flow is:
+
+1. Build or download `Codex Log Viewer.app`.
+2. Launch the app from Finder.
+3. Use the native app without a repo checkout or terminal process.
 
 The CLI remains available for automation and test smoke checks, but it is not the primary product interface.
 
@@ -68,9 +74,10 @@ Responsibilities:
 
 - launch as the primary native app from `apps/macos`
 - start the private local API engine on an app-owned `127.0.0.1` port
+- generate and pass an ephemeral token to the local engine
 - render projects, summaries, sessions, search, and inspection with SwiftUI
 - provide native sidebar, toolbar, table, and inspector behavior
-- grow toward native file picking, app settings, release packaging, and notarized builds
+- provide native file picking, local recent-source settings, packaged app smoke support, and release metadata
 
 ### Local API Engine
 
@@ -79,6 +86,7 @@ Responsibilities:
 - expose `/api/projects`, `/api/summary`, `/api/sessions`, `/api/session`, `/api/messages/search`, and `/api/export`
 - read local Codex files from Node inside the user's machine
 - bind only to loopback by default
+- require the per-run bearer token for data endpoints
 - avoid serving a web UI
 
 ### CLI

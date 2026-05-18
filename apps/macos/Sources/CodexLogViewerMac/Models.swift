@@ -2,6 +2,7 @@ import Foundation
 
 enum AppConstants {
   static let allProjectsName = "All Projects"
+  static let allModelsName = "All Models"
 }
 
 enum ExportFormat: String {
@@ -9,6 +10,31 @@ enum ExportFormat: String {
   case csv
 
   var fileExtension: String { rawValue }
+}
+
+enum MessageRoleFilter: String, CaseIterable, Identifiable {
+  case all
+  case user
+  case assistant
+  case system
+  case developer
+
+  var id: String { rawValue }
+
+  var label: String {
+    switch self {
+    case .all:
+      return "All"
+    case .user:
+      return "User"
+    case .assistant:
+      return "Assistant"
+    case .system:
+      return "System"
+    case .developer:
+      return "Developer"
+    }
+  }
 }
 
 struct LogFilters: Equatable {
@@ -46,6 +72,7 @@ struct ProjectSummary: Decodable {
   let generatedAt: String
   let totals: SummaryTotals
   let tokens: TokenUsage
+  let models: [ModelBucket]
   let sessions: [SessionSummary]
 }
 
@@ -67,6 +94,12 @@ struct TokenUsage: Decodable, Hashable {
   let outputTokens: Int
   let reasoningOutputTokens: Int
   let totalTokens: Int
+}
+
+struct ModelBucket: Decodable, Hashable {
+  let model: String
+  let turns: Int
+  let tokens: TokenUsage
 }
 
 struct SessionSummary: Decodable, Identifiable, Hashable {
@@ -101,6 +134,7 @@ struct MessageSearchResult: Decodable, Identifiable, Hashable {
   let project: String
   let cwd: String?
   let turnId: String?
+  let model: String?
   let timestamp: String?
   let role: String
   let sourceEvent: String
@@ -136,6 +170,7 @@ struct MessageDetail: Decodable, Hashable {
   let role: String
   let sourceEvent: String
   let content: String
+  let turnId: String?
   let timestamp: String?
   let phase: String?
 }

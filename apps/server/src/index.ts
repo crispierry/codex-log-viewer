@@ -7,6 +7,7 @@ import {
   loadCorpus,
   searchMessages,
   summaryToCsv,
+  summaryToJson,
   summarizeParsedCorpus,
   type LoadedCorpus,
   type SummaryOptions
@@ -16,6 +17,7 @@ export interface ServerOptions {
   host?: string;
   port?: number;
   paths?: string[];
+  authToken?: string;
 }
 
 interface CorpusCacheEntry {
@@ -41,7 +43,12 @@ export async function startServer(options: ServerOptions = {}): Promise<{ url: s
     }
   });
 
-  await listen(server, port, host);
+  try {
+    await listen(server, port, host);
+  } catch (error) {
+    clearInterval(keepAlive);
+    throw error;
+  }
   const address = server.address();
   const actualPort = typeof address === "object" && address ? address.port : port;
   return {
@@ -60,6 +67,11 @@ async function handleRequest(request: IncomingMessage, response: ServerResponse,
   const url = new URL(request.url ?? "/", "http://localhost");
   if (url.pathname === "/api/health") {
     sendJson(response, 200, { ok: true });
+    return;
+  }
+
+  if (!isAuthorized(request, options.authToken)) {
+    sendJson(response, 401, { error: "Unauthorized" });
     return;
   }
 
@@ -96,6 +108,16 @@ async function handleRequest(request: IncomingMessage, response: ServerResponse,
       return;
     }
     const loaded = await loadCachedCorpus(url, options.paths);
+    const summaryOptions = summaryOptionsFromQuery(url, options.paths);
+    const project = url.searchParams.get("project");
+    const summary = summarizeParsedCorpus(loaded.corpus, {
+      ...summaryOptions,
+      project: project && project !== "All Projects" ? project : undefined
+    });
+    if (!summary.sessions.some((session) => session.sessionId === sessionId)) {
+      sendJson(response, 404, { error: "Session not found" });
+      return;
+    }
     const file = loaded.corpus.files.find((candidate) => candidate.sessionId === sessionId);
     const session = loaded.corpus.sessions.find((candidate) => candidate.sessionId === sessionId);
     if (!file) {
@@ -129,7 +151,9 @@ async function handleRequest(request: IncomingMessage, response: ServerResponse,
         ...summaryOptionsFromQuery(url, options.paths),
         project: project && project !== "All Projects" ? project : undefined,
         query: url.searchParams.get("q") ?? "",
-        role: "all",
+        role: roleFromQuery(url.searchParams.get("role")),
+        model: url.searchParams.get("model") ?? undefined,
+        sessionId: url.searchParams.get("sessionId") ?? undefined,
         limit
       })
     });
@@ -140,12 +164,13 @@ async function handleRequest(request: IncomingMessage, response: ServerResponse,
     const loaded = await loadCachedCorpus(url, options.paths);
     const summary = summarizeParsedCorpus(loaded.corpus, summaryOptionsFromQuery(url, options.paths));
     const format = url.searchParams.get("format") === "csv" ? "csv" : "json";
+    const isRawJson = url.searchParams.get("privacy") === "raw";
     const filename = `codex-log-viewer-${summary.project.replaceAll(/[^a-z0-9-]+/gi, "-").toLowerCase()}.${format}`;
     if (format === "csv") {
       sendText(response, 200, summaryToCsv(summary), "text/csv; charset=utf-8", filename);
       return;
     }
-    sendText(response, 200, `${JSON.stringify(summary, null, 2)}\n`, "application/json; charset=utf-8", filename);
+    sendText(response, 200, summaryToJson(summary, { redacted: !isRawJson }), "application/json; charset=utf-8", filename);
     return;
   }
 
@@ -188,6 +213,19 @@ function pathsFromQuery(url: URL, fallbackPaths?: string[]): string[] | undefine
   return queryPaths.length > 0 ? queryPaths : fallbackPaths;
 }
 
+function roleFromQuery(value: string | null): "all" | "user" | "assistant" | "system" | "developer" | "unknown" {
+  switch (value) {
+    case "user":
+    case "assistant":
+    case "system":
+    case "developer":
+    case "unknown":
+      return value;
+    default:
+      return "all";
+  }
+}
+
 function cacheKey(paths: string[] | undefined): string {
   return paths && paths.length > 0 ? [...paths].sort().join("\n") : "__default__";
 }
@@ -195,6 +233,20 @@ function cacheKey(paths: string[] | undefined): string {
 function sendJson(response: ServerResponse, statusCode: number, value: unknown): void {
   response.writeHead(statusCode, { "content-type": "application/json; charset=utf-8" });
   response.end(JSON.stringify(value, null, 2));
+}
+
+function isAuthorized(request: IncomingMessage, authToken: string | undefined): boolean {
+  if (!authToken) {
+    return true;
+  }
+
+  const authorization = request.headers.authorization;
+  if (authorization === `Bearer ${authToken}`) {
+    return true;
+  }
+
+  const localToken = request.headers["x-codex-log-viewer-token"];
+  return localToken === authToken;
 }
 
 function sendText(
@@ -239,8 +291,10 @@ function isMainModule(): boolean {
 if (isMainModule()) {
   const portArg = process.argv.find((arg) => arg.startsWith("--port="));
   const urlFileArg = process.argv.find((arg) => arg.startsWith("--url-file="));
+  const authTokenArg = process.argv.find((arg) => arg.startsWith("--auth-token="));
   const port = portArg ? Number(portArg.split("=")[1]) : Number(process.env.PORT ?? 3210);
-  const server = await startServer({ port });
+  const authToken = authTokenArg?.slice("--auth-token=".length) ?? process.env.CODEX_LOG_VIEWER_AUTH_TOKEN;
+  const server = await startServer({ port, authToken });
   if (urlFileArg) {
     await writeFile(urlFileArg.slice("--url-file=".length), `${server.url}\n`);
   }

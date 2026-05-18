@@ -14,6 +14,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Added a native SwiftUI macOS app as the primary product surface.
 - Added project selection, source paths, exports, searchable sessions, and session details to the native app.
 - Added cross-project message search with project/date/source filtering.
+- Added role, model, and session filters for message search.
+- Added packaged macOS app creation with bundled local engine, bundled Node runtime, app icon, zip artifact, and checksum.
+- Added packaged app and native UI smoke tests.
+- Added ephemeral-token authentication for the private local API.
+- Added redacted JSON exports by default, with explicit raw JSON for private local use.
+- Added synthetic parser event-shape coverage and search performance benchmarking.
 - Updated documentation to reflect the native-macOS-first product workflow.
 - Fixed native app filter/session state races so project selections and session details update reliably.
 - Removed the web dashboard and Electron prototype.

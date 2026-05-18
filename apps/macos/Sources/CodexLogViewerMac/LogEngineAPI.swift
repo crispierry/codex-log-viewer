@@ -1,7 +1,22 @@
 import Foundation
 
+enum LogEngineAPIError: LocalizedError {
+  case badStatus(path: String, statusCode: Int, body: String)
+
+  var errorDescription: String? {
+    switch self {
+    case .badStatus(let path, let statusCode, let body):
+      if body.isEmpty {
+        return "The local parser engine returned HTTP \(statusCode) for \(path)."
+      }
+      return "The local parser engine returned HTTP \(statusCode) for \(path): \(body)"
+    }
+  }
+}
+
 struct LogEngineAPI {
   let baseURL: URL
+  let authToken: String
 
   func projects(filters: LogFilters) async throws -> [ProjectListItem] {
     let response: ProjectsResponse = try await get("api/projects", query: queryItems(filters: filters, includeDateRange: false))
@@ -20,11 +35,25 @@ struct LogEngineAPI {
     return try await get("api/session", query: queryItems)
   }
 
-  func searchMessages(query: String, project: String, filters: LogFilters) async throws -> MessageSearchSummary {
+  func searchMessages(
+    query: String,
+    role: MessageRoleFilter,
+    model: String,
+    sessionID: String?,
+    project: String,
+    filters: LogFilters
+  ) async throws -> MessageSearchSummary {
     var queryItems = [
       URLQueryItem(name: "q", value: query),
+      URLQueryItem(name: "role", value: role.rawValue),
       URLQueryItem(name: "limit", value: "100")
     ]
+    if model != AppConstants.allModelsName {
+      queryItems.append(URLQueryItem(name: "model", value: model))
+    }
+    if let sessionID {
+      queryItems.append(URLQueryItem(name: "sessionId", value: sessionID))
+    }
     queryItems.append(contentsOf: self.queryItems(project: project, filters: filters))
     let response: MessageSearchResponse = try await get("api/messages/search", query: queryItems)
     return response.search
@@ -45,10 +74,15 @@ struct LogEngineAPI {
     var components = URLComponents(url: baseURL.appending(path: path), resolvingAgainstBaseURL: false)!
     components.queryItems = query.isEmpty ? nil : query
 
-    let (data, response) = try await URLSession.shared.data(from: components.url!)
+    var request = URLRequest(url: components.url!)
+    request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+
+    let (data, response) = try await URLSession.shared.data(for: request)
     let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
     guard 200..<300 ~= statusCode else {
-      throw URLError(.badServerResponse)
+      let body = String(data: data, encoding: .utf8)?
+        .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+      throw LogEngineAPIError.badStatus(path: path, statusCode: statusCode, body: body)
     }
     return data
   }

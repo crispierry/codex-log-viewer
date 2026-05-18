@@ -30,3 +30,12 @@ jobs:
       - run: npm ci
       - run: npm run build:native-engine
       - run: npm run build:mac
+      - run: npm run package:mac
+      - run: npm run smoke:mac-package
+      - run: npm run smoke:mac-ui
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Codex-Log-Viewer-macOS
+          path: |
+            dist/macos/Codex-Log-Viewer-*-macOS.zip
+            dist/macos/Codex-Log-Viewer-*-macOS.zip.sha256

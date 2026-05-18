@@ -73,6 +73,8 @@ export interface ProjectSummary {
 export interface MessageSearchOptions extends SummaryOptions {
   query?: string;
   role?: MessageRole | "all";
+  model?: string;
+  sessionId?: string;
   limit?: number;
 }
 
@@ -83,6 +85,7 @@ export interface MessageSearchResult {
   project: string;
   cwd?: string;
   turnId?: string;
+  model?: string;
   timestamp?: string;
   role: MessageRole;
   sourceEvent: string;

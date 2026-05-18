@@ -1,4 +1,16 @@
 import Foundation
+import Security
+
+struct LocalLogEngineConnection {
+  let baseURL: URL
+  let authToken: String
+}
+
+private struct LocalLogEngineLocation {
+  let serverURL: URL
+  let workingDirectoryURL: URL
+  let nodeExecutableURL: URL?
+}
 
 enum LocalLogEngineServerError: LocalizedError {
   case missingRepository
@@ -34,16 +46,18 @@ final class LocalLogEngineServer {
   private var stderrURL: URL?
   private var stdoutHandle: FileHandle?
   private var stderrHandle: FileHandle?
+  private var authToken: String?
 
   private init() {}
 
-  func start() async throws -> URL {
-    if let baseURL, process?.isRunning == true, await isHealthy(baseURL) {
-      return baseURL
+  func start() async throws -> LocalLogEngineConnection {
+    if let baseURL, let authToken, process?.isRunning == true, await isHealthy(baseURL, authToken: authToken) {
+      return LocalLogEngineConnection(baseURL: baseURL, authToken: authToken)
     }
 
     stop()
-    try launch()
+    let authToken = Self.generateAuthToken()
+    try launch(authToken: authToken)
 
     for _ in 0..<40 {
       if process?.isRunning == false {
@@ -52,9 +66,10 @@ final class LocalLogEngineServer {
         throw LocalLogEngineServerError.launchFailed(details.isEmpty ? "The parser engine exited before it was ready." : details)
       }
 
-      if let serverURL = readServerURL(), await isHealthy(serverURL) {
+      if let serverURL = readServerURL(), await isHealthy(serverURL, authToken: authToken) {
         baseURL = serverURL
-        return serverURL
+        self.authToken = authToken
+        return LocalLogEngineConnection(baseURL: serverURL, authToken: authToken)
       }
 
       try await Task.sleep(for: .milliseconds(250))
@@ -68,6 +83,7 @@ final class LocalLogEngineServer {
   func stop() {
     if let process, process.isRunning {
       process.terminate()
+      process.waitUntilExit()
     }
     stdoutHandle?.closeFile()
     stderrHandle?.closeFile()
@@ -82,11 +98,12 @@ final class LocalLogEngineServer {
     self.stderrURL = nil
     self.stdoutHandle = nil
     self.stderrHandle = nil
+    self.authToken = nil
   }
 
-  private func launch() throws {
-    let repoURL = try repositoryURL()
-    let serverURL = repoURL.appending(path: "apps/server/dist/index.js")
+  private func launch(authToken: String) throws {
+    let engineLocation = try locateEngine()
+    let serverURL = engineLocation.serverURL
 
     guard FileManager.default.fileExists(atPath: serverURL.path) else {
       throw LocalLogEngineServerError.missingServerBuild(serverURL)
@@ -106,11 +123,19 @@ final class LocalLogEngineServer {
     let stderrHandle = try FileHandle(forWritingTo: stderrURL)
 
     let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-    process.arguments = ["node", serverURL.path, "--port=0", "--url-file=\(urlFileURL.path)"]
-    process.currentDirectoryURL = repoURL
+    if let nodeExecutableURL = engineLocation.nodeExecutableURL {
+      process.executableURL = nodeExecutableURL
+      process.arguments = [serverURL.path, "--port=0", "--url-file=\(urlFileURL.path)"]
+    } else {
+      process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+      process.arguments = ["node", serverURL.path, "--port=0", "--url-file=\(urlFileURL.path)"]
+    }
+    process.currentDirectoryURL = engineLocation.workingDirectoryURL
     process.standardOutput = stdoutHandle
     process.standardError = stderrHandle
+    var environment = ProcessInfo.processInfo.environment
+    environment["CODEX_LOG_VIEWER_AUTH_TOKEN"] = authToken
+    process.environment = environment
 
     do {
       try process.run()
@@ -127,6 +152,55 @@ final class LocalLogEngineServer {
       try? FileManager.default.removeItem(at: temporaryDirectoryURL)
       throw LocalLogEngineServerError.launchFailed(error.localizedDescription)
     }
+  }
+
+  private func locateEngine() throws -> LocalLogEngineLocation {
+    if let engineDirectory = ProcessInfo.processInfo.environment["CODEX_LOG_VIEWER_ENGINE_DIR"], !engineDirectory.isEmpty {
+      let engineURL = URL(fileURLWithPath: engineDirectory, isDirectory: true)
+      return LocalLogEngineLocation(
+        serverURL: engineURL.appending(path: "apps/server/dist/index.js"),
+        workingDirectoryURL: engineURL,
+        nodeExecutableURL: nodeExecutableURL(engineURL: engineURL)
+      )
+    }
+
+    if let resourceURL = Bundle.main.resourceURL {
+      let engineURL = resourceURL.appending(path: "engine", directoryHint: .isDirectory)
+      let serverURL = engineURL.appending(path: "apps/server/dist/index.js")
+      if FileManager.default.fileExists(atPath: serverURL.path) {
+        return LocalLogEngineLocation(
+          serverURL: serverURL,
+          workingDirectoryURL: engineURL,
+          nodeExecutableURL: nodeExecutableURL(engineURL: engineURL)
+        )
+      }
+    }
+
+    let repoURL = try repositoryURL()
+    return LocalLogEngineLocation(
+      serverURL: repoURL.appending(path: "apps/server/dist/index.js"),
+      workingDirectoryURL: repoURL,
+      nodeExecutableURL: nil
+    )
+  }
+
+  private func nodeExecutableURL(engineURL: URL) -> URL? {
+    if let nodePath = ProcessInfo.processInfo.environment["CODEX_LOG_VIEWER_NODE"], !nodePath.isEmpty {
+      return URL(fileURLWithPath: nodePath)
+    }
+
+    let bundledNodeURL = Bundle.main.resourceURL?
+      .appending(path: "node/bin/node")
+    if let bundledNodeURL, FileManager.default.isExecutableFile(atPath: bundledNodeURL.path) {
+      return bundledNodeURL
+    }
+
+    let engineNodeURL = engineURL.appending(path: "node/bin/node")
+    if FileManager.default.isExecutableFile(atPath: engineNodeURL.path) {
+      return engineNodeURL
+    }
+
+    return nil
   }
 
   private func repositoryURL() throws -> URL {
@@ -173,13 +247,24 @@ final class LocalLogEngineServer {
     return value
   }
 
-  private func isHealthy(_ baseURL: URL) async -> Bool {
+  private func isHealthy(_ baseURL: URL, authToken: String) async -> Bool {
     do {
       let healthURL = baseURL.appending(path: "api/health")
-      let (_, response) = try await URLSession.shared.data(from: healthURL)
+      var request = URLRequest(url: healthURL)
+      request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+      let (_, response) = try await URLSession.shared.data(for: request)
       return (response as? HTTPURLResponse)?.statusCode == 200
     } catch {
       return false
     }
+  }
+
+  private static func generateAuthToken() -> String {
+    var bytes = [UInt8](repeating: 0, count: 32)
+    let status = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+    if status == errSecSuccess {
+      return bytes.map { String(format: "%02x", $0) }.joined()
+    }
+    return "\(UUID().uuidString)-\(UUID().uuidString)"
   }
 }

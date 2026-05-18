@@ -21,6 +21,7 @@ struct RootView: View {
         } label: {
           Label("Refresh", systemImage: "arrow.clockwise")
         }
+        .accessibilityIdentifier("refresh-button")
       }
 
       ToolbarItemGroup(placement: .primaryAction) {
@@ -29,14 +30,17 @@ struct RootView: View {
         } label: {
           Label("Export JSON", systemImage: "doc")
         }
+        .accessibilityIdentifier("export-json-button")
 
         Button {
           model.exportSummary(.csv)
         } label: {
           Label("Export CSV", systemImage: "tablecells")
         }
+        .accessibilityIdentifier("export-csv-button")
 
         StatusPill(status: model.status)
+          .accessibilityIdentifier("status-pill")
       }
     }
   }
@@ -52,6 +56,7 @@ struct SidebarView: View {
           TextEditor(text: $model.pathDraft)
             .font(.system(.caption, design: .monospaced))
             .frame(minHeight: 82)
+            .accessibilityIdentifier("source-paths-editor")
             .overlay {
               if model.pathDraft.isEmpty {
                 Text("Default Codex log locations")
@@ -63,11 +68,54 @@ struct SidebarView: View {
               }
             }
           HStack {
+            Button {
+              model.chooseSourcePaths()
+            } label: {
+              Label("Choose", systemImage: "folder.badge.plus")
+            }
+            .accessibilityIdentifier("source-picker-button")
+
             Button("Apply") {
               model.applySourcePaths()
             }
+            .accessibilityIdentifier("source-apply-button")
+
             Button("Default") {
               model.resetSourcePaths()
+            }
+            .accessibilityIdentifier("source-default-button")
+
+            if !model.recentSourcePaths.isEmpty {
+              Menu("Recent") {
+                ForEach(model.recentSourcePaths, id: \.self) { path in
+                  Button(path) {
+                    model.useRecentSourcePath(path)
+                  }
+                }
+              }
+              .accessibilityIdentifier("recent-sources-menu")
+            }
+          }
+
+          if !model.sourcePaths.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+              ForEach(model.sourcePaths, id: \.self) { path in
+                HStack(spacing: 6) {
+                  Text(path)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                  Spacer()
+                  Button {
+                    model.removeSourcePath(path)
+                  } label: {
+                    Image(systemName: "xmark.circle")
+                  }
+                  .buttonStyle(.borderless)
+                  .help("Remove source")
+                }
+              }
             }
           }
         }
@@ -76,14 +124,18 @@ struct SidebarView: View {
 
       Section("Filters") {
         Toggle("Since", isOn: $model.hasSinceFilter)
+          .accessibilityIdentifier("since-toggle")
         DatePicker("Since Date", selection: $model.sinceDate, displayedComponents: .date)
           .labelsHidden()
           .disabled(!model.hasSinceFilter)
+          .accessibilityIdentifier("since-date-picker")
 
         Toggle("Until", isOn: $model.hasUntilFilter)
+          .accessibilityIdentifier("until-toggle")
         DatePicker("Until Date", selection: $model.untilDate, displayedComponents: .date)
           .labelsHidden()
           .disabled(!model.hasUntilFilter)
+          .accessibilityIdentifier("until-date-picker")
       }
 
       Section("Library") {
@@ -110,6 +162,7 @@ struct SidebarView: View {
     }
     .listStyle(.sidebar)
     .navigationTitle("Codex Logs")
+    .accessibilityIdentifier("project-sidebar")
     .onChange(of: model.selectedProject) { _, newValue in
       model.selectProject(newValue)
     }
@@ -243,6 +296,7 @@ struct MessageSearchView: View {
             .foregroundStyle(.secondary)
           TextField("Search messages across projects", text: $model.messageQuery)
             .textFieldStyle(.plain)
+            .accessibilityIdentifier("message-search-field")
             .onSubmit {
               model.searchMessages()
             }
@@ -250,9 +304,62 @@ struct MessageSearchView: View {
             model.searchMessages()
           }
           .keyboardShortcut(.return, modifiers: .command)
+          .accessibilityIdentifier("message-search-button")
         }
         .padding(8)
         .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+
+        HStack {
+          Picker("Role", selection: $model.messageRoleFilter) {
+            ForEach(MessageRoleFilter.allCases) { role in
+              Text(role.label).tag(role)
+            }
+          }
+          .pickerStyle(.segmented)
+          .accessibilityIdentifier("message-role-filter")
+          .onChange(of: model.messageRoleFilter) { _, _ in
+            if model.searchSummary != nil {
+              model.searchMessages()
+            }
+          }
+
+          Picker("Model", selection: $model.messageModelFilter) {
+            ForEach(model.messageModelOptions, id: \.self) { modelName in
+              Text(modelName).tag(modelName)
+            }
+          }
+          .frame(maxWidth: 220)
+          .accessibilityIdentifier("message-model-filter")
+          .onChange(of: model.messageModelFilter) { _, _ in
+            if model.searchSummary != nil {
+              model.searchMessages()
+            }
+          }
+        }
+
+        HStack {
+          if let sessionLabel = model.messageSessionFilterLabel {
+            Label("Session \(sessionLabel)", systemImage: "scope")
+              .font(.caption)
+              .foregroundStyle(.secondary)
+            Button {
+              model.clearMessageSessionFilter()
+            } label: {
+              Image(systemName: "xmark.circle.fill")
+            }
+            .buttonStyle(.borderless)
+            .help("Clear session filter")
+            .accessibilityIdentifier("message-session-filter-clear")
+          } else if model.selectedSessionID != nil {
+            Button {
+              model.limitMessageSearchToSelectedSession()
+            } label: {
+              Label("Limit to Selected Session", systemImage: "scope")
+            }
+            .accessibilityIdentifier("message-session-filter-button")
+          }
+          Spacer()
+        }
 
         if let search = model.searchSummary {
           Text("\(search.totalMatches.formatted()) matches in \(search.project)")
@@ -270,6 +377,11 @@ struct MessageSearchView: View {
             }
             .width(min: 120, ideal: 170)
 
+            TableColumn("Model") { result in
+              Text(result.model ?? "unknown")
+            }
+            .width(min: 100, ideal: 130)
+
             TableColumn("Message") { result in
               Text(result.snippet)
                 .lineLimit(2)
@@ -281,6 +393,10 @@ struct MessageSearchView: View {
             .width(min: 120, ideal: 150)
           }
           .frame(minHeight: 220)
+          .accessibilityIdentifier("message-search-results-table")
+          .onChange(of: model.selectedSearchResultID) { _, newValue in
+            model.selectSearchResult(newValue)
+          }
         } else {
           Text("Search respects the current source, project, and date filters.")
             .font(.callout)
@@ -303,6 +419,7 @@ struct SessionsTableView: View {
             .foregroundStyle(.secondary)
           TextField("Search sessions", text: $model.sessionQuery)
             .textFieldStyle(.plain)
+            .accessibilityIdentifier("session-search-field")
           Text("\(model.filteredSessions.count.formatted())")
             .font(.caption.monospacedDigit())
             .foregroundStyle(.secondary)
@@ -339,6 +456,7 @@ struct SessionsTableView: View {
             .width(min: 140, ideal: 180)
           }
           .frame(minHeight: 280)
+          .accessibilityIdentifier("sessions-table")
           .onChange(of: model.selectedSessionID) { _, newValue in
             model.selectSession(newValue)
           }
@@ -362,7 +480,11 @@ struct DetailPane: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
       if let result = selectedSearchResult {
-        SearchResultInspector(result: result)
+        SearchResultInspector(
+          result: result,
+          detail: model.selectedSessionDetail,
+          isDetailLoading: model.isDetailLoading
+        )
       } else if model.isDetailLoading {
         ProgressView("Loading session")
           .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -485,20 +607,64 @@ struct InspectorSectionTitle: View {
 
 struct SearchResultInspector: View {
   let result: MessageSearchResult
+  let detail: SessionDetail?
+  let isDetailLoading: Bool
+
+  private var matchingMessageIndex: Int? {
+    detail?.messages.firstIndex { message in
+      message.timestamp == result.timestamp &&
+        message.role == result.role &&
+        message.sourceEvent == result.sourceEvent &&
+        (result.turnId == nil || message.turnId == result.turnId)
+    }
+  }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      Label("Message", systemImage: "text.bubble")
-        .font(.title3)
-        .fontWeight(.semibold)
-      LabeledContent("Role", value: result.role.capitalized)
-      LabeledContent("Project", value: result.project)
-      LabeledContent("Session", value: result.sessionId)
-      LabeledContent("Time", value: formattedDate(result.timestamp))
-      Divider()
-      Text(result.snippet)
-        .textSelection(.enabled)
-      Spacer()
+    ScrollView {
+      VStack(alignment: .leading, spacing: 12) {
+        Label("Message", systemImage: "text.bubble")
+          .font(.title3)
+          .fontWeight(.semibold)
+        LabeledContent("Role", value: result.role.capitalized)
+        LabeledContent("Project", value: result.project)
+        LabeledContent("Model", value: result.model ?? "unknown")
+        LabeledContent("Session", value: result.sessionId)
+        LabeledContent("Time", value: formattedDate(result.timestamp))
+        Divider()
+        Text(result.snippet)
+          .textSelection(.enabled)
+
+        Divider()
+        InspectorSectionTitle("Session Context")
+
+        if isDetailLoading {
+          ProgressView("Loading session")
+            .padding(.vertical, 16)
+        } else if let detail {
+          ForEach(Array(detail.messages.enumerated()), id: \.offset) { index, message in
+            VStack(alignment: .leading, spacing: 4) {
+              Text(message.role.capitalized)
+                .font(.caption)
+                .fontWeight(.semibold)
+                .foregroundStyle(.secondary)
+              Text(message.content.isEmpty ? message.sourceEvent : message.content)
+                .textSelection(.enabled)
+            }
+            .padding(8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+              index == matchingMessageIndex
+                ? Color.accentColor.opacity(0.16)
+                : Color.clear,
+              in: RoundedRectangle(cornerRadius: 6)
+            )
+          }
+        } else {
+          Text("Session context is not available.")
+            .foregroundStyle(.secondary)
+        }
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
     }
   }
 }

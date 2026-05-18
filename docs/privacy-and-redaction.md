@@ -38,21 +38,30 @@ Do not replace field names or remove nesting just to sanitize content. The parse
 
 The app makes session details separate from aggregate metrics. It currently shows parsed message content and parser diagnostics when a user selects a session, so users should treat the app as a local private view.
 
+The local API is bound to loopback and protected with an ephemeral app-generated token. The token is passed only to the app-owned parser engine and is not written to logs or the UI.
+
 Future UI work should consider:
 
 - collapsed full raw payloads by default
-- redacted export mode by default
 - clear labels when message content or raw payloads are visible
 - warnings before exporting transcripts or detailed session content
 
 ## Exports
 
-Current exports respect the active source, project, and date filters. CSV exports are aggregate-oriented. JSON summary exports include session metadata such as file paths, cwd values, model names, timestamps, and counts, so users should treat JSON exports as private unless they have reviewed and redacted them.
+Current exports respect the active source, project, and date filters. CSV exports are aggregate-oriented. JSON summary exports are redacted by default:
+
+- `filters.paths` becomes `[redacted]`
+- session `filePath` values become `[redacted]`
+- session `cwd` values become `[redacted]`
+
+Default JSON still includes project names, timestamps, session IDs, model names, and usage counts. Users should review exports before sharing.
+
+Raw JSON can be requested through the CLI with `--raw` or through the local API with `privacy=raw`. Raw JSON is for private local use only.
 
 Future export modes should include:
 
 - aggregate-only export
-- redacted detail export
-- raw local export
+- redacted detailed transcript export
+- explicit raw local transcript export
 
 Raw local export should be explicit and clearly labeled.

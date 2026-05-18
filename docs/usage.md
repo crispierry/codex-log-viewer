@@ -19,17 +19,25 @@ npm run app:mac
 From the app you can:
 
 - use the default Codex log locations
-- add custom files or directories in the source panel
+- add custom files or directories with the native source picker or source panel
 - select a project from the sidebar
 - filter by date range
 - search messages across all selected projects
-- export JSON or CSV
+- filter message search by role, model, and selected session
+- export redacted JSON or aggregate CSV
 - search sessions
 - inspect session messages, token events, warnings, and unknown events
 
+To build a packaged app from source:
+
+```sh
+npm run package:mac
+open "dist/macos/Codex Log Viewer.app"
+```
+
 ## Custom Sources
 
-In the app source panel, add one path per line:
+In the app source panel, use `Choose` to pick files or directories. You can also paste one path per line:
 
 ```sh
 /Users/example/.codex/sessions
@@ -37,17 +45,23 @@ In the app source panel, add one path per line:
 /Users/example/Downloads/sample-session.jsonl
 ```
 
-Click `Apply` to rescan those paths. Click `Default` to return to `~/.codex/sessions` and `~/.codex/archived_sessions`.
+Click `Apply` to rescan typed paths. Click `Default` to return to `~/.codex/sessions` and `~/.codex/archived_sessions`. Recent custom sources are stored in local app settings.
 
 ## Message Search
 
-Use the message search panel to search across all parsed user and assistant messages. Search respects the current source, project, and date filters. Choose `All Projects` to search across every discovered project.
+Use the message search panel to search across parsed messages. Search respects the current source, project, date, role, model, and session filters. Choose `All Projects` to search across every discovered project.
 
 ## Exports
 
 Use the `JSON` and `CSV` buttons in the app toolbar. Exports respect the current source, project, and date filters.
 
-JSON exports include session metadata such as local file paths and cwd values. Treat them as private unless you have reviewed and redacted them.
+JSON exports redact local source paths and working directories by default. Treat them as private until reviewed because project names, timestamps, session IDs, and model metadata may still be sensitive.
+
+The CLI supports explicit raw JSON for private local use:
+
+```sh
+npm run cli -- export --format json --raw --output private-usage.json
+```
 
 ## CLI Fallback
 

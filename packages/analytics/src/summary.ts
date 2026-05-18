@@ -62,6 +62,13 @@ export function summarizeParsedCorpus(corpus: ParsedCodexCorpus, options: Summar
   const tokenUsage = corpus.tokenUsage.filter(
     (token) => sessionIds.has(token.sessionId) && timestampInRange(token.timestamp, range)
   );
+  const toolEvents = corpus.toolEvents.filter(
+    (event) => sessionIds.has(event.sessionId) && timestampInRange(event.timestamp, range)
+  );
+  const unknownEvents = corpus.unknownEvents.filter(
+    (event) => sessionIds.has(event.sessionId) && timestampInRange(event.timestamp, range)
+  );
+  const sessionIdByFilePath = new Map(corpus.files.map((file) => [file.filePath, file.sessionId]));
 
   const tokens = emptyUsage();
   for (const token of dedupeTokenEvents(tokenUsage)) {
@@ -74,6 +81,11 @@ export function summarizeParsedCorpus(corpus: ParsedCodexCorpus, options: Summar
   const tokensByDay = bucketTokens(tokenUsage, "day");
   const models = modelBuckets(turns, tokenUsage, turnModels);
   const sessions = sessionSummaries(corpus, [...sessionIds], aliases, range);
+  const visibleSessionIds = new Set(sessions.map((session) => session.sessionId));
+  const parseWarnings = corpus.warnings.filter((warning) => {
+    const sessionId = sessionIdByFilePath.get(warning.filePath);
+    return sessionId ? visibleSessionIds.has(sessionId) : project === "All Projects";
+  });
 
   return {
     project,
@@ -89,9 +101,9 @@ export function summarizeParsedCorpus(corpus: ParsedCodexCorpus, options: Summar
       userMessages: submittedUserMessages.length,
       assistantMessages: assistantMessages.length,
       uniqueUserMessages: uniqueMessages.size,
-      toolEvents: corpus.toolEvents.filter((event) => sessionIds.has(event.sessionId)).length,
-      unknownEvents: corpus.unknownEvents.filter((event) => sessionIds.has(event.sessionId)).length,
-      parseWarnings: corpus.warnings.length
+      toolEvents: toolEvents.length,
+      unknownEvents: unknownEvents.length,
+      parseWarnings: parseWarnings.length
     },
     tokens,
     messagesByDay,
@@ -112,6 +124,8 @@ export function searchMessages(corpus: ParsedCodexCorpus, options: MessageSearch
   const aliases = options.aliases ?? [];
   const project = options.project && options.project !== "All Projects" ? options.project : "All Projects";
   const limit = clampLimit(options.limit);
+  const modelFilter = options.model?.trim();
+  const sessionFilter = options.sessionId?.trim();
 
   if (!normalizedQuery) {
     return {
@@ -126,9 +140,16 @@ export function searchMessages(corpus: ParsedCodexCorpus, options: MessageSearch
 
   const range = dateRange(options);
   const sessionContexts = new Map<string, ReturnType<typeof projectContextForSession>>();
+  const turnModels = new Map(
+    corpus.turns.map((turn) => [`${turn.sessionId}:${turn.turnId}`, turn.model ?? "unknown"])
+  );
   const matches: MessageSearchResult[] = [];
 
   for (const message of corpus.messages) {
+    if (sessionFilter && message.sessionId !== sessionFilter) {
+      continue;
+    }
+
     const context =
       sessionContexts.get(message.sessionId) ?? projectContextForSession(message.sessionId, corpus, aliases);
     sessionContexts.set(message.sessionId, context);
@@ -138,6 +159,11 @@ export function searchMessages(corpus: ParsedCodexCorpus, options: MessageSearch
     }
 
     if (options.role && options.role !== "all" && message.role !== options.role) {
+      continue;
+    }
+
+    const model = message.turnId ? turnModels.get(`${message.sessionId}:${message.turnId}`) : undefined;
+    if (modelFilter && modelFilter !== "all" && (model ?? "unknown") !== modelFilter) {
       continue;
     }
 
@@ -164,6 +190,7 @@ export function searchMessages(corpus: ParsedCodexCorpus, options: MessageSearch
       project: context.project,
       cwd: context.cwd,
       turnId: message.turnId,
+      model,
       timestamp: message.timestamp,
       role: message.role,
       sourceEvent: message.sourceEvent,

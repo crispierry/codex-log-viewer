@@ -3,6 +3,7 @@ import { writeFile } from "node:fs/promises";
 import {
   loadCorpus,
   summaryToCsv,
+  summaryToJson,
   summarizeParsedCorpus,
   summarizeProject,
   type ProjectSummary,
@@ -120,7 +121,7 @@ async function exportCommand(parsed: ParsedArgs): Promise<void> {
   const summary = await summarizeProject(summaryOptions(parsed));
   const format = String(parsed.options.format ?? "json");
   const output = typeof parsed.options.output === "string" ? parsed.options.output : undefined;
-  const body = format === "csv" ? summaryToCsv(summary) : `${JSON.stringify(summary, null, 2)}\n`;
+  const body = format === "csv" ? summaryToCsv(summary) : summaryToJson(summary, { redacted: parsed.options.raw !== true });
 
   if (output) {
     await writeFile(output, body, "utf8");
@@ -196,6 +197,7 @@ Usage:
   codex-log-viewer summary [--project <name>] [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--path <file-or-dir>] [--json]
   codex-log-viewer sessions [--project <name>] [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--json]
   codex-log-viewer export [--format json|csv] [--output <file>] [summary options]
+  codex-log-viewer export --format json --raw [summary options]
 
 Defaults scan ~/.codex/sessions and ~/.codex/archived_sessions.
 `);
