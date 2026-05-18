@@ -22,6 +22,7 @@ const child = spawn(executablePath, [], {
     ...process.env,
     CODEX_LOG_VIEWER_UI_TEST: "1",
     CODEX_LOG_VIEWER_UI_TEST_AUTO_QUIT: "1",
+    CODEX_LOG_VIEWER_UI_WORKFLOW_SMOKE: "1",
     CODEX_LOG_VIEWER_EPHEMERAL_SETTINGS: "1",
     CODEX_LOG_VIEWER_INITIAL_PATHS: fixturePath
   },
@@ -46,6 +47,10 @@ try {
 
 if (child.exitCode !== 0 && child.exitCode !== null) {
   throw new Error(`Native UI smoke app exited with ${child.exitCode}\n${stderr}${stdout}`);
+}
+
+if (!stdout.includes("Native UI workflow smoke passed.")) {
+  throw new Error(`Native UI workflow did not report success.\n${stderr}${stdout}`);
 }
 
 console.log("Native macOS UI smoke test passed.");

@@ -26,7 +26,7 @@ Implemented for v0.1:
 - packaged `.app` build with metadata, icon, bundled local engine, bundled Node runtime, zip artifact, and checksum
 - optional Developer ID signing and notarization path through environment variables
 - packaged app smoke workflow that verifies engine startup, API access, search, session detail, exports, repeated launch, and child-process cleanup
-- native UI smoke workflow through macOS accessibility automation using sanitized fixtures and ephemeral settings
+- native UI smoke workflow through macOS accessibility automation using sanitized fixtures and ephemeral settings; it verifies source loading, project/date selection, search, session context, session-scoped search, and export data
 - per-run local API bearer token for data endpoints
 - native source picker, recent source settings, and local-only settings persistence
 - parser fixture coverage for supported event shapes, null token info, malformed lines, unknown payloads, and tool events

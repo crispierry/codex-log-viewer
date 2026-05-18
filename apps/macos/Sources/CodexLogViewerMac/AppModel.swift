@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 import Foundation
 
 @MainActor
@@ -140,7 +141,7 @@ final class AppModel: ObservableObject {
           clearSelectedSession()
         }
         status = .ready
-        scheduleUITestQuitIfNeeded()
+        scheduleUITestWorkflowIfNeeded(api: api, filters: filters)
       } catch is CancellationError {
         return
       } catch {
@@ -408,17 +409,132 @@ final class AppModel: ObservableObject {
     UserDefaults.standard.set(recentSourcePaths, forKey: DefaultsKeys.recentSourcePaths)
   }
 
-  private func scheduleUITestQuitIfNeeded() {
-    guard ProcessInfo.processInfo.environment["CODEX_LOG_VIEWER_UI_TEST_AUTO_QUIT"] == "1",
+  private func scheduleUITestWorkflowIfNeeded(api: LogEngineAPI, filters: LogFilters) {
+    guard ProcessInfo.processInfo.environment["CODEX_LOG_VIEWER_UI_TEST_AUTO_QUIT"] == "1" ||
+      ProcessInfo.processInfo.environment["CODEX_LOG_VIEWER_UI_WORKFLOW_SMOKE"] == "1",
       !hasScheduledUITestQuit
     else {
       return
     }
 
     hasScheduledUITestQuit = true
+    if ProcessInfo.processInfo.environment["CODEX_LOG_VIEWER_UI_WORKFLOW_SMOKE"] == "1" {
+      Task {
+        do {
+          try await Task.sleep(for: .seconds(5))
+          try await runUITestWorkflow(api: api, filters: filters)
+          Self.writeStdout("Native UI workflow smoke passed.\n")
+          NSApp.terminate(nil)
+        } catch {
+          Self.writeStderr("Native UI workflow smoke failed: \(error.localizedDescription)\n")
+          LocalLogEngineServer.shared.stop()
+          exit(1)
+        }
+      }
+      return
+    }
+
     Task {
       try? await Task.sleep(for: .seconds(8))
       NSApp.terminate(nil)
+    }
+  }
+
+  private func runUITestWorkflow(api: LogEngineAPI, filters: LogFilters) async throws {
+    let projects = try await api.projects(filters: filters)
+    guard projects.contains(where: { $0.project == "sample-app" }) else {
+      throw AppSmokeError.unexpected("The sanitized fixture project was not visible in the project list.")
+    }
+    self.projects = projects
+
+    let fixtureDate = "2026-04-27"
+    guard let date = Self.dateFormatter.date(from: fixtureDate) else {
+      throw AppSmokeError.unexpected("The UI workflow fixture date could not be parsed.")
+    }
+    hasSinceFilter = true
+    hasUntilFilter = true
+    sinceDate = date
+    untilDate = date
+
+    let dateFilters = LogFilters(
+      paths: filters.paths,
+      since: fixtureDate,
+      until: fixtureDate,
+      refreshToken: filters.refreshToken
+    )
+    let allProjectsSummary = try await api.summary(project: AppConstants.allProjectsName, filters: dateFilters)
+    guard allProjectsSummary.sessions.contains(where: { $0.project == "sample-app" }) else {
+      throw AppSmokeError.unexpected("The sanitized fixture session was not visible in all-projects summary.")
+    }
+
+    selectedProject = "sample-app"
+    let projectSummary = try await api.summary(project: selectedProject, filters: dateFilters)
+    guard projectSummary.totals.userMessages == 1,
+      projectSummary.sessions.first?.sessionId == "sample-session-1"
+    else {
+      throw AppSmokeError.unexpected("The sample project summary did not match the sanitized fixture.")
+    }
+    summary = projectSummary
+
+    messageQuery = "parser test"
+    messageRoleFilter = .all
+    messageModelFilter = AppConstants.allModelsName
+    messageSessionFilter = nil
+    let search = try await api.searchMessages(
+      query: messageQuery,
+      role: messageRoleFilter,
+      model: messageModelFilter,
+      sessionID: nil,
+      project: AppConstants.allProjectsName,
+      filters: dateFilters
+    )
+    guard let result = search.results.first, search.totalMatches >= 1 else {
+      throw AppSmokeError.unexpected("The UI workflow message search returned no fixture matches.")
+    }
+    searchSummary = search
+    selectedSearchResultID = result.id
+    selectedSessionID = result.sessionId
+
+    let detail = try await api.sessionDetail(
+      sessionID: result.sessionId,
+      project: AppConstants.allProjectsName,
+      filters: dateFilters
+    )
+    guard detail.messages.contains(where: { $0.content.contains("parser test") }) else {
+      throw AppSmokeError.unexpected("The selected search result did not load full session context.")
+    }
+    selectedSessionDetail = detail
+
+    messageSessionFilter = result.sessionId
+    let sessionSearch = try await api.searchMessages(
+      query: messageQuery,
+      role: .all,
+      model: AppConstants.allModelsName,
+      sessionID: result.sessionId,
+      project: AppConstants.allProjectsName,
+      filters: dateFilters
+    )
+    guard sessionSearch.totalMatches >= 1 else {
+      throw AppSmokeError.unexpected("The selected-session message filter returned no fixture matches.")
+    }
+
+    let jsonExport = try await api.exportSummary(
+      format: .json,
+      project: AppConstants.allProjectsName,
+      filters: dateFilters
+    )
+    let csvExport = try await api.exportSummary(
+      format: .csv,
+      project: AppConstants.allProjectsName,
+      filters: dateFilters
+    )
+    let jsonText = String(data: jsonExport, encoding: .utf8) ?? ""
+    let csvText = String(data: csvExport, encoding: .utf8) ?? ""
+    guard jsonText.contains("[redacted]"),
+      !jsonText.contains("/Users/example"),
+      csvText.contains("user_messages")
+    else {
+      throw AppSmokeError.unexpected("The UI workflow export checks did not pass.")
     }
   }
 
@@ -460,6 +576,14 @@ final class AppModel: ObservableObject {
 
   private static func stringArray(forKey key: String) -> [String] {
     UserDefaults.standard.stringArray(forKey: key) ?? []
+  }
+
+  private static func writeStdout(_ message: String) {
+    FileHandle.standardOutput.write(Data(message.utf8))
+  }
+
+  private static func writeStderr(_ message: String) {
+    FileHandle.standardError.write(Data(message.utf8))
   }
 }
 
