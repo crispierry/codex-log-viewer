@@ -12,12 +12,9 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "npm run build -w @codex-log-viewer/parser && npm run build && node --test test/*.test.mjs"
   },
   "dependencies": {
     "@codex-log-viewer/parser": "0.1.0"
-  },
-  "devDependencies": {
-    "vitest": "^4.0.0"
   }
 }

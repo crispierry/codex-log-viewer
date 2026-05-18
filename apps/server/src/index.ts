@@ -1,9 +1,11 @@
-import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { createReadStream, existsSync } from "node:fs";
-import { extname, join, normalize } from "node:path";
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { realpathSync } from "node:fs";
+import { writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   loadCorpus,
+  searchMessages,
   summaryToCsv,
   summarizeParsedCorpus,
   type LoadedCorpus,
@@ -14,8 +16,6 @@ export interface ServerOptions {
   host?: string;
   port?: number;
   paths?: string[];
-  webDir?: string;
-  openUrl?: boolean;
 }
 
 interface CorpusCacheEntry {
@@ -29,12 +29,11 @@ const CACHE_TTL_MS = 30_000;
 export async function startServer(options: ServerOptions = {}): Promise<{ url: string; close: () => Promise<void> }> {
   const host = options.host ?? "127.0.0.1";
   const port = options.port ?? 3210;
-  const webDir = options.webDir ?? defaultWebDir();
   const keepAlive = setInterval(() => undefined, 60_000);
 
   const server = createServer(async (request, response) => {
     try {
-      await handleRequest(request, response, { ...options, webDir });
+      await handleRequest(request, response, options);
     } catch (error) {
       sendJson(response, 500, {
         error: error instanceof Error ? error.message : "Unexpected server error"
@@ -42,7 +41,7 @@ export async function startServer(options: ServerOptions = {}): Promise<{ url: s
     }
   });
 
-  await new Promise<void>((resolve) => server.listen(port, host, resolve));
+  await listen(server, port, host);
   const address = server.address();
   const actualPort = typeof address === "object" && address ? address.port : port;
   return {
@@ -121,6 +120,22 @@ async function handleRequest(request: IncomingMessage, response: ServerResponse,
     return;
   }
 
+  if (url.pathname === "/api/messages/search") {
+    const loaded = await loadCachedCorpus(url, options.paths);
+    const project = url.searchParams.get("project");
+    const limit = Number(url.searchParams.get("limit") ?? 100);
+    sendJson(response, 200, {
+      search: searchMessages(loaded.corpus, {
+        ...summaryOptionsFromQuery(url, options.paths),
+        project: project && project !== "All Projects" ? project : undefined,
+        query: url.searchParams.get("q") ?? "",
+        role: "all",
+        limit
+      })
+    });
+    return;
+  }
+
   if (url.pathname === "/api/export") {
     const loaded = await loadCachedCorpus(url, options.paths);
     const summary = summarizeParsedCorpus(loaded.corpus, summaryOptionsFromQuery(url, options.paths));
@@ -134,7 +149,7 @@ async function handleRequest(request: IncomingMessage, response: ServerResponse,
     return;
   }
 
-  await serveStatic(url.pathname, response, options.webDir ?? defaultWebDir());
+  sendJson(response, 404, { error: "Not found" });
 }
 
 function loadCachedCorpus(url: URL, fallbackPaths?: string[]): Promise<LoadedCorpus> {
@@ -177,31 +192,6 @@ function cacheKey(paths: string[] | undefined): string {
   return paths && paths.length > 0 ? [...paths].sort().join("\n") : "__default__";
 }
 
-async function serveStatic(pathname: string, response: ServerResponse, webDir: string): Promise<void> {
-  const safePath = pathname === "/" ? "/index.html" : pathname;
-  const candidate = normalize(join(webDir, safePath));
-  const normalizedWebDir = normalize(webDir);
-
-  if (!candidate.startsWith(normalizedWebDir)) {
-    sendJson(response, 403, { error: "Forbidden" });
-    return;
-  }
-
-  if (!existsSync(candidate)) {
-    const indexPath = join(webDir, "index.html");
-    if (existsSync(indexPath)) {
-      response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-      createReadStream(indexPath).pipe(response);
-      return;
-    }
-    sendJson(response, 404, { error: "Dashboard assets not found. Run npm run build first." });
-    return;
-  }
-
-  response.writeHead(200, { "content-type": contentType(candidate) });
-  createReadStream(candidate).pipe(response);
-}
-
 function sendJson(response: ServerResponse, statusCode: number, value: unknown): void {
   response.writeHead(statusCode, { "content-type": "application/json; charset=utf-8" });
   response.end(JSON.stringify(value, null, 2));
@@ -221,30 +211,38 @@ function sendText(
   response.end(value);
 }
 
-function contentType(filePath: string): string {
-  switch (extname(filePath)) {
-    case ".html":
-      return "text/html; charset=utf-8";
-    case ".js":
-      return "text/javascript; charset=utf-8";
-    case ".css":
-      return "text/css; charset=utf-8";
-    case ".svg":
-      return "image/svg+xml";
-    case ".json":
-      return "application/json; charset=utf-8";
-    default:
-      return "application/octet-stream";
+function listen(server: Server, port: number, host: string): Promise<void> {
+  return new Promise((resolvePromise, reject) => {
+    const onError = (error: Error) => {
+      server.off("listening", onListening);
+      reject(error);
+    };
+    const onListening = () => {
+      server.off("error", onError);
+      resolvePromise();
+    };
+    server.once("error", onError);
+    server.once("listening", onListening);
+    server.listen(port, host);
+  });
+}
+
+function isMainModule(): boolean {
+  const entrypoint = process.argv[1];
+  if (!entrypoint) {
+    return false;
   }
+
+  return realpathSync(fileURLToPath(import.meta.url)) === realpathSync(resolve(entrypoint));
 }
 
-function defaultWebDir(): string {
-  return fileURLToPath(new URL("../../web/dist", import.meta.url));
-}
-
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMainModule()) {
   const portArg = process.argv.find((arg) => arg.startsWith("--port="));
+  const urlFileArg = process.argv.find((arg) => arg.startsWith("--url-file="));
   const port = portArg ? Number(portArg.split("=")[1]) : Number(process.env.PORT ?? 3210);
   const server = await startServer({ port });
+  if (urlFileArg) {
+    await writeFile(urlFileArg.slice("--url-file=".length), `${server.url}\n`);
+  }
   process.stdout.write(`Codex Log Viewer running at ${server.url}\n`);
 }

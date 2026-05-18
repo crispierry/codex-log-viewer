@@ -1,0 +1,161 @@
+import Foundation
+
+enum AppConstants {
+  static let allProjectsName = "All Projects"
+}
+
+enum ExportFormat: String {
+  case json
+  case csv
+
+  var fileExtension: String { rawValue }
+}
+
+struct LogFilters: Equatable {
+  var paths: [String] = []
+  var since: String?
+  var until: String?
+  var refreshToken = 0
+}
+
+struct ProjectsResponse: Decodable {
+  let projects: [ProjectListItem]
+}
+
+struct SummaryResponse: Decodable {
+  let summary: ProjectSummary
+}
+
+struct MessageSearchResponse: Decodable {
+  let search: MessageSearchSummary
+}
+
+struct ProjectListItem: Decodable, Identifiable, Hashable {
+  let project: String
+  let cwdSamples: [String]
+  let sessions: Int
+  let turns: Int
+  let messages: Int
+  let totalTokens: Int
+
+  var id: String { project }
+}
+
+struct ProjectSummary: Decodable {
+  let project: String
+  let generatedAt: String
+  let totals: SummaryTotals
+  let tokens: TokenUsage
+  let sessions: [SessionSummary]
+}
+
+struct SummaryTotals: Decodable {
+  let sessions: Int
+  let turns: Int
+  let userMessages: Int
+  let assistantMessages: Int
+  let uniqueUserMessages: Int
+  let toolEvents: Int
+  let unknownEvents: Int
+  let parseWarnings: Int
+}
+
+struct TokenUsage: Decodable, Hashable {
+  let inputTokens: Int
+  let cachedInputTokens: Int
+  let freshInputTokens: Int
+  let outputTokens: Int
+  let reasoningOutputTokens: Int
+  let totalTokens: Int
+}
+
+struct SessionSummary: Decodable, Identifiable, Hashable {
+  let sessionId: String
+  let filePath: String
+  let project: String
+  let cwd: String?
+  let firstSeen: String?
+  let lastSeen: String?
+  let userMessages: Int
+  let assistantMessages: Int
+  let totalTokens: Int
+  let models: [String]
+
+  var id: String { sessionId }
+  var shortSessionId: String { String(sessionId.prefix(8)) }
+}
+
+struct MessageSearchSummary: Decodable {
+  let query: String
+  let project: String
+  let generatedAt: String
+  let totalMatches: Int
+  let limit: Int
+  let results: [MessageSearchResult]
+}
+
+struct MessageSearchResult: Decodable, Identifiable, Hashable {
+  let id: String
+  let sessionId: String
+  let filePath: String
+  let project: String
+  let cwd: String?
+  let turnId: String?
+  let timestamp: String?
+  let role: String
+  let sourceEvent: String
+  let snippet: String
+}
+
+struct SessionDetail: Decodable {
+  let file: SessionDetailFile
+  let turns: [TurnDetail]
+  let messages: [MessageDetail]
+  let tokenUsage: [TokenUsageDetail]
+  let taskTimings: [TaskTimingDetail]
+  let toolEvents: [EventPlaceholder]
+  let unknownEvents: [EventPlaceholder]
+  let warnings: [ParseWarningDetail]
+}
+
+struct SessionDetailFile: Decodable {
+  let filePath: String
+  let sessionId: String
+  let lineCount: Int
+}
+
+struct TurnDetail: Decodable, Hashable {
+  let turnId: String
+  let model: String?
+  let effort: String?
+  let cwd: String?
+  let timestamp: String?
+}
+
+struct MessageDetail: Decodable, Hashable {
+  let role: String
+  let sourceEvent: String
+  let content: String
+  let timestamp: String?
+  let phase: String?
+}
+
+struct TokenUsageDetail: Decodable, Hashable {
+  let timestamp: String?
+  let usage: TokenUsage
+  let cumulativeUsage: TokenUsage?
+}
+
+struct TaskTimingDetail: Decodable, Hashable {
+  let turnId: String
+  let durationMs: Double?
+  let timeToFirstTokenMs: Double?
+}
+
+struct ParseWarningDetail: Decodable, Hashable {
+  let lineNumber: Int
+  let code: String
+  let message: String
+}
+
+struct EventPlaceholder: Decodable, Hashable {}

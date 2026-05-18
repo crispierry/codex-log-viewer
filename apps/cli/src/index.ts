@@ -8,7 +8,6 @@ import {
   type ProjectSummary,
   type SummaryOptions
 } from "@codex-log-viewer/analytics";
-import { startServer } from "@codex-log-viewer/server";
 
 interface ParsedArgs {
   command: string;
@@ -29,9 +28,6 @@ async function main(argv: string[]): Promise<void> {
       break;
     case "export":
       await exportCommand(parsed);
-      break;
-    case "serve":
-      await serveCommand(parsed);
       break;
     case "help":
     case "--help":
@@ -134,14 +130,6 @@ async function exportCommand(parsed: ParsedArgs): Promise<void> {
   }
 }
 
-async function serveCommand(parsed: ParsedArgs): Promise<void> {
-  const port = Number(parsed.options.port ?? 3210);
-  const paths = arrayOption(parsed.options.path);
-  const server = await startServer({ port, paths: paths.length > 0 ? paths : undefined });
-  process.stdout.write(`Codex Log Viewer running at ${server.url}\n`);
-  process.stdout.write("Press Ctrl+C to stop.\n");
-}
-
 function summaryOptions(parsed: ParsedArgs): SummaryOptions {
   const paths = arrayOption(parsed.options.path);
   return {
@@ -208,7 +196,6 @@ Usage:
   codex-log-viewer summary [--project <name>] [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--path <file-or-dir>] [--json]
   codex-log-viewer sessions [--project <name>] [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--json]
   codex-log-viewer export [--format json|csv] [--output <file>] [summary options]
-  codex-log-viewer serve [--port 3210] [--path <file-or-dir>]
 
 Defaults scan ~/.codex/sessions and ~/.codex/archived_sessions.
 `);

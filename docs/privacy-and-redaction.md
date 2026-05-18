@@ -34,9 +34,9 @@ Keep event shape intact while replacing sensitive values:
 
 Do not replace field names or remove nesting just to sanitize content. The parser needs realistic structure.
 
-## Dashboard Privacy
+## App Privacy
 
-The dashboard makes session details separate from aggregate metrics. It currently shows parsed message content and parser diagnostics when a user selects a session, so users should treat the dashboard as a local private view.
+The app makes session details separate from aggregate metrics. It currently shows parsed message content and parser diagnostics when a user selects a session, so users should treat the app as a local private view.
 
 Future UI work should consider:
 
@@ -47,7 +47,7 @@ Future UI work should consider:
 
 ## Exports
 
-Current exports are aggregate summary exports and respect the active source, project, and date filters.
+Current exports respect the active source, project, and date filters. CSV exports are aggregate-oriented. JSON summary exports include session metadata such as file paths, cwd values, model names, timestamps, and counts, so users should treat JSON exports as private unless they have reviewed and redacted them.
 
 Future export modes should include:
 

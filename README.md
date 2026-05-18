@@ -1,6 +1,6 @@
 # Codex Log Viewer
 
-Codex Log Viewer is a local-first parser and analytics project for OpenAI Codex session logs.
+Codex Log Viewer is a local-first native macOS app and parser for OpenAI Codex session logs.
 
 The goal is to help developers understand how they use Codex across projects: message volume, unique prompts, token usage, model usage, session history, and time-based activity patterns.
 
@@ -11,12 +11,13 @@ This project has a working v0 implementation:
 - TypeScript parser for Codex `rollout-*.jsonl` logs
 - Shared analytics engine
 - CLI summaries and exports
-- Local dashboard server
-- React dashboard
+- Private local API engine for the app
+- Native SwiftUI macOS app
+- Cross-project message search
 - Sanitized fixtures and tests
 - GitHub Actions CI
 
-## Planned Features
+## Current Capabilities
 
 - Parse Codex JSONL sessions from `~/.codex/sessions` and `~/.codex/archived_sessions`
 - Group sessions by project path and Codex worktree name
@@ -25,47 +26,38 @@ This project has a working v0 implementation:
 - Track total, input, cached input, fresh input, output, and reasoning tokens
 - Break usage down by model
 - Export summaries as JSON and CSV
-- Provide a local web dashboard with charts and session tables
+- Provide a macOS app with metrics, search, and session tables
 - Keep all parsing and analysis local by default
 
 ## Quick Start
 
 ```sh
 npm install
-npm run serve
+npm run app:mac
 ```
 
-The dashboard server starts on [http://127.0.0.1:3210](http://127.0.0.1:3210) by default.
+The macOS app starts a private local parser engine on an app-owned `127.0.0.1` port and opens the desktop window.
 
-## Dashboard
+## macOS App
 
-The dashboard is the primary product experience. From the front end you can:
+The app is the primary product experience. From the desktop UI you can:
 
 - scan default Codex logs
 - add custom files or directories
-- select projects
+- select projects or all projects
 - filter by date range
+- search messages across projects
 - refresh the scan
 - export JSON or CSV
-- search sessions
 - inspect session messages, turns, tokens, warnings, and unknown events
 
 Run it with:
 
 ```sh
-npm run serve
+npm run app:mac
 ```
 
-The dashboard is served by a local Node process. Browser code does not directly access your filesystem; it calls the local API provided by the server.
-
-For dashboard frontend development:
-
-```sh
-npm run start -w @codex-log-viewer/server
-npm run dev -w @codex-log-viewer/web
-```
-
-The Vite dev server proxies `/api` to `http://127.0.0.1:3210`.
+The macOS app is native SwiftUI. It reuses the local parser, analytics, and private API engine so parsing stays fixture-driven and local.
 
 ## CLI
 
@@ -73,8 +65,8 @@ The CLI remains available for automation and smoke tests, but it is not required
 
 ```sh
 npm run cli -- projects
-npm run cli -- summary --project WBD-Celebration --since 2026-04-22 --until 2026-04-29
-npm run cli -- export --format csv --output usage.csv --project WBD-Celebration
+npm run cli -- summary --project sample-app --since 2026-04-22 --until 2026-04-29
+npm run cli -- export --format csv --output usage.csv --project sample-app
 ```
 
 Use `--path <file-or-dir>` to scan a specific fixture, export, or alternate Codex home:
@@ -95,11 +87,14 @@ codex-log-viewer summary
 npm run lint
 npm test
 npm run build
+npm run build:mac # macOS only
 ```
 
 ## Documentation
 
 - [Research and roadmap](docs/research-and-roadmap.md)
+- [macOS app and open source plan](docs/macos-app-plan.md)
+- [Open source readiness](docs/open-source-readiness.md)
 - [Product requirements](docs/product-requirements.md)
 - [Architecture](docs/architecture.md)
 - [Parser schema notes](docs/parser-schema-notes.md)
@@ -120,6 +115,8 @@ npm run build
 ## Privacy
 
 Codex logs may contain prompts, source code, file paths, terminal output, and secrets. The default workflow is local-only. Do not commit unsanitized logs or paste private sessions into public issues.
+
+JSON exports can include local session metadata such as file paths and cwd values. Treat exports as private unless you have reviewed and redacted them.
 
 See [Privacy and Redaction](docs/privacy-and-redaction.md).
 

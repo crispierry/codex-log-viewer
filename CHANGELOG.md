@@ -8,10 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Added project foundation documentation.
 - Added research and roadmap for Codex log parsing and analytics.
-- Added TypeScript parser, analytics package, CLI, local dashboard server, and React dashboard.
+- Added TypeScript parser, analytics package, CLI, and private local API engine.
 - Added sanitized Codex fixture coverage and unit tests.
 - Added GitHub Actions CI.
-- Promoted project selection, source paths, exports, searchable sessions, and session details into the dashboard.
-- Updated documentation to reflect the dashboard-first product workflow.
-- Fixed dashboard filter/session state races so project selections and session details update reliably.
-- Added browser regression coverage and a UI test plan for dashboard workflows.
+- Added a native SwiftUI macOS app as the primary product surface.
+- Added project selection, source paths, exports, searchable sessions, and session details to the native app.
+- Added cross-project message search with project/date/source filtering.
+- Updated documentation to reflect the native-macOS-first product workflow.
+- Fixed native app filter/session state races so project selections and session details update reliably.
+- Removed the web dashboard and Electron prototype.
+- Added a UI test plan for native app workflows.
+- Added macOS app build verification to CI.

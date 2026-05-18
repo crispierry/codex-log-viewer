@@ -10,6 +10,9 @@ import { listProjects, projectContextForSession, projectNameForCwd } from "./pro
 import type {
   DateBucket,
   LoadedCorpus,
+  MessageSearchOptions,
+  MessageSearchResult,
+  MessageSearchSummary,
   ModelBucket,
   ProjectAlias,
   ProjectListItem,
@@ -103,8 +106,137 @@ export function projectsFromCorpus(corpus: ParsedCodexCorpus, aliases: ProjectAl
   return listProjects(corpus, aliases);
 }
 
+export function searchMessages(corpus: ParsedCodexCorpus, options: MessageSearchOptions = {}): MessageSearchSummary {
+  const query = options.query?.trim() ?? "";
+  const normalizedQuery = normalizeSearchText(query);
+  const aliases = options.aliases ?? [];
+  const project = options.project && options.project !== "All Projects" ? options.project : "All Projects";
+  const limit = clampLimit(options.limit);
+
+  if (!normalizedQuery) {
+    return {
+      query,
+      project,
+      generatedAt: new Date().toISOString(),
+      totalMatches: 0,
+      limit,
+      results: []
+    };
+  }
+
+  const range = dateRange(options);
+  const sessionContexts = new Map<string, ReturnType<typeof projectContextForSession>>();
+  const matches: MessageSearchResult[] = [];
+
+  for (const message of corpus.messages) {
+    const context =
+      sessionContexts.get(message.sessionId) ?? projectContextForSession(message.sessionId, corpus, aliases);
+    sessionContexts.set(message.sessionId, context);
+
+    if (project !== "All Projects" && context.project !== project) {
+      continue;
+    }
+
+    if (options.role && options.role !== "all" && message.role !== options.role) {
+      continue;
+    }
+
+    if (!timestampInRange(message.timestamp, range)) {
+      continue;
+    }
+
+    if (!normalizeSearchText(message.content).includes(normalizedQuery)) {
+      continue;
+    }
+
+    matches.push({
+      id: [
+        message.filePath,
+        message.sessionId,
+        message.turnId ?? "",
+        message.timestamp ?? "",
+        message.role,
+        message.sourceEvent,
+        matches.length
+      ].join("#"),
+      sessionId: message.sessionId,
+      filePath: message.filePath,
+      project: context.project,
+      cwd: context.cwd,
+      turnId: message.turnId,
+      timestamp: message.timestamp,
+      role: message.role,
+      sourceEvent: message.sourceEvent,
+      snippet: snippetFor(message.content, query)
+    });
+  }
+
+  matches.sort((a, b) => (b.timestamp ?? "").localeCompare(a.timestamp ?? ""));
+
+  return {
+    query,
+    project,
+    generatedAt: new Date().toISOString(),
+    totalMatches: matches.length,
+    limit,
+    results: matches.slice(0, limit)
+  };
+}
+
 export function normalizeMessage(message: string): string {
   return message.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function normalizeSearchText(value: string): string {
+  return value.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function clampLimit(limit: number | undefined): number {
+  if (!limit || Number.isNaN(limit)) {
+    return 100;
+  }
+  return Math.max(1, Math.min(500, Math.trunc(limit)));
+}
+
+function snippetFor(content: string, query: string): string {
+  const trimmed = content.trim();
+  const matchIndex = normalizedMatchStart(trimmed, query);
+  const start = matchIndex >= 0 ? Math.max(0, matchIndex - 80) : 0;
+  const end = Math.min(trimmed.length, start + 280);
+  const prefix = start > 0 ? "..." : "";
+  const suffix = end < trimmed.length ? "..." : "";
+  return `${prefix}${trimmed.slice(start, end)}${suffix}`;
+}
+
+function normalizedMatchStart(content: string, query: string): number {
+  const normalizedQuery = normalizeSearchText(query);
+  const normalizedCharacters: string[] = [];
+  const sourceIndexes: number[] = [];
+  let previousWasWhitespace = false;
+
+  for (let index = 0; index < content.length; index += 1) {
+    const character = content[index] ?? "";
+    if (/\s/.test(character)) {
+      if (normalizedCharacters.length > 0 && !previousWasWhitespace) {
+        normalizedCharacters.push(" ");
+        sourceIndexes.push(index);
+      }
+      previousWasWhitespace = true;
+      continue;
+    }
+
+    normalizedCharacters.push(character.toLowerCase());
+    sourceIndexes.push(index);
+    previousWasWhitespace = false;
+  }
+
+  while (normalizedCharacters.at(-1) === " ") {
+    normalizedCharacters.pop();
+    sourceIndexes.pop();
+  }
+
+  const matchIndex = normalizedCharacters.join("").indexOf(normalizedQuery);
+  return matchIndex >= 0 ? sourceIndexes[matchIndex] ?? 0 : -1;
 }
 
 function dateRange(options: SummaryOptions): { since?: number; until?: number } {
@@ -260,7 +392,9 @@ function sessionSummaries(
   aliases: ProjectAlias[],
   range: { since?: number; until?: number }
 ): SessionSummary[] {
-  return sessionIds.map((sessionId) => {
+  const hasDateFilter = range.since !== undefined || range.until !== undefined;
+
+  return sessionIds.flatMap((sessionId) => {
     const file = corpus.files.find((candidate) => candidate.sessionId === sessionId);
     const session = corpus.sessions.find((candidate) => candidate.sessionId === sessionId);
     const cwd = session?.cwd ?? corpus.turns.find((turn) => turn.sessionId === sessionId)?.cwd;
@@ -270,24 +404,33 @@ function sessionSummaries(
     const tokens = dedupeTokenEvents(
       corpus.tokenUsage.filter((token) => token.sessionId === sessionId && timestampInRange(token.timestamp, range))
     );
-    const turns = corpus.turns.filter((turn) => turn.sessionId === sessionId);
+    const turns = corpus.turns.filter((turn) => turn.sessionId === sessionId && timestampInRange(turn.timestamp, range));
+    const sessionTimestampInRange = session?.timestamp ? timestampInRange(session.timestamp, range) : false;
+    const hasActivityInRange = sessionTimestampInRange || messages.length > 0 || tokens.length > 0 || turns.length > 0;
+
+    if (hasDateFilter && !hasActivityInRange) {
+      return [];
+    }
+
     const timestamps = [
       ...messages.map((message) => message.timestamp),
       ...tokens.map((token) => token.timestamp),
-      session?.timestamp
+      ...turns.map((turn) => turn.timestamp),
+      ...(sessionTimestampInRange ? [session?.timestamp] : [])
     ].filter(Boolean) as string[];
+    const sortedTimestamps = timestamps.sort();
 
-    return {
+    return [{
       sessionId,
       filePath: file?.filePath ?? "",
       project: projectNameForCwd(cwd, aliases),
       cwd,
-      firstSeen: timestamps.sort()[0],
-      lastSeen: timestamps.sort().at(-1),
+      firstSeen: sortedTimestamps[0],
+      lastSeen: sortedTimestamps.at(-1),
       userMessages: messages.filter((message) => message.sourceEvent === "event_msg.user_message").length,
       assistantMessages: messages.filter((message) => message.role === "assistant").length,
       totalTokens: tokens.reduce((sum, token) => sum + token.usage.totalTokens, 0),
       models: [...new Set(turns.map((turn) => turn.model).filter(Boolean) as string[])]
-    };
+    }];
   }).sort((a, b) => (b.lastSeen ?? "").localeCompare(a.lastSeen ?? ""));
 }

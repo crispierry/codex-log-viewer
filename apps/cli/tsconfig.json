@@ -7,8 +7,7 @@
   },
   "references": [
     { "path": "../../packages/parser" },
-    { "path": "../../packages/analytics" },
-    { "path": "../server" }
+    { "path": "../../packages/analytics" }
   ],
   "include": ["src/**/*.ts"]
 }

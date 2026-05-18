@@ -4,7 +4,7 @@ Date: 2026-05-02
 
 ## Implementation Status
 
-This document is the initial research and execution map. The repository now has a working dashboard-first v0 implementation with a TypeScript parser, analytics package, local server/API, React dashboard, CLI fallback, fixtures, tests, and CI. Treat this file as historical context plus roadmap background; current usage is documented in [Usage](usage.md).
+This document is the initial research and execution map. The repository now has a native-macOS-first v0 implementation with a TypeScript parser, analytics package, private local API engine, CLI fallback, fixtures, tests, and CI. Treat this file as historical context plus roadmap background; current usage is documented in [Usage](usage.md).
 
 ## Goal
 
@@ -29,7 +29,7 @@ The space is active, but most tools are either token counters, CLI summaries, or
 - [toktrack](https://www.producthunt.com/products/toktrack) positions itself as a fast Rust CLI for spending by model/day across Claude Code, Codex CLI, Gemini CLI, and OpenCode.
 - [codex-replay](https://www.reddit.com/r/codex/comments/1rn3u2n/codexreplay_interactive_html_replays_for_openai/) generates self-contained HTML replays from Codex JSONL sessions, with filtering, redaction, bookmarks, and session picking.
 
-Opportunity: a public parser library plus visual project analytics dashboard is still a good niche. The strongest differentiator is accurate project attribution, message analytics, schema transparency, and a reusable parser others can build on.
+Opportunity: a public parser library plus native project analytics app is still a good niche. The strongest differentiator is accurate project attribution, message analytics, schema transparency, and a reusable parser others can build on.
 
 ## Official Documentation Status
 
@@ -39,27 +39,18 @@ I did not find a stable official page that fully specifies the persisted `rollou
 
 Working assumption: this project should treat the Codex rollout format as an evolving event log, not a frozen API. The parser should be tolerant, fixture-driven, version-aware where possible, and explicit about confidence/unknown fields.
 
-## Local Findings
+## Sanitized Local Findings
 
-Local environment checked:
+The project was initially shaped by private local Codex logs and a private seven-day usage report. Those source logs and project names are intentionally not included in this public repository.
 
-- Codex CLI: `0.128.0-alpha.1`
-- Total local rollout files found: `442`
-- WBD Celebration related rollout files found: `218`
-- WBD Celebration models observed in `turn_context`: `gpt-5.5` and `gpt-5.4`
+The desired analytics shape from that private validation pass is safe to describe at a high level:
 
-The previous WBD report at `/Users/cris/Documents/github/WBD-Celebration/docs/usage/README.md` confirms the desired analytics shape:
-
-- seven-day user-message submissions: `1,393`
-- seven-day unique user-role messages: `1,041`
-- seven-day user-message tokens: `83,659`
-- model responses: `1,105`
-- total model tokens: `87,546,478`
-- input tokens: `87,317,753`
-- cached input tokens: `82,336,000`
-- fresh input tokens: `4,981,753`
-- output tokens: `228,725`
-- reasoning tokens: `95,769`
+- seven-day user-message submissions
+- seven-day unique user-message counts
+- model response counts
+- total, input, cached input, fresh input, output, and reasoning token totals
+- day/hour activity buckets
+- model and session breakdowns
 
 Representative Codex rollout event types seen locally:
 
@@ -84,15 +75,15 @@ Read `~/.codex/sessions/**/*.jsonl`, `~/.codex/archived_sessions/*.jsonl`, and e
 
 2. Project attribution
 
-Use `session_meta.payload.cwd`, `turn_context.payload.cwd`, and tool execution `cwd` fields. Normalize symlinks/worktrees when possible, and allow manual project aliases such as all WBD worktrees rolling up to `WBD-Celebration`.
+Use `session_meta.payload.cwd`, `turn_context.payload.cwd`, and tool execution `cwd` fields. Normalize symlinks/worktrees when possible, and allow manual project aliases so related worktrees can roll up to one project name.
 
 3. Metrics engine
 
 Compute message counts, unique normalized user messages, day/hour buckets in local timezone, token totals, fresh input tokens, cached input tokens, output tokens, reasoning tokens, model breakdowns, session breakdowns, and parse completeness.
 
-4. Dashboard
+4. Native macOS app
 
-Start with a local web UI. First screen should be the actual analytics tool: project selector, date range, metric cards, day/hour charts, model breakdown, sessions table, and raw-event drilldown.
+The primary surface is the native SwiftUI macOS app. First screen should be the actual analytics tool: source selector, project selector, date range, metric cards, search, sessions table, and inspector.
 
 5. CLI fallback
 
@@ -108,11 +99,12 @@ Use TypeScript for the first version:
 
 - `packages/parser`: JSONL reader, schema guards, normalization, fixtures
 - `packages/analytics`: aggregation and bucketing logic
-- `apps/web`: Vite/React dashboard
+- `apps/macos`: native SwiftUI app using the private local API engine
+- `apps/server`: private local API engine
 - `apps/cli`: Node CLI using the same parser/analytics packages
 - `fixtures/codex`: sanitized event fixtures covering known schema variants
 
-This keeps the public contribution surface approachable and makes the parser reusable by both CLI and dashboard. If performance becomes a real issue after testing against thousands of sessions, we can add a Rust-backed scanner later.
+This keeps the public contribution surface approachable and makes the parser reusable by the macOS app and CLI. If performance becomes a real issue after testing against thousands of sessions, we can add a Rust-backed scanner or SQLite-backed index later.
 
 ## Parsing Strategy
 
@@ -139,17 +131,17 @@ Milestone 1: parser MVP
 - tests for `session_meta`, `turn_context`, `user_message`, `agent_message`, `token_count`, lifecycle events, and malformed lines
 - CLI `summary --path <dir>`
 
-Milestone 2: WBD parity analytics
+Milestone 2: reference-report parity analytics
 
-- reproduce WBD metrics: messages, unique messages, day/hour buckets, total/input/cached/output/reasoning tokens, model counts
+- reproduce a private reference report using local logs without committing the source data: messages, unique messages, day/hour buckets, total/input/cached/output/reasoning tokens, model counts
 - export JSON and CSV
 - add project alias config
 
-Milestone 3: dashboard MVP
+Milestone 3: native app MVP
 
-- local Vite dashboard
+- native SwiftUI app
 - project selector and date range
-- metric cards, day/hour charts, model chart, sessions table
+- metric cards, message search, sessions table
 - session details for selected session/turn, with full raw payload exploration as a later enhancement
 
 Milestone 4: public polish
@@ -163,17 +155,11 @@ Milestone 4: public polish
 ## Open Questions And Follow-Ups
 
 - Should the tool focus only on Codex at first, or design the data model to support Claude/Gemini later?
-- Should we eventually ship as a desktop app or VS Code extension in addition to the local web app?
+- Should we eventually ship a VS Code extension in addition to the native macOS app?
 - Do we want to estimate API-equivalent cost, even though Codex product/subscription billing can differ?
 - How aggressively should we redact message contents by default in exports?
 - Should project grouping default to exact `cwd`, git root, repo name, or a user-defined alias map?
 
 ## Recommended Next Step
 
-Start with a TypeScript monorepo and build the parser/analytics core before UI. The first success criterion should be reproducing the WBD seven-day dashboard numbers from local Codex logs with a command like:
-
-```sh
-codex-log-viewer summary --project WBD-Celebration --since 2026-04-22 --until 2026-04-29
-```
-
-Once that matches, the dashboard becomes a visualization layer over trusted data rather than a pretty wrapper around uncertain parsing.
+Continue hardening the native macOS app around a tested parser and analytics core. The next public-facing success criterion is packaging: a signed/notarized `.app` release path with clear privacy notes and no need to inspect or upload private logs.

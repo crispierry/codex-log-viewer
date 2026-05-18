@@ -1,4 +1,5 @@
 import type {
+  MessageRole,
   ParsedCodexCorpus,
   SessionRecord,
   TokenUsage
@@ -69,6 +70,34 @@ export interface ProjectSummary {
   sessions: SessionSummary[];
 }
 
+export interface MessageSearchOptions extends SummaryOptions {
+  query?: string;
+  role?: MessageRole | "all";
+  limit?: number;
+}
+
+export interface MessageSearchResult {
+  id: string;
+  sessionId: string;
+  filePath: string;
+  project: string;
+  cwd?: string;
+  turnId?: string;
+  timestamp?: string;
+  role: MessageRole;
+  sourceEvent: string;
+  snippet: string;
+}
+
+export interface MessageSearchSummary {
+  query: string;
+  project: string;
+  generatedAt: string;
+  totalMatches: number;
+  limit: number;
+  results: MessageSearchResult[];
+}
+
 export interface ProjectListItem {
   project: string;
   cwdSamples: string[];
@@ -88,4 +117,3 @@ export interface ProjectContext {
   project: string;
   cwd?: string;
 }
-

@@ -11,7 +11,7 @@ This project will handle local agent session logs that can contain private code,
 - Add parser tests around known rollout records
 - Improve project attribution rules
 - Improve redaction utilities and fixture-sanitizing scripts
-- Improve dashboard accessibility, responsive layout, and session-inspection workflows
+- Improve macOS app accessibility, session inspection, and native workflow polish
 
 ## Fixture Safety
 
@@ -42,10 +42,16 @@ npm test
 npm run build
 ```
 
-Run the dashboard:
+On macOS, also verify the native app build when touching `apps/macos` or app-facing APIs:
 
 ```sh
-npm run serve
+npm run build:mac
+```
+
+Run the macOS app:
+
+```sh
+npm run app:mac
 ```
 
 Run the CLI fallback through the root helper:

@@ -1,5 +1,5 @@
 name: Feature request
-description: Suggest a parser, analytics, CLI, dashboard, or export feature.
+description: Suggest a parser, analytics, macOS app, CLI, local API, or export feature.
 title: "[Feature]: "
 labels: ["enhancement"]
 body:
@@ -23,7 +23,8 @@ body:
       options:
         - Parser
         - Analytics
-        - Dashboard
+        - macOS app
+        - Local API
         - CLI
         - Exports
         - Privacy/redaction

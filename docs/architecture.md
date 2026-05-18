@@ -2,24 +2,23 @@
 
 ## Stack
 
-The first implementation is a TypeScript monorepo:
+Codex Log Viewer is a native macOS app backed by a local TypeScript parsing engine:
 
+- `apps/macos`: native SwiftUI macOS app
+- `apps/server`: private local HTTP API engine launched by the app
+- `apps/cli`: command-line access to parser and analytics for automation
 - `packages/parser`: Codex JSONL parsing and normalization
-- `packages/analytics`: project grouping, aggregation, bucketing, exports
-- `apps/cli`: command-line access to parser and analytics
-- `apps/server`: local HTTP server for dashboard assets and API
-- `apps/web`: local dashboard
+- `packages/analytics`: project grouping, aggregation, bucketing, search, and exports
 - `fixtures/codex`: sanitized JSONL fixtures
 
-TypeScript keeps the parser easy to contribute to and lets the CLI and dashboard share the same code. If performance becomes a real blocker, a Rust scanner can be introduced behind the same normalized data contract.
+There is intentionally no browser dashboard or Electron shell. Codex logs live on the user's machine, so the product surface is the native app. The local HTTP engine is an implementation detail used to reuse the tested parser and analytics packages.
 
 ## Product Flow
 
-Codex Log Viewer is dashboard-first. The normal user flow is:
+The normal user flow is:
 
-1. Start the local server with `npm run serve`.
-2. Open `http://127.0.0.1:3210`.
-3. Use the dashboard to select sources, projects, date ranges, sessions, and exports.
+1. Start the app with `npm run app:mac`.
+2. Use the native app to select sources, projects, date ranges, message searches, sessions, and exports.
 
 The CLI remains available for automation and test smoke checks, but it is not the primary product interface.
 
@@ -32,10 +31,10 @@ flowchart LR
   C --> D["Normalized records"]
   C --> E["Parse warnings"]
   D --> F["Analytics engine"]
-  F --> G["Dashboard API"]
-  F --> H["Dashboard"]
+  F --> G["Private local API"]
+  G --> H["Native macOS app"]
   F --> I["JSON/CSV exports"]
-  D --> J["Raw event inspector"]
+  D --> J["Session inspector"]
 ```
 
 ## Core Packages
@@ -59,8 +58,28 @@ Responsibilities:
 - bucket activity by time window
 - count user messages and unique normalized messages
 - aggregate token usage
+- search messages across all parsed projects
 - calculate model/session/project breakdowns
 - emit export-ready summary objects
+
+### macOS App
+
+Responsibilities:
+
+- launch as the primary native app from `apps/macos`
+- start the private local API engine on an app-owned `127.0.0.1` port
+- render projects, summaries, sessions, search, and inspection with SwiftUI
+- provide native sidebar, toolbar, table, and inspector behavior
+- grow toward native file picking, app settings, release packaging, and notarized builds
+
+### Local API Engine
+
+Responsibilities:
+
+- expose `/api/projects`, `/api/summary`, `/api/sessions`, `/api/session`, `/api/messages/search`, and `/api/export`
+- read local Codex files from Node inside the user's machine
+- bind only to loopback by default
+- avoid serving a web UI
 
 ### CLI
 
@@ -70,29 +89,6 @@ Supported commands:
 - `projects`: list discovered projects
 - `sessions`: list sessions for a project/date range
 - `export`: write JSON or CSV
-
-### Web
-
-Current views:
-
-- source path controls
-- project selector
-- date range controls
-- metric cards
-- messages by day/hour charts
-- token trend and model breakdown
-- sessions table
-- session details with turns, messages, token events, warnings, and unknown-event counts
-- JSON and CSV exports
-
-### Server
-
-Responsibilities:
-
-- serve the built dashboard from `apps/web/dist`
-- expose `/api/projects`, `/api/summary`, `/api/sessions`, `/api/session`, and `/api/export`
-- read local Codex files from Node rather than from browser code
-- default to `127.0.0.1:3210`
 
 ## Storage
 
