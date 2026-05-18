@@ -23,6 +23,111 @@ test("summarizeParsedCorpus aggregates messages, unique messages, tokens, models
   assert.equal(summary.messagesByDay[0]?.count, 1);
 });
 
+test("summarizeParsedCorpus attributes token usage to models by session and turn", () => {
+  const corpus = {
+    files: [
+      {
+        filePath: "session-a.jsonl",
+        sessionId: "session-a",
+        lineCount: 1,
+        sessions: [],
+        turns: [],
+        messages: [],
+        tokenUsage: [],
+        taskTimings: [],
+        toolEvents: [],
+        unknownEvents: [],
+        warnings: []
+      },
+      {
+        filePath: "session-b.jsonl",
+        sessionId: "session-b",
+        lineCount: 1,
+        sessions: [],
+        turns: [],
+        messages: [],
+        tokenUsage: [],
+        taskTimings: [],
+        toolEvents: [],
+        unknownEvents: [],
+        warnings: []
+      }
+    ],
+    sessions: [
+      {
+        filePath: "session-a.jsonl",
+        sessionId: "session-a",
+        cwd: "/tmp/project-a",
+        timestamp: "2026-01-01T00:00:00.000Z"
+      },
+      {
+        filePath: "session-b.jsonl",
+        sessionId: "session-b",
+        cwd: "/tmp/project-b",
+        timestamp: "2026-01-01T00:00:00.000Z"
+      }
+    ],
+    turns: [
+      {
+        filePath: "session-a.jsonl",
+        sessionId: "session-a",
+        turnId: "shared-turn",
+        timestamp: "2026-01-01T00:00:00.000Z",
+        model: "model-a"
+      },
+      {
+        filePath: "session-b.jsonl",
+        sessionId: "session-b",
+        turnId: "shared-turn",
+        timestamp: "2026-01-01T00:01:00.000Z",
+        model: "model-b"
+      }
+    ],
+    messages: [],
+    tokenUsage: [
+      {
+        filePath: "session-a.jsonl",
+        sessionId: "session-a",
+        turnId: "shared-turn",
+        timestamp: "2026-01-01T00:00:30.000Z",
+        usage: {
+          inputTokens: 10,
+          cachedInputTokens: 0,
+          freshInputTokens: 10,
+          outputTokens: 5,
+          reasoningOutputTokens: 0,
+          totalTokens: 15
+        }
+      },
+      {
+        filePath: "session-b.jsonl",
+        sessionId: "session-b",
+        turnId: "shared-turn",
+        timestamp: "2026-01-01T00:01:30.000Z",
+        usage: {
+          inputTokens: 20,
+          cachedInputTokens: 0,
+          freshInputTokens: 20,
+          outputTokens: 7,
+          reasoningOutputTokens: 0,
+          totalTokens: 27
+        }
+      }
+    ],
+    taskTimings: [],
+    toolEvents: [],
+    unknownEvents: [],
+    warnings: []
+  };
+
+  const summary = summarizeParsedCorpus(corpus);
+  const modelA = summary.models.find((bucket) => bucket.model === "model-a");
+  const modelB = summary.models.find((bucket) => bucket.model === "model-b");
+
+  assert.equal(modelA?.tokens.totalTokens, 15);
+  assert.equal(modelB?.tokens.totalTokens, 27);
+});
+
 test("searchMessages searches messages across all projects and supports project filtering", async () => {
   const corpus = await parseCodexCorpus({ paths: [fixturePath] });
 

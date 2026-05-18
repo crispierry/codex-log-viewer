@@ -175,6 +175,9 @@ async function signBundle() {
     run("codesign", codeSignArgs(appDir, ["--deep"]), { quiet: true });
     didSignBundle = true;
   } catch (error) {
+    if (codeSignIdentity !== "-") {
+      throw error;
+    }
     console.warn("Codesign failed; continuing with unsigned local bundle.");
   }
 }

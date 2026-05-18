@@ -53,7 +53,7 @@ export function summarizeParsedCorpus(corpus: ParsedCodexCorpus, options: Summar
   );
 
   const turns = corpus.turns.filter((turn) => sessionIds.has(turn.sessionId) && timestampInRange(turn.timestamp, range));
-  const turnModels = new Map(turns.map((turn) => [turn.turnId, turn.model ?? "unknown"]));
+  const turnModels = new Map(turns.map((turn) => [turnModelKey(turn.sessionId, turn.turnId), turn.model ?? "unknown"]));
   const messages = corpus.messages.filter(
     (message) => sessionIds.has(message.sessionId) && timestampInRange(message.timestamp, range)
   );
@@ -404,13 +404,17 @@ function modelBuckets(
   }
 
   for (const token of dedupeTokenEvents(tokenUsage)) {
-    const model = token.turnId ? turnModels.get(token.turnId) ?? "unknown" : "unknown";
+    const model = token.turnId ? turnModels.get(turnModelKey(token.sessionId, token.turnId)) ?? "unknown" : "unknown";
     const bucket = buckets.get(model) ?? { model, turns: 0, tokens: emptyUsage() };
     addUsage(bucket.tokens, token.usage);
     buckets.set(model, bucket);
   }
 
   return [...buckets.values()].sort((a, b) => b.tokens.totalTokens - a.tokens.totalTokens || a.model.localeCompare(b.model));
+}
+
+function turnModelKey(sessionId: string, turnId: string): string {
+  return `${sessionId}:${turnId}`;
 }
 
 function sessionSummaries(
