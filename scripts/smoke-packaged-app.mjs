@@ -1,22 +1,21 @@
 import { execFileSync, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { copyFile, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "..");
 const appPath = resolve(process.argv[2] ?? "dist/macos/Codex Log Viewer.app");
-const executablePath = `${appPath}/Contents/MacOS/CodexLogViewerMac`;
 const fixturePath = resolve(repoRoot, "fixtures/codex/sample-session.jsonl");
 
 if (process.platform !== "darwin") {
   throw new Error("Packaged macOS app smoke test only runs on macOS.");
 }
 
-if (!existsSync(executablePath)) {
-  throw new Error(`Missing packaged app executable at ${executablePath}`);
+if (!existsSync(executablePathFor(appPath))) {
+  throw new Error(`Missing packaged app executable at ${executablePathFor(appPath)}`);
 }
 
 if (!existsSync(fixturePath)) {
@@ -24,20 +23,23 @@ if (!existsSync(fixturePath)) {
 }
 
 await runSmoke("first launch");
-assertNoLeakedEngine();
+assertNoLeakedEngine(appPath);
 await runSmoke("second launch");
-assertNoLeakedEngine();
-await runOpenSmoke();
-assertNoLeakedEngine();
+assertNoLeakedEngine(appPath);
+await runOpenSmoke(appPath, "Finder-style launch");
+assertNoLeakedEngine(appPath);
+await runRelocatedSmoke();
 
 console.log("Packaged app smoke test passed.");
 
-async function runSmoke(label) {
+async function runSmoke(label, targetAppPath = appPath, sourceFixturePath = fixturePath) {
+  const executablePath = executablePathFor(targetAppPath);
   const child = spawn(executablePath, [], {
+    cwd: tmpdir(),
     env: {
       ...process.env,
       CODEX_LOG_VIEWER_SMOKE: "1",
-      CODEX_LOG_VIEWER_SMOKE_FIXTURE: fixturePath
+      CODEX_LOG_VIEWER_SMOKE_FIXTURE: sourceFixturePath
     },
     stdio: ["ignore", "pipe", "pipe"]
   });
@@ -68,12 +70,13 @@ async function runSmoke(label) {
   }
 }
 
-async function runOpenSmoke() {
+async function runOpenSmoke(targetAppPath, label, sourceFixturePath = fixturePath) {
   const tempDir = await mkdtemp(`${tmpdir()}/codex-log-viewer-open-smoke-`);
   const stdoutPath = `${tempDir}/stdout.log`;
   const stderrPath = `${tempDir}/stderr.log`;
   let launcherStdout = "";
   let launcherStderr = "";
+  const executablePath = executablePathFor(targetAppPath);
 
   try {
     const child = spawn(
@@ -88,8 +91,8 @@ async function runOpenSmoke() {
         "--env",
         "CODEX_LOG_VIEWER_SMOKE=1",
         "--env",
-        `CODEX_LOG_VIEWER_SMOKE_FIXTURE=${fixturePath}`,
-        appPath
+        `CODEX_LOG_VIEWER_SMOKE_FIXTURE=${sourceFixturePath}`,
+        targetAppPath
       ],
       { stdio: ["ignore", "pipe", "pipe"] }
     );
@@ -105,13 +108,31 @@ async function runOpenSmoke() {
     const diagnostics = [stderr, stdout, launcherStderr, launcherStdout].filter(Boolean).join("");
 
     if (exitCode !== 0) {
-      throw new Error(`Packaged app Finder-style launch failed with exit code ${exitCode}\n${diagnostics}`);
+      throw new Error(`Packaged app ${label} failed with exit code ${exitCode}\n${diagnostics}`);
     }
     if (!stdout.includes("Codex Log Viewer packaged smoke workflow passed.")) {
-      throw new Error(`Packaged app Finder-style launch did not report success.\n${diagnostics}`);
+      throw new Error(`Packaged app ${label} did not report success.\n${diagnostics}`);
     }
   } finally {
-    terminateLeakedAppProcesses();
+    terminateLeakedAppProcesses(executablePath);
+    await rm(tempDir, { recursive: true, force: true });
+  }
+}
+
+async function runRelocatedSmoke() {
+  const tempDir = await mkdtemp(`${tmpdir()}/codex-log-viewer-relocated-smoke-`);
+  const relocatedAppPath = join(tempDir, "Codex Log Viewer.app");
+  const relocatedFixturePath = join(tempDir, "sample-session.jsonl");
+
+  try {
+    execFileSync("ditto", [appPath, relocatedAppPath], { stdio: "ignore" });
+    await copyFile(fixturePath, relocatedFixturePath);
+    await runSmoke("relocated executable launch", relocatedAppPath, relocatedFixturePath);
+    assertNoLeakedEngine(relocatedAppPath);
+    await runOpenSmoke(relocatedAppPath, "relocated Finder-style launch", relocatedFixturePath);
+    assertNoLeakedEngine(relocatedAppPath);
+  } finally {
+    terminateLeakedAppProcesses(executablePathFor(relocatedAppPath));
     await rm(tempDir, { recursive: true, force: true });
   }
 }
@@ -137,9 +158,10 @@ async function readFileIfExists(filePath) {
   }
 }
 
-function assertNoLeakedEngine() {
+function assertNoLeakedEngine(targetAppPath) {
   const processList = execFileSync("ps", ["-axo", "pid=,command="], { encoding: "utf8" });
-  const bundledEnginePath = `${appPath}/Contents/Resources/engine/apps/server/dist/index.js`;
+  const executablePath = executablePathFor(targetAppPath);
+  const bundledEnginePath = `${targetAppPath}/Contents/Resources/engine/apps/server/dist/index.js`;
   const leaks = processList
     .split("\n")
     .filter((line) => line.includes(bundledEnginePath) || line.includes(executablePath))
@@ -150,7 +172,11 @@ function assertNoLeakedEngine() {
   }
 }
 
-function terminateLeakedAppProcesses() {
+function executablePathFor(targetAppPath) {
+  return `${targetAppPath}/Contents/MacOS/CodexLogViewerMac`;
+}
+
+function terminateLeakedAppProcesses(executablePath) {
   try {
     execFileSync("pkill", ["-f", executablePath], { stdio: "ignore" });
   } catch {

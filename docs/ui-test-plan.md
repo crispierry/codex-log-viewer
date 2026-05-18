@@ -66,7 +66,7 @@ npm run package:mac
 npm run smoke:mac-package
 ```
 
-Covers packaged app launch, bundled engine discovery, health/API access, fixture scan, cross-project search, session detail loading, JSON/CSV export endpoints, repeated launch, Finder-style `.app` launch, and child-engine shutdown.
+Covers packaged app launch, bundled engine discovery, health/API access, fixture scan, cross-project search, session detail loading, JSON/CSV export endpoints, repeated launch, Finder-style `.app` launch, relocated `.app` launch outside the repo, and child-engine shutdown.
 
 ### Native UI Smoke
 
