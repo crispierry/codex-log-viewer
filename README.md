@@ -111,6 +111,7 @@ npm run package:mac # macOS only
 npm run smoke:mac-package # macOS only
 npm run smoke:mac-ui # macOS only
 npm run benchmark:search
+npm run check:reference -- --reference fixtures/codex/sample-reference-summary.json --path fixtures/codex/sample-session.jsonl --project sample-app
 ```
 
 ## Documentation

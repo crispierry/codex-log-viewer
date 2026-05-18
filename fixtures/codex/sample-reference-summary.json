@@ -1,0 +1,60 @@
+{
+  "project": "sample-app",
+  "filters": {
+    "paths": [
+      "fixtures/codex/sample-session.jsonl"
+    ]
+  },
+  "totals": {
+    "sessions": 1,
+    "turns": 1,
+    "userMessages": 1,
+    "assistantMessages": 1,
+    "uniqueUserMessages": 1,
+    "toolEvents": 0,
+    "unknownEvents": 1,
+    "parseWarnings": 1
+  },
+  "tokens": {
+    "inputTokens": 16808,
+    "cachedInputTokens": 6528,
+    "freshInputTokens": 10280,
+    "outputTokens": 469,
+    "reasoningOutputTokens": 62,
+    "totalTokens": 17277
+  },
+  "messagesByDay": [
+    {
+      "key": "2026-04-27",
+      "count": 1,
+      "uniqueCount": 1
+    }
+  ],
+  "tokensByDay": [
+    {
+      "key": "2026-04-27",
+      "tokens": {
+        "inputTokens": 16808,
+        "cachedInputTokens": 6528,
+        "freshInputTokens": 10280,
+        "outputTokens": 469,
+        "reasoningOutputTokens": 62,
+        "totalTokens": 17277
+      }
+    }
+  ],
+  "models": [
+    {
+      "model": "gpt-5.5",
+      "turns": 1,
+      "tokens": {
+        "inputTokens": 16808,
+        "cachedInputTokens": 6528,
+        "freshInputTokens": 10280,
+        "outputTokens": 469,
+        "reasoningOutputTokens": 62,
+        "totalTokens": 17277
+      }
+    }
+  ]
+}

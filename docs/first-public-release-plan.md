@@ -33,11 +33,12 @@ Implemented for v0.1:
 - analytics tests for date/project filtering, diagnostics filtering, model/session search filters, token aggregation, and redacted exports
 - redacted JSON exports by default with explicit raw JSON for private local use
 - search benchmark with documented threshold and future SQLite FTS5 trigger
+- private-reference parity harness with a sanitized fixture reference report
 
 External release prerequisites:
 
 - Developer ID certificate and notarytool keychain profile are required to produce a notarized public macOS artifact.
-- A maintainer should run any private-log parity check locally without committing private inputs or outputs.
+- A maintainer should run the private-log parity check locally with a private reference report, without committing private inputs or outputs.
 
 ## Current State
 
@@ -382,6 +383,7 @@ Before tagging the first public version, run and record:
 - [x] packaged app launch smoke test
 - [x] native UI smoke automation suite
 - [x] sanitized fixture QA through packaged app and native UI smoke tests
+- [x] sanitized reference-report parity harness
 - [ ] private reference-report parity check, maintainer-local only
 - [x] privacy scan for unsanitized logs, screenshots, recordings, exports, secrets, and local caches
 - [x] documentation review from a first-time-user perspective

@@ -17,11 +17,26 @@ npm ci
 npm run test:all
 npm audit --audit-level=moderate
 npm run benchmark:search
+npm run check:reference -- --reference fixtures/codex/sample-reference-summary.json --path fixtures/codex/sample-session.jsonl --project sample-app
 npm run release:mac
 git diff --check
 ```
 
 On macOS, `npm run release:mac` builds `Codex Log Viewer.app`, launches the packaged smoke workflow twice, checks that the local engine exits, and runs a native UI smoke check against sanitized fixtures.
+
+## Private Reference Parity
+
+The fixture reference check above proves the parity harness. Before an official public release, a maintainer should run the same command shape against a private reference report and private local logs outside the repository:
+
+```sh
+npm run check:reference -- \
+  --reference /path/outside/repo/private-reference-summary.json \
+  --path /path/outside/repo/private-codex-logs \
+  --project "Private Project Name" \
+  --tolerance 0.01
+```
+
+Do not commit the private reference, private logs, generated reports, screenshots, or terminal output from that run.
 
 ## Signing And Notarization
 
@@ -56,4 +71,3 @@ Release notes should include:
 ```sh
 shasum -a 256 -c Codex-Log-Viewer-vX.Y.Z-macOS.zip.sha256
 ```
-
