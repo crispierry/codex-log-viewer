@@ -88,7 +88,7 @@ Use `--path <file-or-dir>` to scan a specific fixture, export, or alternate Code
 npm run cli -- summary --path fixtures/codex/sample-session.jsonl
 ```
 
-After installing from a future package release, the intended binary name is:
+If a future CLI package is published, the intended binary name is:
 
 ```sh
 codex-log-viewer summary
@@ -121,6 +121,7 @@ npm run check:reference -- --reference fixtures/codex/sample-reference-summary.j
 - [First public release plan](docs/first-public-release-plan.md)
 - [Open source readiness](docs/open-source-readiness.md)
 - [Release checklist](docs/release-checklist.md)
+- [Release notes template](docs/release-notes-template.md)
 - [Product requirements](docs/product-requirements.md)
 - [Architecture](docs/architecture.md)
 - [Parser schema notes](docs/parser-schema-notes.md)

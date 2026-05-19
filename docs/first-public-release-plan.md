@@ -34,6 +34,7 @@ Implemented for v0.1:
 - redacted JSON exports by default with explicit raw JSON for private local use
 - search benchmark with documented threshold and future SQLite FTS5 trigger
 - private-reference parity harness with a sanitized fixture reference report
+- release notes template, manual-update position, checksum guidance, and tag-based release workflow
 - public GitHub repository settings: description, topics, private vulnerability reporting, and protected `main` with required `verify` and `macos-app` checks
 
 External release prerequisites:

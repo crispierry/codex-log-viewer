@@ -22,6 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Added packaged app missing-engine failure verification.
 - Added ephemeral-token authentication for the private local API.
 - Added redacted JSON exports by default, with explicit raw JSON for private local use.
+- Added a release notes template for public GitHub releases.
 - Added synthetic parser event-shape coverage and search performance benchmarking.
 - Updated documentation to reflect the native-macOS-first product workflow.
 - Fixed native app filter/session state races so project selections and session details update reliably.

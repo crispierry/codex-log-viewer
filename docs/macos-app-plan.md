@@ -21,7 +21,8 @@ The product must support searching every parsed message across every project, wi
 - all projects or one selected project
 - date range
 - default Codex log roots or custom paths
-- eventually role, model, session, and repeated-message status
+- role, model, and session
+- eventually repeated-message status
 
 The first implementation can be scan-based because it reuses the parsed in-memory corpus and keeps the behavior easy to test. For larger histories, search should move to a local index.
 
@@ -46,7 +47,6 @@ Phase 3 should add richer app workflows:
 
 - saved searches
 - search result deep links into a session and turn
-- role/model filters
 - repeated prompt grouping
 - redacted export from search results
 
@@ -69,6 +69,8 @@ Phase 1 makes it feel complete as a macOS app:
 - better empty states and scan progress
 - graceful error recovery when logs are malformed or inaccessible
 
+Status: native source picking, recent source settings, date-filter settings, role/model/session search filters, and release-critical smoke automation are implemented for v0.1. Richer empty states, more keyboard workflows, and deeper recovery affordances remain later polish.
+
 Phase 2 prepares public releases:
 
 - `.app` bundle generation
@@ -77,6 +79,8 @@ Phase 2 prepares public releases:
 - code signing and notarization notes
 - release checklist
 - GitHub Actions release workflow
+
+Status: `.app` bundle generation, zip/checksum artifacts, app icon, signing/notarization path, release checklist, release notes template, and tag-based GitHub Release workflow are implemented. Official notarized artifacts still require Developer ID and notary credentials.
 
 Phase 3 improves scale:
 

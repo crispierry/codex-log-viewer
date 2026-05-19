@@ -88,12 +88,13 @@ Goal: make the normal product path feel like a polished desktop app.
 - app settings
 - scan progress and better empty states
 - project and date facets for search
+- packaged app verification
 
 Exit criteria:
 
 - A user can launch the app and inspect/search local logs with expected macOS controls.
 
-Status: in progress. Native source picking, app settings, packaging, signing, and persistent indexed search remain follow-up work.
+Status: complete for native source picking, local source/date settings, role/model/session search filters, packaged app verification, and release-critical smoke automation. Deeper empty states, richer keyboard workflows, and persistent indexed search remain follow-up work.
 
 ## Milestone 5: Public Release
 
@@ -103,10 +104,12 @@ Goal: publish a useful open source release.
 - install/run instructions
 - fixture contribution workflow
 - CI for lint/test/build
-- macOS packaging plan
-- release notes
+- macOS packaging and release workflow
+- release notes template
 - first version tag
 
 Exit criteria:
 
 - A new user can install, run against local logs, and understand privacy implications.
+
+Status: source and CI readiness are complete for review. The first version tag and official notarized artifact still depend on human review, maintainer-local private reference parity, and Developer ID/notary credentials.

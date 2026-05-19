@@ -61,7 +61,7 @@ When those variables are set, the packaging script signs with hardened runtime, 
 
 ## Public Release Notes
 
-Release notes should include:
+Start from [Release Notes Template](release-notes-template.md). Release notes should include:
 
 - the native macOS-only product scope
 - privacy model: local parsing, loopback engine, ephemeral token, redacted default JSON
