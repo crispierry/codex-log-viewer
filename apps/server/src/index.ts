@@ -65,13 +65,13 @@ export async function startServer(options: ServerOptions = {}): Promise<{ url: s
 
 async function handleRequest(request: IncomingMessage, response: ServerResponse, options: ServerOptions): Promise<void> {
   const url = new URL(request.url ?? "/", "http://localhost");
-  if (url.pathname === "/api/health") {
-    sendJson(response, 200, { ok: true });
+  if (!isAuthorized(request, options.authToken)) {
+    sendJson(response, 401, { error: "Unauthorized" });
     return;
   }
 
-  if (!isAuthorized(request, options.authToken)) {
-    sendJson(response, 401, { error: "Unauthorized" });
+  if (url.pathname === "/api/health") {
+    sendJson(response, 200, { ok: true });
     return;
   }
 

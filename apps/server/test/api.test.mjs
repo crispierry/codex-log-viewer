@@ -11,6 +11,16 @@ test("local API requires bearer token when auth is enabled", async () => {
   const server = await startServer({ port: 0, authToken: "test-token", paths: [fixturePath] });
 
   try {
+    const healthWithoutToken = await fetch(`${server.url}/api/health`);
+    assert.equal(healthWithoutToken.status, 401);
+
+    const healthWithToken = await fetch(`${server.url}/api/health`, {
+      headers: {
+        authorization: "Bearer test-token"
+      }
+    });
+    assert.equal(healthWithToken.status, 200);
+
     const unauthorized = await fetch(`${server.url}/api/projects`);
     assert.equal(unauthorized.status, 401);
 
