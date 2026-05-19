@@ -151,6 +151,7 @@ async function handleRequest(request: IncomingMessage, response: ServerResponse,
         model: url.searchParams.get("model") ?? undefined,
         sessionId: url.searchParams.get("sessionId") ?? undefined,
         filePath: url.searchParams.get("filePath") ?? undefined,
+        submittedOnly: url.searchParams.get("submittedOnly") === "true",
         limit
       })
     });

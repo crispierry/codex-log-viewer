@@ -507,7 +507,7 @@ struct MessageSearchView: View {
   }
 
   private var emptySearchTitle: String {
-    if isBrowsingMessages && model.messageRoleFilter == .user {
+    if isBrowsingMessages && model.isSubmittedMessageSearch {
       return "No Sent Messages"
     }
     return isBrowsingMessages ? "No Messages" : "No Matches"
@@ -526,7 +526,7 @@ struct MessageSearchView: View {
     guard isBrowsingMessages else {
       return "\(count) matches in \(search.project)"
     }
-    if model.messageRoleFilter == .user {
+    if model.isSubmittedMessageSearch {
       return "\(count) sent messages in \(search.project)"
     }
     return "\(count) messages in \(search.project)"

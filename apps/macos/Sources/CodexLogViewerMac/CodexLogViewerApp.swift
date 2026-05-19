@@ -112,7 +112,8 @@ enum AppSmokeRunner {
         model: AppConstants.allModelsName,
         sessionID: nil,
         project: AppConstants.allProjectsName,
-        filters: filters
+        filters: filters,
+        submittedOnly: true
       )
       guard let firstSession = summary.sessions.first else {
         throw AppSmokeError.unexpected("No sessions found in smoke fixture.")

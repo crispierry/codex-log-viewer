@@ -58,7 +58,9 @@ test("message search supports model and session filters through the local API", 
     const missBody = await miss.json();
     assert.equal(missBody.search.totalMatches, 0);
 
-    const sentMessages = await fetch(`${server.url}/api/messages/search?role=user&project=sample-app`, { headers });
+    const sentMessages = await fetch(`${server.url}/api/messages/search?role=user&project=sample-app&submittedOnly=true`, {
+      headers
+    });
     assert.equal(sentMessages.status, 200);
     const sentMessagesBody = await sentMessages.json();
     assert.equal(sentMessagesBody.search.totalMatches, 1);
@@ -66,6 +68,71 @@ test("message search supports model and session filters through the local API", 
     assert.match(sentMessagesBody.search.results[0]?.snippet, /parser test/);
   } finally {
     await server.close();
+  }
+});
+
+test("message search can limit browse mode to submitted user messages through the local API", async () => {
+  const tempDir = await mkdtemp(`${tmpdir()}/codex-log-viewer-submitted-search-`);
+  const submittedFixture = resolve(tempDir, "submitted-search.jsonl");
+
+  await writeFile(
+    submittedFixture,
+    [
+      JSON.stringify({
+        timestamp: "2026-04-27T20:00:00.000Z",
+        type: "session_meta",
+        payload: {
+          id: "submitted-search-session",
+          timestamp: "2026-04-27T20:00:00.000Z",
+          cwd: "/Users/example/projects/sample-app"
+        }
+      }),
+      JSON.stringify({
+        timestamp: "2026-04-27T20:00:01.000Z",
+        type: "event_msg",
+        payload: {
+          type: "user_message",
+          message: "Typed prompt"
+        }
+      }),
+      JSON.stringify({
+        timestamp: "2026-04-27T20:00:02.000Z",
+        type: "response_item",
+        payload: {
+          type: "message",
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text: "<goal_context>\nContinue working toward the active thread goal."
+            }
+          ]
+        }
+      })
+    ].join("\n") + "\n",
+    "utf8"
+  );
+
+  const server = await startServer({ port: 0, authToken: "test-token", paths: [submittedFixture] });
+  const headers = { authorization: "Bearer test-token" };
+
+  try {
+    const allUserMessages = await fetch(`${server.url}/api/messages/search?role=user`, { headers });
+    assert.equal(allUserMessages.status, 200);
+    const allUserMessagesBody = await allUserMessages.json();
+    assert.equal(allUserMessagesBody.search.totalMatches, 2);
+
+    const submittedMessages = await fetch(`${server.url}/api/messages/search?role=user&submittedOnly=true`, {
+      headers
+    });
+    assert.equal(submittedMessages.status, 200);
+    const submittedMessagesBody = await submittedMessages.json();
+    assert.equal(submittedMessagesBody.search.totalMatches, 1);
+    assert.equal(submittedMessagesBody.search.results[0]?.sourceEvent, "event_msg.user_message");
+    assert.equal(submittedMessagesBody.search.results[0]?.snippet, "Typed prompt");
+  } finally {
+    await server.close();
+    await rm(tempDir, { recursive: true, force: true });
   }
 });
 

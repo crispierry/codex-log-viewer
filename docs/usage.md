@@ -52,7 +52,7 @@ Click `Apply` to rescan typed paths. Click `Default` to return to `~/.codex/sess
 
 Use the message search panel to search across parsed messages. Search respects the current source, project, date, role, model, and session filters. Choose `All Projects` to search across every discovered project.
 
-Click `Messages I Sent` to list your sent prompts for the selected project without typing a search phrase.
+Click `Messages I Sent` to list prompts you typed and submitted for the selected project without typing a search phrase. Internal continuation context, such as goal-resume prompts, is excluded from that view.
 
 Selecting a search result opens its session context in the inspector. The inspector includes copy actions for the result's session id, project, and a whitespace-normalized snippet with local home paths shortened.
 

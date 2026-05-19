@@ -87,6 +87,7 @@ export interface MessageSearchOptions extends SummaryOptions {
   model?: string;
   sessionId?: string;
   filePath?: string;
+  submittedOnly?: boolean;
   limit?: number;
 }
 

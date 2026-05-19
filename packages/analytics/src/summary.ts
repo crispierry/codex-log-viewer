@@ -143,6 +143,10 @@ export function searchMessages(corpus: ParsedCodexCorpus, options: MessageSearch
       continue;
     }
 
+    if (options.submittedOnly && message.sourceEvent !== "event_msg.user_message") {
+      continue;
+    }
+
     const model = message.turnId
       ? turnModels.get(turnModelKey(message.filePath, message.sessionId, message.turnId))
       : undefined;

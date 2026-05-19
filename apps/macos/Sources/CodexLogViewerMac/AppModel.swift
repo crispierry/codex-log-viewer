@@ -38,6 +38,7 @@ final class AppModel: ObservableObject {
   @Published var messageSessionFilter: String?
   @Published private var messageSessionFilePathFilter: String?
   @Published var isMessageBrowseMode = false
+  @Published var isSubmittedMessageSearch = false
   @Published var searchSummary: MessageSearchSummary?
   @Published var selectedSearchResultID: MessageSearchResult.ID?
   @Published var pathDraft = ""
@@ -254,7 +255,7 @@ final class AppModel: ObservableObject {
     }
   }
 
-  func searchMessages(allowEmptyQuery: Bool = false) {
+  func searchMessages(allowEmptyQuery: Bool = false, submittedOnly: Bool = false) {
     let trimmedQuery = messageQuery.trimmingCharacters(in: .whitespacesAndNewlines)
     let isBrowseRequest = allowEmptyQuery && trimmedQuery.isEmpty
     guard !trimmedQuery.isEmpty || isBrowseRequest, let api else {
@@ -266,6 +267,7 @@ final class AppModel: ObservableObject {
     searchRequestID += 1
     selectedSearchResultID = nil
     isMessageBrowseMode = isBrowseRequest
+    isSubmittedMessageSearch = submittedOnly
     let requestID = searchRequestID
     let filters = currentFilters()
     let project = selectedProject
@@ -284,7 +286,8 @@ final class AppModel: ObservableObject {
           sessionID: sessionID,
           filePath: filePath,
           project: project,
-          filters: filters
+          filters: filters,
+          submittedOnly: submittedOnly
         )
         guard !Task.isCancelled, requestID == searchRequestID else { return }
         searchSummary = search
@@ -299,7 +302,7 @@ final class AppModel: ObservableObject {
   }
 
   func refreshMessageResults() {
-    searchMessages(allowEmptyQuery: isMessageBrowseMode)
+    searchMessages(allowEmptyQuery: isMessageBrowseMode, submittedOnly: isSubmittedMessageSearch)
   }
 
   func showSentMessagesForCurrentProject() {
@@ -308,7 +311,7 @@ final class AppModel: ObservableObject {
     messageModelFilter = AppConstants.allModelsName
     messageSessionFilter = nil
     messageSessionFilePathFilter = nil
-    searchMessages(allowEmptyQuery: true)
+    searchMessages(allowEmptyQuery: true, submittedOnly: true)
   }
 
   func focusMessageSearch() {
@@ -402,6 +405,7 @@ final class AppModel: ObservableObject {
     messageSessionFilter = nil
     messageSessionFilePathFilter = nil
     isMessageBrowseMode = false
+    isSubmittedMessageSearch = false
     searchSummary = nil
   }
 
@@ -605,7 +609,8 @@ final class AppModel: ObservableObject {
       model: AppConstants.allModelsName,
       sessionID: nil,
       project: selectedProject,
-      filters: dateFilters
+      filters: dateFilters,
+      submittedOnly: true
     )
     guard sentMessagesSearch.totalMatches == 1,
       sentMessagesSearch.results.first?.role == MessageRoleFilter.user.rawValue,

@@ -15,7 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Added project selection, source paths, exports, searchable sessions, and session details to the native app.
 - Added persisted local date filter settings to the native app.
 - Added cross-project message search with project/date/source filtering.
-- Added a native Messages I Sent action for browsing user prompts by project.
+- Added a native Messages I Sent action for browsing submitted user prompts by project without goal-resume context.
 - Added role, model, and session filters for message search.
 - Added repeated-prompt grouping for current project/source/date filters.
 - Added native search-result copy actions for session id, project, and sanitized snippets.

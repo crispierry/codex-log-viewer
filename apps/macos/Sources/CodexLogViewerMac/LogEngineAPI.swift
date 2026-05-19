@@ -45,7 +45,8 @@ struct LogEngineAPI {
     sessionID: String?,
     filePath: String? = nil,
     project: String,
-    filters: LogFilters
+    filters: LogFilters,
+    submittedOnly: Bool = false
   ) async throws -> MessageSearchSummary {
     var queryItems = [
       URLQueryItem(name: "q", value: query),
@@ -60,6 +61,9 @@ struct LogEngineAPI {
     }
     if let filePath {
       queryItems.append(URLQueryItem(name: "filePath", value: filePath))
+    }
+    if submittedOnly {
+      queryItems.append(URLQueryItem(name: "submittedOnly", value: "true"))
     }
     queryItems.append(contentsOf: self.queryItems(project: project, filters: filters))
     let response: MessageSearchResponse = try await get("api/messages/search", query: queryItems)

@@ -417,6 +417,49 @@ test("searchMessages searches messages across all projects and supports project 
   assert.match(sentMessages.results[0]?.snippet, /parser test/);
 });
 
+test("searchMessages can browse only submitted user messages", () => {
+  const corpus = {
+    files: [],
+    sessions: [{ filePath: "fixture.jsonl", sessionId: "session-1", cwd: "/tmp/sample-app" }],
+    turns: [],
+    messages: [
+      {
+        filePath: "fixture.jsonl",
+        sessionId: "session-1",
+        timestamp: "2026-01-01T00:00:00.000Z",
+        role: "user",
+        sourceEvent: "event_msg.user_message",
+        content: "Typed prompt",
+        imagesCount: 0,
+        localImagesCount: 0
+      },
+      {
+        filePath: "fixture.jsonl",
+        sessionId: "session-1",
+        timestamp: "2026-01-01T00:00:01.000Z",
+        role: "user",
+        sourceEvent: "response_item.message",
+        content: "<goal_context>\nContinue working toward the active thread goal.",
+        imagesCount: 0,
+        localImagesCount: 0
+      }
+    ],
+    tokenUsage: [],
+    taskTimings: [],
+    toolEvents: [],
+    unknownEvents: [],
+    warnings: []
+  };
+
+  const allUserMessages = searchMessages(corpus, { query: "", role: "user" });
+  assert.equal(allUserMessages.totalMatches, 2);
+
+  const submittedMessages = searchMessages(corpus, { query: "", role: "user", submittedOnly: true });
+  assert.equal(submittedMessages.totalMatches, 1);
+  assert.equal(submittedMessages.results[0]?.sourceEvent, "event_msg.user_message");
+  assert.equal(submittedMessages.results[0]?.snippet, "Typed prompt");
+});
+
 test("searchMessages anchors snippets for whitespace-normalized message matches", () => {
   const corpus = {
     files: [],
