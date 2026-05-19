@@ -553,7 +553,10 @@ function isGitCommandMessage(normalized: string): boolean {
   const gitObjectAction =
     /^(create|make|open|merge|close|delete|remove|clean|switch|checkout) ((a|the|current|new) )*(branch|commit|pull request|pr|worktree|work tree)\b/.test(normalized);
   const worktreeCleanup = /^(close|delete|remove|clean) ((the|current) )*(worktree|work tree)\b/.test(normalized);
-  return directGitCommand || explicitGitInspection || gitObjectAction || worktreeCleanup;
+  const commitStateQuestion =
+    /^(are|is|did|do|does|have|has)\b.*\b(all|everything|files?|changes?|work|worktree|work tree|repo|repository|anything|we)\b.*\b(committed|commit|pushed|push|staged|unstaged|uncommitted|dirty|clean)\b\??$/.test(normalized) ||
+    /^(all|everything|files?|changes?|anything|repo|repository|worktree|work tree)\b.*\b(committed|pushed|staged|unstaged|uncommitted|dirty|clean)\b\??$/.test(normalized);
+  return directGitCommand || explicitGitInspection || gitObjectAction || worktreeCleanup || commitStateQuestion;
 }
 
 function isRunAppMessage(normalized: string): boolean {

@@ -148,7 +148,11 @@ test("summarizeParsedCorpus groups command-style prompt families", () => {
     message({ content: "Can you make a commit please", timestamp: "2026-01-01T00:05:00.000Z" }, 6),
     message({ content: "run the app", timestamp: "2026-01-01T00:06:00.000Z" }, 7),
     message({ content: "start the server", timestamp: "2026-01-01T00:07:00.000Z" }, 8),
-    message({ content: "OK open the app for me", timestamp: "2026-01-01T00:08:00.000Z" }, 9)
+    message({ content: "OK open the app for me", timestamp: "2026-01-01T00:08:00.000Z" }, 9),
+    message({ content: "Are all files committed?", timestamp: "2026-01-01T00:09:00.000Z" }, 10),
+    message({ content: "Have all changes been pushed?", timestamp: "2026-01-01T00:10:00.000Z" }, 11),
+    message({ content: "is repo clean?", timestamp: "2026-01-01T00:11:00.000Z" }, 12),
+    message({ content: "anything uncommitted?", timestamp: "2026-01-01T00:12:00.000Z" }, 13)
   ];
   const corpus = {
     files: messages.map((item) => ({
@@ -180,15 +184,26 @@ test("summarizeParsedCorpus groups command-style prompt families", () => {
   };
 
   const summary = summarizeParsedCorpus(corpus, { project: "sample-app" });
-  assert.equal(summary.totals.userMessages, 9);
+  assert.equal(summary.totals.userMessages, 13);
   assert.equal(summary.totals.uniqueUserMessages, 2);
   assert.equal(summary.messagesByDay[0]?.uniqueCount, 2);
 
   const gitGroup = summary.repeatedUserMessages.find((group) => group.sample === "Git commands");
-  assert.equal(gitGroup?.count, 6);
+  assert.equal(gitGroup?.count, 10);
   assert.deepEqual(
     gitGroup?.variants.map((variant) => variant.sample),
-    ["Can you make a commit please", "create a new branch", "close work tree", "push", "commit and push", "commit"]
+    [
+      "anything uncommitted?",
+      "is repo clean?",
+      "Have all changes been pushed?",
+      "Are all files committed?",
+      "Can you make a commit please",
+      "create a new branch",
+      "close work tree",
+      "push",
+      "commit and push",
+      "commit"
+    ]
   );
 
   const runAppGroup = summary.repeatedUserMessages.find((group) => group.sample === "Run app");
