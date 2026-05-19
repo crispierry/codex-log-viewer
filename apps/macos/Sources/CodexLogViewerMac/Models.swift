@@ -27,7 +27,7 @@ enum MessageRoleFilter: String, CaseIterable, Identifiable {
     case .all:
       return "All"
     case .user:
-      return "User"
+      return "Sent"
     case .automation:
       return "Automation"
     case .assistant:
@@ -290,6 +290,7 @@ struct ModelBucket: Decodable, Hashable {
 struct SessionSummary: Decodable, Identifiable, Hashable {
   let sessionId: String
   let filePath: String
+  let dateKey: String
   let project: String
   let cwd: String?
   let firstSeen: String?
@@ -300,7 +301,7 @@ struct SessionSummary: Decodable, Identifiable, Hashable {
   let totalTokens: Int
   let models: [String]
 
-  var id: String { "\(filePath)#\(sessionId)" }
+  var id: String { "\(filePath)#\(sessionId)#\(dateKey)" }
   var shortSessionId: String { String(sessionId.prefix(8)) }
 }
 
@@ -336,6 +337,7 @@ struct MessageSearchResult: Decodable, Identifiable, Hashable {
   let id: String
   let sessionId: String
   let filePath: String
+  let dateKey: String?
   let project: String
   let cwd: String?
   let lineNumber: Int?

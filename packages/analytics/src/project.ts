@@ -83,7 +83,7 @@ export function listProjects(corpus: ParsedCodexCorpus, aliases: ProjectAlias[] 
       totalTokens: 0
     };
 
-    existing.sessions += 1;
+    existing.sessions += dailySessionCount(file);
     existing.turns += file.turns.length;
     existing.messages += file.messages.filter((message) => message.sourceEvent === "event_msg.user_message").length;
     existing.totalTokens += file.tokenUsage.reduce((sum, token) => sum + token.usage.totalTokens, 0);
@@ -98,4 +98,28 @@ export function listProjects(corpus: ParsedCodexCorpus, aliases: ProjectAlias[] 
 
 function sameSessionFile(record: SessionLocator, locator: SessionLocator): boolean {
   return record.sessionId === locator.sessionId && record.filePath === locator.filePath;
+}
+
+function dailySessionCount(file: ParsedCodexCorpus["files"][number]): number {
+  const dateKeys = new Set<string>();
+  for (const message of file.messages) {
+    if (message.sourceEvent === "event_msg.user_message") {
+      dateKeys.add(localDateKey(message.timestamp));
+    }
+  }
+  return dateKeys.size;
+}
+
+function localDateKey(timestamp: string | undefined): string {
+  if (!timestamp) {
+    return "unknown";
+  }
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) {
+    return "unknown";
+  }
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }

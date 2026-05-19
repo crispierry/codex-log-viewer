@@ -40,6 +40,7 @@ export interface ModelBucket {
 export interface SessionSummary {
   sessionId: string;
   filePath: string;
+  dateKey: string;
   project: string;
   cwd?: string;
   firstSeen?: string;
@@ -108,6 +109,7 @@ export interface MessageSearchOptions extends SummaryOptions {
   model?: string;
   sessionId?: string;
   filePath?: string;
+  dateKey?: string;
   submittedOnly?: boolean;
   limit?: number;
 }
@@ -116,6 +118,7 @@ export interface MessageSearchResult {
   id: string;
   sessionId: string;
   filePath: string;
+  dateKey: string;
   project: string;
   cwd?: string;
   lineNumber?: number;

@@ -3,7 +3,7 @@ import test from "node:test";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseCodexCorpus } from "@codex-log-viewer/parser";
-import { redactedProjectSummary, searchMessages, summarizeParsedCorpus, summaryToJson } from "../dist/index.js";
+import { projectsFromCorpus, redactedProjectSummary, searchMessages, summarizeParsedCorpus, summaryToJson } from "../dist/index.js";
 
 const testDir = dirname(fileURLToPath(import.meta.url));
 const fixturePath = resolve(testDir, "../../../fixtures/codex/sample-session.jsonl");
@@ -338,6 +338,72 @@ test("summarizeParsedCorpus counts automation prompts separately from sent user 
   assert.equal(summary.sessions[0]?.userMessages, 1);
   assert.equal(summary.sessions[0]?.automationMessages, 1);
   assert.equal(summary.messagesByDay[0]?.count, 1);
+});
+
+test("summarizeParsedCorpus hides automation-only sessions from the actionable session list", () => {
+  const corpus = {
+    files: [
+      {
+        filePath: "automation-only-session.jsonl",
+        sessionId: "automation-only-session",
+        lineCount: 1,
+        sessions: [],
+        turns: [],
+        messages: [
+          {
+            filePath: "automation-only-session.jsonl",
+            sessionId: "automation-only-session",
+            timestamp: "2026-01-01T00:00:00.000Z",
+            role: "automation",
+            sourceEvent: "event_msg.automation_message",
+            content: "Automation: Daily fixture sync",
+            imagesCount: 0,
+            localImagesCount: 0
+          }
+        ],
+        tokenUsage: [],
+        taskTimings: [],
+        toolEvents: [],
+        unknownEvents: [],
+        warnings: []
+      }
+    ],
+    sessions: [
+      {
+        filePath: "automation-only-session.jsonl",
+        sessionId: "automation-only-session",
+        cwd: "/tmp/sample-app",
+        timestamp: "2026-01-01T00:00:00.000Z"
+      }
+    ],
+    turns: [],
+    messages: [
+      {
+        filePath: "automation-only-session.jsonl",
+        sessionId: "automation-only-session",
+        timestamp: "2026-01-01T00:00:00.000Z",
+        role: "automation",
+        sourceEvent: "event_msg.automation_message",
+        content: "Automation: Daily fixture sync",
+        imagesCount: 0,
+        localImagesCount: 0
+      }
+    ],
+    tokenUsage: [],
+    taskTimings: [],
+    toolEvents: [],
+    unknownEvents: [],
+    warnings: []
+  };
+
+  const summary = summarizeParsedCorpus(corpus, { project: "sample-app" });
+  const projects = projectsFromCorpus(corpus);
+
+  assert.equal(summary.totals.sessions, 0);
+  assert.equal(summary.totals.automationMessages, 1);
+  assert.deepEqual(summary.sessions, []);
+  assert.equal(projects[0]?.sessions, 0);
+  assert.equal(projects[0]?.messages, 0);
 });
 
 test("summarizeParsedCorpus attributes token usage to models by session and turn", () => {
@@ -809,6 +875,142 @@ test("summarizeParsedCorpus filters session list and session total by date range
   assert.equal(summary.totals.sessions, 1);
   assert.deepEqual(summary.sessions.map((session) => session.sessionId), ["new-session"]);
   assert.equal(summary.totals.userMessages, 1);
+});
+
+test("summarizeParsedCorpus splits long raw sessions into daily session slices", () => {
+  const corpus = {
+    files: [
+      {
+        filePath: "spanning.jsonl",
+        sessionId: "spanning-session",
+        lineCount: 6,
+        sessions: [],
+        turns: [],
+        messages: [],
+        tokenUsage: [],
+        taskTimings: [],
+        toolEvents: [],
+        unknownEvents: [],
+        warnings: []
+      }
+    ],
+    sessions: [
+      {
+        filePath: "spanning.jsonl",
+        sessionId: "spanning-session",
+        cwd: "/tmp/sample-app",
+        timestamp: "2026-01-01T12:00:00.000Z"
+      }
+    ],
+    turns: [
+      {
+        filePath: "spanning.jsonl",
+        sessionId: "spanning-session",
+        turnId: "turn-1",
+        timestamp: "2026-01-01T12:00:00.000Z",
+        model: "model-a"
+      },
+      {
+        filePath: "spanning.jsonl",
+        sessionId: "spanning-session",
+        turnId: "turn-2",
+        timestamp: "2026-01-02T12:00:00.000Z",
+        model: "model-a"
+      }
+    ],
+    messages: [
+      {
+        filePath: "spanning.jsonl",
+        sessionId: "spanning-session",
+        turnId: "turn-1",
+        timestamp: "2026-01-01T12:00:00.000Z",
+        role: "user",
+        sourceEvent: "event_msg.user_message",
+        content: "first day prompt",
+        imagesCount: 0,
+        localImagesCount: 0
+      },
+      {
+        filePath: "spanning.jsonl",
+        sessionId: "spanning-session",
+        turnId: "turn-1",
+        timestamp: "2026-01-01T12:01:00.000Z",
+        role: "assistant",
+        sourceEvent: "event_msg.agent_message",
+        content: "first day response",
+        imagesCount: 0,
+        localImagesCount: 0
+      },
+      {
+        filePath: "spanning.jsonl",
+        sessionId: "spanning-session",
+        turnId: "turn-2",
+        timestamp: "2026-01-02T12:00:00.000Z",
+        role: "user",
+        sourceEvent: "event_msg.user_message",
+        content: "second day prompt",
+        imagesCount: 0,
+        localImagesCount: 0
+      }
+    ],
+    tokenUsage: [
+      {
+        filePath: "spanning.jsonl",
+        sessionId: "spanning-session",
+        turnId: "turn-1",
+        timestamp: "2026-01-01T12:02:00.000Z",
+        usage: {
+          inputTokens: 10,
+          cachedInputTokens: 0,
+          freshInputTokens: 10,
+          outputTokens: 5,
+          reasoningOutputTokens: 0,
+          totalTokens: 15
+        }
+      },
+      {
+        filePath: "spanning.jsonl",
+        sessionId: "spanning-session",
+        turnId: "turn-2",
+        timestamp: "2026-01-02T12:02:00.000Z",
+        usage: {
+          inputTokens: 20,
+          cachedInputTokens: 0,
+          freshInputTokens: 20,
+          outputTokens: 10,
+          reasoningOutputTokens: 0,
+          totalTokens: 30
+        }
+      }
+    ],
+    taskTimings: [],
+    toolEvents: [],
+    unknownEvents: [],
+    warnings: []
+  };
+
+  const summary = summarizeParsedCorpus(corpus, { project: "sample-app" });
+  const firstDay = summary.sessions.find((session) => session.firstSeen === "2026-01-01T12:00:00.000Z");
+  const secondDay = summary.sessions.find((session) => session.firstSeen === "2026-01-02T12:00:00.000Z");
+
+  assert.equal(summary.totals.sessions, 2);
+  assert.equal(new Set(summary.sessions.map((session) => session.dateKey)).size, 2);
+  assert.equal(firstDay?.userMessages, 1);
+  assert.equal(firstDay?.assistantMessages, 1);
+  assert.equal(firstDay?.totalTokens, 15);
+  assert.equal(secondDay?.userMessages, 1);
+  assert.equal(secondDay?.assistantMessages, 0);
+  assert.equal(secondDay?.totalTokens, 30);
+
+  const firstDaySearch = searchMessages(corpus, {
+    query: "day prompt",
+    sessionId: "spanning-session",
+    filePath: "spanning.jsonl",
+    dateKey: firstDay?.dateKey
+  });
+  assert.equal(firstDaySearch.totalMatches, 1);
+  assert.equal(firstDaySearch.results[0]?.snippet, "first day prompt");
+  assert.equal(firstDaySearch.results[0]?.dateKey, firstDay?.dateKey);
 });
 
 test("summarizeParsedCorpus filters diagnostics by visible project sessions and date range", () => {

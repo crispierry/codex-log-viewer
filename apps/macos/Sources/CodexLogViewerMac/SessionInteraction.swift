@@ -1,5 +1,25 @@
 import Foundation
 
+private let codexFractionalISOFormatter: ISO8601DateFormatter = {
+  let formatter = ISO8601DateFormatter()
+  formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+  return formatter
+}()
+
+private let codexPlainISOFormatter: ISO8601DateFormatter = {
+  let formatter = ISO8601DateFormatter()
+  formatter.formatOptions = [.withInternetDateTime]
+  return formatter
+}()
+
+private let codexDateKeyFormatter: DateFormatter = {
+  let formatter = DateFormatter()
+  formatter.calendar = Calendar(identifier: .gregorian)
+  formatter.locale = Locale(identifier: "en_US_POSIX")
+  formatter.dateFormat = "yyyy-MM-dd"
+  return formatter
+}()
+
 struct SessionInteraction: Equatable {
   let userMessageIndex: Int
   let userMessage: MessageDetail
@@ -11,9 +31,12 @@ struct SessionInteraction: Equatable {
 }
 
 enum SessionInteractionBuilder {
-  static func userMessageOffsets(in detail: SessionDetail) -> [(offset: Int, element: MessageDetail)] {
+  static func userMessageOffsets(in detail: SessionDetail, dateKey: String? = nil) -> [(offset: Int, element: MessageDetail)] {
     Array(detail.messages.enumerated())
-      .filter { $0.element.sourceEvent == "event_msg.user_message" }
+      .filter {
+        $0.element.sourceEvent == "event_msg.user_message" &&
+          (dateKey == nil || codexLocalDateKey($0.element.timestamp) == dateKey)
+      }
   }
 
   static func interaction(in detail: SessionDetail, selectedUserMessageIndex: Int) -> SessionInteraction? {
@@ -130,4 +153,12 @@ enum SessionInteractionBuilder {
 func messageDisplayText(_ message: MessageDetail) -> String {
   let text = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
   return text.isEmpty ? message.sourceEvent : text
+}
+
+func codexLocalDateKey(_ value: String?) -> String? {
+  guard let value, !value.isEmpty else { return nil }
+  guard let date = codexFractionalISOFormatter.date(from: value) ?? codexPlainISOFormatter.date(from: value) else {
+    return nil
+  }
+  return codexDateKeyFormatter.string(from: date)
 }

@@ -39,8 +39,7 @@ final class AppModel: ObservableObject {
   @Published var messageModelFilter = AppConstants.allModelsName
   @Published var messageSessionFilter: String?
   @Published private var messageSessionFilePathFilter: String?
-  @Published var isMessageBrowseMode = false
-  @Published var isSubmittedMessageSearch = false
+  @Published private var messageSessionDateKeyFilter: String?
   @Published var searchSummary: MessageSearchSummary?
   @Published var selectedSearchResultID: MessageSearchResult.ID?
   @Published var pathDraft = ""
@@ -84,6 +83,7 @@ final class AppModel: ObservableObject {
         session.project,
         session.cwd,
         session.filePath,
+        session.dateKey,
         session.models.joined(separator: " ")
       ]
       .compactMap { $0 }
@@ -93,6 +93,11 @@ final class AppModel: ObservableObject {
     }
   }
 
+  var selectedSessionDateKey: String? {
+    guard let selectedSessionID else { return nil }
+    return sessionForSelectionID(selectedSessionID)?.dateKey
+  }
+
   var messageModelOptions: [String] {
     let models = summary?.models.map(\.model).filter { !$0.isEmpty } ?? []
     return [AppConstants.allModelsName] + models
@@ -100,7 +105,13 @@ final class AppModel: ObservableObject {
 
   var messageSessionFilterLabel: String? {
     guard let messageSessionFilter else { return nil }
-    return String(messageSessionFilter.prefix(8))
+    let shortSession = String(messageSessionFilter.prefix(8))
+    guard let messageSessionDateKeyFilter,
+      let date = Self.displayDateKey(messageSessionDateKeyFilter)
+    else {
+      return shortSession
+    }
+    return "\(shortSession) on \(date)"
   }
 
   func startIfNeeded() {
@@ -238,10 +249,12 @@ final class AppModel: ObservableObject {
         if let messageSessionFilter, !hasMessageSessionFilter(in: summary.sessions, sessionID: messageSessionFilter) {
           self.messageSessionFilter = nil
           self.messageSessionFilePathFilter = nil
+          self.messageSessionDateKeyFilter = nil
         }
         if let selectedSessionID, !summary.sessions.contains(where: { $0.id == selectedSessionID }) {
           clearSelectedSession()
         }
+        selectLatestSessionIfNeeded(in: summary)
         status = .ready
         scheduleUITestWorkflowIfNeeded(api: api, filters: filters)
       } catch is CancellationError {
@@ -381,6 +394,7 @@ final class AppModel: ObservableObject {
         let detail = try await api.sessionDetail(
           sessionID: target.sessionID,
           filePath: target.filePath,
+          dateKey: target.dateKey,
           project: project,
           filters: filters
         )
@@ -398,11 +412,10 @@ final class AppModel: ObservableObject {
     }
   }
 
-  func searchMessages(allowEmptyQuery: Bool = false, submittedOnly: Bool = false) {
+  func searchMessages() {
     selectedSection = .search
     let trimmedQuery = messageQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-    let isBrowseRequest = allowEmptyQuery && trimmedQuery.isEmpty
-    guard !trimmedQuery.isEmpty || isBrowseRequest, let api else {
+    guard !trimmedQuery.isEmpty, let api else {
       clearSearchResults()
       return
     }
@@ -410,8 +423,6 @@ final class AppModel: ObservableObject {
     searchTask?.cancel()
     searchRequestID += 1
     selectedSearchResultID = nil
-    isMessageBrowseMode = isBrowseRequest
-    isSubmittedMessageSearch = submittedOnly
     let requestID = searchRequestID
     let filters = currentFilters()
     let project = selectedProject
@@ -419,6 +430,8 @@ final class AppModel: ObservableObject {
     let model = messageModelFilter
     let sessionID = messageSessionFilter
     let filePath = messageSessionFilePathFilter
+    let dateKey = messageSessionDateKeyFilter
+    let submittedOnly = role == .user
 
     searchTask = Task {
       do {
@@ -429,6 +442,7 @@ final class AppModel: ObservableObject {
           model: model,
           sessionID: sessionID,
           filePath: filePath,
+          dateKey: dateKey,
           project: project,
           filters: filters,
           submittedOnly: submittedOnly
@@ -447,17 +461,7 @@ final class AppModel: ObservableObject {
   }
 
   func refreshMessageResults() {
-    searchMessages(allowEmptyQuery: isMessageBrowseMode, submittedOnly: isSubmittedMessageSearch)
-  }
-
-  func showSentMessagesForCurrentProject() {
-    selectedSection = .search
-    messageQuery = ""
-    messageRoleFilter = .user
-    messageModelFilter = AppConstants.allModelsName
-    messageSessionFilter = nil
-    messageSessionFilePathFilter = nil
-    searchMessages(allowEmptyQuery: true, submittedOnly: true)
+    searchMessages()
   }
 
   func focusMessageSearch() {
@@ -475,7 +479,11 @@ final class AppModel: ObservableObject {
     selectedSection = .browse
     pendingSearchResultTarget = SearchResultSelectionTarget(result)
     selectedUserMessageIndex = nil
-    selectedSessionID = sessionSelectionID(sessionID: result.sessionId, filePath: result.filePath) ?? result.sessionId
+    selectedSessionID = sessionSelectionID(
+      sessionID: result.sessionId,
+      filePath: result.filePath,
+      dateKey: result.dateKey
+    ) ?? result.sessionId
     selectedSessionDetail = nil
     loadSelectedSession()
   }
@@ -485,6 +493,7 @@ final class AppModel: ObservableObject {
     let target = detailTarget(for: selectedSessionID)
     messageSessionFilter = target.sessionID
     messageSessionFilePathFilter = target.filePath
+    messageSessionDateKeyFilter = target.dateKey
     if searchSummary != nil {
       refreshMessageResults()
     }
@@ -493,6 +502,7 @@ final class AppModel: ObservableObject {
   func clearMessageSessionFilter() {
     messageSessionFilter = nil
     messageSessionFilePathFilter = nil
+    messageSessionDateKeyFilter = nil
     if searchSummary != nil {
       refreshMessageResults()
     }
@@ -557,9 +567,20 @@ final class AppModel: ObservableObject {
     pendingSearchResultTarget = nil
     messageSessionFilter = nil
     messageSessionFilePathFilter = nil
-    isMessageBrowseMode = false
-    isSubmittedMessageSearch = false
+    messageSessionDateKeyFilter = nil
     searchSummary = nil
+  }
+
+  private func selectLatestSessionIfNeeded(in summary: ProjectSummary) {
+    guard selectedSessionID == nil, let latestSession = summary.sessions.first else {
+      return
+    }
+
+    selectedSessionID = latestSession.id
+    selectedSessionDetail = nil
+    selectedUserMessageIndex = nil
+    pendingSearchResultTarget = nil
+    loadSelectedSession()
   }
 
   private func selectedSearchResultBelongsToSession(_ sessionID: SessionSummary.ID?) -> Bool {
@@ -570,37 +591,45 @@ final class AppModel: ObservableObject {
       return false
     }
     if let session = sessionForSelectionID(sessionID) {
-      return result.sessionId == session.sessionId && result.filePath == session.filePath
+      return result.sessionId == session.sessionId &&
+        result.filePath == session.filePath &&
+        (result.dateKey == nil || result.dateKey == session.dateKey)
     }
     return result.sessionId == sessionID
   }
 
-  private func detailTarget(for selectionID: SessionSummary.ID) -> (sessionID: String, filePath: String?) {
+  private func detailTarget(for selectionID: SessionSummary.ID) -> (sessionID: String, filePath: String?, dateKey: String?) {
     if let session = sessionForSelectionID(selectionID) {
-      return (session.sessionId, session.filePath)
+      return (session.sessionId, session.filePath, session.dateKey)
     }
     if let selectedSearchResultID,
       let result = searchSummary?.results.first(where: { $0.id == selectedSearchResultID && $0.sessionId == selectionID })
     {
-      return (result.sessionId, result.filePath)
+      return (result.sessionId, result.filePath, result.dateKey)
     }
-    return (selectionID, nil)
+    return (selectionID, nil, nil)
   }
 
   private func sessionForSelectionID(_ selectionID: SessionSummary.ID) -> SessionSummary? {
     summary?.sessions.first { $0.id == selectionID }
   }
 
-  private func sessionSelectionID(sessionID: String, filePath: String) -> SessionSummary.ID? {
-    summary?.sessions.first { $0.sessionId == sessionID && $0.filePath == filePath }?.id
+  private func sessionSelectionID(sessionID: String, filePath: String, dateKey: String?) -> SessionSummary.ID? {
+    if let dateKey,
+      let exact = summary?.sessions.first(where: { $0.sessionId == sessionID && $0.filePath == filePath && $0.dateKey == dateKey }) {
+      return exact.id
+    }
+    return summary?.sessions.first { $0.sessionId == sessionID && $0.filePath == filePath }?.id
   }
 
   private func applyPendingMessageSelection(to detail: SessionDetail) {
     guard let pendingSearchResultTarget else {
+      let userMessageOffsets = SessionInteractionBuilder.userMessageOffsets(in: detail, dateKey: selectedSessionDateKey)
       if let selectedUserMessageIndex,
-        !SessionInteractionBuilder.userMessageOffsets(in: detail).contains(where: { $0.offset == selectedUserMessageIndex }) {
-        self.selectedUserMessageIndex = nil
+        userMessageOffsets.contains(where: { $0.offset == selectedUserMessageIndex }) {
+        return
       }
+      selectedUserMessageIndex = userMessageOffsets.last?.offset
       return
     }
     selectedUserMessageIndex = userMessageIndex(for: pendingSearchResultTarget, in: detail)
@@ -674,7 +703,11 @@ final class AppModel: ObservableObject {
       guard let messageSessionFilePathFilter else {
         return session.sessionId == sessionID
       }
-      return session.sessionId == sessionID && session.filePath == messageSessionFilePathFilter
+      let sameSession = session.sessionId == sessionID && session.filePath == messageSessionFilePathFilter
+      guard let messageSessionDateKeyFilter else {
+        return sameSession
+      }
+      return sameSession && session.dateKey == messageSessionDateKeyFilter
     }
   }
 
@@ -893,7 +926,11 @@ final class AppModel: ObservableObject {
     }
     searchSummary = search
     selectedSearchResultID = result.id
-    selectedSessionID = sessionSelectionID(sessionID: result.sessionId, filePath: result.filePath) ?? result.sessionId
+    selectedSessionID = sessionSelectionID(
+      sessionID: result.sessionId,
+      filePath: result.filePath,
+      dateKey: result.dateKey
+    ) ?? result.sessionId
 
     let sentMessagesSearch = try await api.searchMessages(
       query: "",
@@ -930,6 +967,7 @@ final class AppModel: ObservableObject {
     let detail = try await api.sessionDetail(
       sessionID: result.sessionId,
       filePath: result.filePath,
+      dateKey: result.dateKey,
       project: selectedProject,
       filters: dateFilters
     )
@@ -963,12 +1001,14 @@ final class AppModel: ObservableObject {
 
     messageSessionFilter = result.sessionId
     messageSessionFilePathFilter = result.filePath
+    messageSessionDateKeyFilter = result.dateKey
     let sessionSearch = try await api.searchMessages(
       query: messageQuery,
       role: .all,
       model: AppConstants.allModelsName,
       sessionID: result.sessionId,
       filePath: result.filePath,
+      dateKey: result.dateKey,
       project: AppConstants.allProjectsName,
       filters: dateFilters
     )
@@ -1063,6 +1103,10 @@ final class AppModel: ObservableObject {
 
   private static func displayDateOnly(_ date: Date) -> String {
     displayDateFormatter.string(from: date)
+  }
+
+  private static func displayDateKey(_ value: String) -> String? {
+    dateFormatter.date(from: value).map(displayDateOnly)
   }
 
   private static func displayMonth(_ date: Date) -> String {

@@ -149,6 +149,7 @@ export function searchMessages(corpus: ParsedCodexCorpus, options: MessageSearch
   const modelFilter = options.model?.trim();
   const sessionFilter = options.sessionId?.trim();
   const filePathFilter = options.filePath?.trim();
+  const dateKeyFilter = options.dateKey?.trim();
 
   const range = dateRange(options);
   const sessionContexts = new Map<string, ReturnType<typeof projectContextForFile>>();
@@ -192,6 +193,11 @@ export function searchMessages(corpus: ParsedCodexCorpus, options: MessageSearch
       continue;
     }
 
+    const dateKey = localDateKey(message.timestamp);
+    if (dateKeyFilter && dateKey !== dateKeyFilter) {
+      continue;
+    }
+
     if (normalizedQuery && !normalizeSearchText(message.content).includes(normalizedQuery)) {
       continue;
     }
@@ -209,6 +215,7 @@ export function searchMessages(corpus: ParsedCodexCorpus, options: MessageSearch
       ].join("#"),
       sessionId: message.sessionId,
       filePath: message.filePath,
+      dateKey,
       project: context.project,
       cwd: context.cwd,
       lineNumber: message.lineNumber,
@@ -291,9 +298,16 @@ function normalizedMatchStart(content: string, query: string): number {
 
 function dateRange(options: SummaryOptions): { since?: number; until?: number } {
   return {
-    since: options.since ? Date.parse(options.since) : undefined,
+    since: options.since ? startOfDate(options.since) : undefined,
     until: options.until ? endOfDate(options.until) : undefined
   };
+}
+
+function startOfDate(value: string): number {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return Date.parse(`${value}T00:00:00.000`);
+  }
+  return Date.parse(value);
 }
 
 function endOfDate(value: string): number {
@@ -634,6 +648,20 @@ function bucketKey(timestamp: string | undefined, grain: "day" | "hour"): string
   return `${year}-${month}-${day} ${hour}:00`;
 }
 
+function localDateKey(timestamp: string | undefined): string {
+  if (!timestamp) {
+    return "unknown";
+  }
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) {
+    return "unknown";
+  }
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function modelBuckets(
   turns: TurnRecord[],
   tokenUsage: TokenUsageRecord[],
@@ -690,28 +718,88 @@ function sessionSummaries(
       return [];
     }
 
-    const timestamps = [
-      ...messages.map((message) => message.timestamp),
-      ...tokens.map((token) => token.timestamp),
-      ...turns.map((turn) => turn.timestamp),
-      ...(sessionTimestampInRange ? [session?.timestamp] : [])
-    ].filter(Boolean) as string[];
-    const sortedTimestamps = timestamps.sort();
+    const buckets = new Map<
+      string,
+      {
+        messages: MessageRecord[];
+        tokens: TokenUsageRecord[];
+        turns: TurnRecord[];
+        timestamps: string[];
+      }
+    >();
+    const bucketFor = (dateKey: string) => {
+      const existing = buckets.get(dateKey);
+      if (existing) {
+        return existing;
+      }
+      const created = { messages: [], tokens: [], turns: [], timestamps: [] };
+      buckets.set(dateKey, created);
+      return created;
+    };
 
-    return [{
-      sessionId,
-      filePath: file.filePath,
-      project: projectNameForCwd(cwd, aliases),
-      cwd,
-      firstSeen: sortedTimestamps[0],
-      lastSeen: sortedTimestamps.at(-1),
-      userMessages: messages.filter((message) => message.sourceEvent === "event_msg.user_message").length,
-      automationMessages: messages.filter((message) => message.sourceEvent === "event_msg.automation_message").length,
-      assistantMessages: messages.filter((message) => message.role === "assistant").length,
-      totalTokens: tokens.reduce((sum, token) => sum + token.usage.totalTokens, 0),
-      models: [...new Set(turns.map((turn) => turn.model).filter(Boolean) as string[])]
-    }];
-  }).sort((a, b) => (b.lastSeen ?? "").localeCompare(a.lastSeen ?? ""));
+    for (const message of messages) {
+      const bucket = bucketFor(localDateKey(message.timestamp));
+      bucket.messages.push(message);
+      if (message.timestamp) {
+        bucket.timestamps.push(message.timestamp);
+      }
+    }
+
+    for (const token of tokens) {
+      const bucket = bucketFor(localDateKey(token.timestamp));
+      bucket.tokens.push(token);
+      if (token.timestamp) {
+        bucket.timestamps.push(token.timestamp);
+      }
+    }
+
+    for (const turn of turns) {
+      const bucket = bucketFor(localDateKey(turn.timestamp));
+      bucket.turns.push(turn);
+      if (turn.timestamp) {
+        bucket.timestamps.push(turn.timestamp);
+      }
+    }
+
+    if (sessionTimestampInRange && session?.timestamp) {
+      const sessionDateKey = localDateKey(session.timestamp);
+      if (buckets.has(sessionDateKey) || buckets.size === 0) {
+        bucketFor(sessionDateKey).timestamps.push(session.timestamp);
+      }
+    }
+
+    if (!hasDateFilter && buckets.size === 0) {
+      bucketFor(localDateKey(session?.timestamp));
+    }
+
+    return [...buckets.entries()].flatMap(([dateKey, bucket]) => {
+      const userMessages = bucket.messages.filter((message) => message.sourceEvent === "event_msg.user_message");
+      if (userMessages.length === 0) {
+        return [];
+      }
+
+      const sortedTimestamps = bucket.timestamps.sort();
+
+      return {
+        sessionId,
+        filePath: file.filePath,
+        dateKey,
+        project: projectNameForCwd(cwd, aliases),
+        cwd,
+        firstSeen: sortedTimestamps[0],
+        lastSeen: sortedTimestamps.at(-1),
+        userMessages: userMessages.length,
+        automationMessages: bucket.messages.filter((message) => message.sourceEvent === "event_msg.automation_message").length,
+        assistantMessages: bucket.messages.filter((message) => message.role === "assistant").length,
+        totalTokens: bucket.tokens.reduce((sum, token) => sum + token.usage.totalTokens, 0),
+        models: [...new Set(bucket.turns.map((turn) => turn.model).filter(Boolean) as string[])]
+      };
+    });
+  }).sort((a, b) =>
+    (b.dateKey ?? "").localeCompare(a.dateKey ?? "") ||
+    (b.lastSeen ?? "").localeCompare(a.lastSeen ?? "") ||
+    a.sessionId.localeCompare(b.sessionId)
+  );
 }
 
 function recordInScope(

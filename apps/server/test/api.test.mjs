@@ -366,6 +366,87 @@ test("session detail and message search isolate duplicate session ids by file pa
   }
 });
 
+test("local API exposes daily session slices for sessions that span dates", async () => {
+  const tempDir = await mkdtemp(`${tmpdir()}/codex-log-viewer-daily-session-`);
+  const fixture = resolve(tempDir, "spanning-session.jsonl");
+
+  await writeFile(
+    fixture,
+    [
+      JSON.stringify({
+        timestamp: "2026-01-01T12:00:00.000Z",
+        type: "session_meta",
+        payload: {
+          id: "spanning-session",
+          timestamp: "2026-01-01T12:00:00.000Z",
+          cwd: "/Users/example/projects/daily-app"
+        }
+      }),
+      JSON.stringify({
+        timestamp: "2026-01-01T12:00:01.000Z",
+        type: "event_msg",
+        payload: {
+          type: "user_message",
+          message: "First day prompt"
+        }
+      }),
+      JSON.stringify({
+        timestamp: "2026-01-02T12:00:01.000Z",
+        type: "event_msg",
+        payload: {
+          type: "user_message",
+          message: "Second day prompt"
+        }
+      })
+    ].join("\n") + "\n",
+    "utf8"
+  );
+
+  const server = await startServer({ port: 0, authToken: "test-token", paths: [fixture] });
+  const headers = { authorization: "Bearer test-token" };
+
+  try {
+    const summary = await fetch(`${server.url}/api/summary?project=daily-app`, { headers });
+    assert.equal(summary.status, 200);
+    const summaryBody = await summary.json();
+    assert.equal(summaryBody.summary.totals.sessions, 2);
+    assert.equal(new Set(summaryBody.summary.sessions.map((session) => session.dateKey)).size, 2);
+
+    const firstDay = summaryBody.summary.sessions.find(
+      (session) => session.firstSeen === "2026-01-01T12:00:00.000Z"
+    );
+    assert.equal(firstDay?.userMessages, 1);
+
+    const searchParams = new URLSearchParams({
+      q: "day prompt",
+      sessionId: "spanning-session",
+      filePath: fixture,
+      dateKey: firstDay.dateKey
+    });
+    const search = await fetch(`${server.url}/api/messages/search?${searchParams}`, { headers });
+    assert.equal(search.status, 200);
+    const searchBody = await search.json();
+    assert.equal(searchBody.search.totalMatches, 1);
+    assert.equal(searchBody.search.results[0]?.snippet, "First day prompt");
+    assert.equal(searchBody.search.results[0]?.dateKey, firstDay.dateKey);
+
+    const detailParams = new URLSearchParams({
+      sessionId: "spanning-session",
+      filePath: fixture,
+      dateKey: firstDay.dateKey
+    });
+    const detail = await fetch(`${server.url}/api/session?${detailParams}`, { headers });
+    assert.equal(detail.status, 200);
+
+    detailParams.set("dateKey", "2099-01-01");
+    const hiddenDetail = await fetch(`${server.url}/api/session?${detailParams}`, { headers });
+    assert.equal(hiddenDetail.status, 404);
+  } finally {
+    await server.close();
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("server reports fixed-port conflicts and dynamic ports avoid them", async () => {
   const first = await startServer({ port: 0 });
   const occupiedPort = Number(new URL(first.url).port);

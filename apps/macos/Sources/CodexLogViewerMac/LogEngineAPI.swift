@@ -37,11 +37,20 @@ struct LogEngineAPI {
     return CachedSummary(summary: response.summary, cache: response.cacheMetadata)
   }
 
-  func sessionDetail(sessionID: String, filePath: String? = nil, project: String, filters: LogFilters) async throws -> SessionDetail {
+  func sessionDetail(
+    sessionID: String,
+    filePath: String? = nil,
+    dateKey: String? = nil,
+    project: String,
+    filters: LogFilters
+  ) async throws -> SessionDetail {
     var queryItems = queryItems(project: project, filters: filters)
     queryItems.append(URLQueryItem(name: "sessionId", value: sessionID))
     if let filePath {
       queryItems.append(URLQueryItem(name: "filePath", value: filePath))
+    }
+    if let dateKey {
+      queryItems.append(URLQueryItem(name: "dateKey", value: dateKey))
     }
     return try await get("api/session", query: queryItems)
   }
@@ -52,6 +61,7 @@ struct LogEngineAPI {
     model: String,
     sessionID: String?,
     filePath: String? = nil,
+    dateKey: String? = nil,
     project: String,
     filters: LogFilters,
     submittedOnly: Bool = false
@@ -62,6 +72,7 @@ struct LogEngineAPI {
       model: model,
       sessionID: sessionID,
       filePath: filePath,
+      dateKey: dateKey,
       project: project,
       filters: filters,
       submittedOnly: submittedOnly
@@ -74,6 +85,7 @@ struct LogEngineAPI {
     model: String,
     sessionID: String?,
     filePath: String? = nil,
+    dateKey: String? = nil,
     project: String,
     filters: LogFilters,
     submittedOnly: Bool = false
@@ -91,6 +103,9 @@ struct LogEngineAPI {
     }
     if let filePath {
       queryItems.append(URLQueryItem(name: "filePath", value: filePath))
+    }
+    if let dateKey {
+      queryItems.append(URLQueryItem(name: "dateKey", value: dateKey))
     }
     if submittedOnly {
       queryItems.append(URLQueryItem(name: "submittedOnly", value: "true"))

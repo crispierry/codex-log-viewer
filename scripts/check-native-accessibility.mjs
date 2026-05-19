@@ -27,7 +27,6 @@ const requiredIdentifiers = [
   "date-range-clear-button",
   "message-search-field",
   "message-search-button",
-  "show-sent-messages-button",
   "message-role-filter",
   "message-model-filter",
   "message-search-results-table",

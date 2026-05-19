@@ -107,11 +107,15 @@ async function handleRequest(
       return;
     }
     const filePath = url.searchParams.get("filePath") ?? undefined;
+    const dateKey = url.searchParams.get("dateKey") ?? undefined;
     const loaded = await loadCachedCorpus(url, options, corpusCache);
     const summaryOptions = summaryOptionsFromQuery(url, options.paths);
     const summary = summarizeParsedCorpus(loaded.corpus, summaryOptions);
     const visibleSession = summary.sessions.find(
-      (session) => session.sessionId === sessionId && (!filePath || session.filePath === filePath)
+      (session) =>
+        session.sessionId === sessionId &&
+        (!filePath || session.filePath === filePath) &&
+        (!dateKey || session.dateKey === dateKey)
     );
     if (!visibleSession) {
       sendJson(response, 404, { error: "Session not found" });
@@ -156,6 +160,7 @@ async function handleRequest(
         model: url.searchParams.get("model") ?? undefined,
         sessionId: url.searchParams.get("sessionId") ?? undefined,
         filePath: url.searchParams.get("filePath") ?? undefined,
+        dateKey: url.searchParams.get("dateKey") ?? undefined,
         submittedOnly: url.searchParams.get("submittedOnly") === "true",
         limit
       })

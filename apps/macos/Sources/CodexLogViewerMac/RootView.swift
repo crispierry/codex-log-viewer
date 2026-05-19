@@ -355,7 +355,7 @@ struct SessionBrowserColumn: View {
   var body: some View {
     VStack(spacing: 0) {
       BrowserColumnHeader(
-        "Sessions",
+        "Daily Sessions",
         subtitle: "\(model.filteredSessions.count.formatted()) visible"
       )
       Divider()
@@ -424,9 +424,6 @@ struct SessionBrowserRow: View {
       }
       HStack(spacing: 8) {
         Label("\(session.userMessages.formatted()) sent", systemImage: "paperplane")
-        if session.automationMessages > 0 {
-          Label("\(session.automationMessages.formatted()) auto", systemImage: "clock.arrow.circlepath")
-        }
       }
       .font(.caption)
       .foregroundStyle(.secondary)
@@ -450,7 +447,7 @@ struct SentMessagesBrowserColumn: View {
 
   private var userMessages: [(offset: Int, element: MessageDetail)] {
     guard let detail = model.selectedSessionDetail else { return [] }
-    return SessionInteractionBuilder.userMessageOffsets(in: detail)
+    return SessionInteractionBuilder.userMessageOffsets(in: detail, dateKey: model.selectedSessionDateKey)
   }
 
   var body: some View {
@@ -674,7 +671,7 @@ struct MetricsGrid: View {
   var body: some View {
     Grid(horizontalSpacing: 12, verticalSpacing: 12) {
       GridRow {
-        MetricTile(label: "Sessions", value: summary?.totals.sessions)
+        MetricTile(label: "Daily Sessions", value: summary?.totals.sessions)
         MetricTile(label: "Sent Messages", value: summary?.totals.userMessages)
         MetricTile(label: "Automations", value: summary?.totals.automationMessages)
       }
@@ -1070,14 +1067,6 @@ struct MessageSearchView: View {
           }
           .keyboardShortcut(.return, modifiers: .command)
           .accessibilityIdentifier("message-search-button")
-
-          Button {
-            model.showSentMessagesForCurrentProject()
-          } label: {
-            Label("Messages I Sent", systemImage: "paperplane")
-          }
-          .help("Show your sent messages for the current project")
-          .accessibilityIdentifier("show-sent-messages-button")
         }
         .padding(8)
         .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
@@ -1112,7 +1101,7 @@ struct MessageSearchView: View {
 
         HStack {
           if let sessionLabel = model.messageSessionFilterLabel {
-            Label("Session \(sessionLabel)", systemImage: "scope")
+            Label("Daily session \(sessionLabel)", systemImage: "scope")
               .font(.caption)
               .foregroundStyle(.secondary)
             Button {
@@ -1127,7 +1116,7 @@ struct MessageSearchView: View {
             Button {
               model.limitMessageSearchToSelectedSession()
             } label: {
-              Label("Limit to Selected Session", systemImage: "scope")
+              Label("Limit to Selected Day", systemImage: "scope")
             }
             .accessibilityIdentifier("message-session-filter-button")
           }
@@ -1141,9 +1130,9 @@ struct MessageSearchView: View {
 
           if search.results.isEmpty {
             ContentUnavailableView(
-              emptySearchTitle,
-              systemImage: emptySearchSystemImage,
-              description: Text(emptySearchDescription)
+              "No Matches",
+              systemImage: "magnifyingglass",
+              description: Text("Try another phrase or broaden the current filters.")
             )
             .frame(maxWidth: .infinity, minHeight: 220)
             .accessibilityIdentifier("message-search-empty-state")
@@ -1180,7 +1169,7 @@ struct MessageSearchView: View {
             SearchResultActionsView(result: selectedSearchResult)
           }
         } else {
-          Text("Search respects the current source, project, and date filters.")
+          Text("Search current messages by source, project, and date filters.")
             .font(.callout)
             .foregroundStyle(.secondary)
         }
@@ -1192,35 +1181,9 @@ struct MessageSearchView: View {
     }
   }
 
-  private var isBrowsingMessages: Bool {
-    guard let query = model.searchSummary?.query else { return false }
-    return model.isMessageBrowseMode && query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-  }
-
-  private var emptySearchTitle: String {
-    if isBrowsingMessages && model.isSubmittedMessageSearch {
-      return "No Sent Messages"
-    }
-    return isBrowsingMessages ? "No Messages" : "No Matches"
-  }
-
-  private var emptySearchSystemImage: String {
-    isBrowsingMessages ? "paperplane" : "magnifyingglass"
-  }
-
-  private var emptySearchDescription: String {
-    isBrowsingMessages ? "Try another project, source, or date range." : "Try another phrase or broaden the current filters."
-  }
-
   private func searchSummaryLabel(_ search: MessageSearchSummary) -> String {
     let count = search.totalMatches.formatted()
-    guard isBrowsingMessages else {
-      return "\(count) matches in \(search.project)"
-    }
-    if model.isSubmittedMessageSearch {
-      return "\(count) sent messages in \(search.project)"
-    }
-    return "\(count) messages in \(search.project)"
+    return "\(count) matches in \(search.project)"
   }
 }
 
@@ -1296,7 +1259,7 @@ struct SessionsTableView: View {
   }
 
   var body: some View {
-    GroupBox("Sessions") {
+    GroupBox("Daily Sessions") {
       VStack(alignment: .leading, spacing: 10) {
         HStack {
           Image(systemName: "line.3.horizontal.decrease.circle")
@@ -1332,11 +1295,6 @@ struct SessionsTableView: View {
                 Text(session.userMessages.formatted())
               }
               .width(92)
-
-              TableColumn("Automations") { session in
-                Text(session.automationMessages.formatted())
-              }
-              .width(112)
 
               TableColumn("Project") { session in
                 Text(session.project)

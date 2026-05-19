@@ -50,10 +50,6 @@ struct CodexLogViewerApp: App {
         }
         .keyboardShortcut(.return, modifiers: .command)
 
-        Button("Messages I Sent") {
-          model.showSentMessagesForCurrentProject()
-        }
-
         Divider()
 
         Button(model.sourceMenuLabel) {}
@@ -156,6 +152,7 @@ enum AppSmokeRunner {
       let detail = try await api.sessionDetail(
         sessionID: firstSession.sessionId,
         filePath: firstSession.filePath,
+        dateKey: firstSession.dateKey,
         project: AppConstants.allProjectsName,
         filters: filters
       )
