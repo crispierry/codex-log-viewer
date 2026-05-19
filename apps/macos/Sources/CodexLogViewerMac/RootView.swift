@@ -384,6 +384,8 @@ struct SessionBrowserColumn: View {
                 isSelected: model.selectedSessionID == session.id
               )
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
             .buttonStyle(.plain)
             .listRowInsets(EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8))
           }
@@ -434,6 +436,7 @@ struct SessionBrowserRow: View {
       isSelected ? Color.accentColor.opacity(0.16) : Color.clear,
       in: RoundedRectangle(cornerRadius: 8)
     )
+    .contentShape(Rectangle())
   }
 }
 
@@ -480,6 +483,8 @@ struct SentMessagesBrowserColumn: View {
               isSelected: model.selectedUserMessageIndex == item.offset
             )
           }
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .contentShape(Rectangle())
           .buttonStyle(.plain)
           .listRowInsets(EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8))
         }
@@ -510,6 +515,7 @@ struct SentMessageBrowserRow: View {
       isSelected ? Color.accentColor.opacity(0.16) : Color.primary.opacity(0.04),
       in: RoundedRectangle(cornerRadius: 8)
     )
+    .contentShape(Rectangle())
   }
 }
 
