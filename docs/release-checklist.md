@@ -20,12 +20,14 @@ npm audit --audit-level=moderate
 npm run benchmark:search
 npm run check:reference -- --reference fixtures/codex/sample-reference-summary.json --path fixtures/codex/sample-session.jsonl --project sample-app
 npm run release:mac
+(cd dist/macos && shasum -a 256 -c Codex-Log-Viewer-v0.1.0-macOS.zip.sha256)
+npm run release:notes -- --tag v0.1.0 --output dist/macos/release-notes.md
 git diff --check
 ```
 
 On macOS, `npm run release:mac` builds `Codex Log Viewer.app`, launches the packaged smoke workflow twice, verifies Finder-style and relocated `.app` launches, verifies missing-engine failure diagnostics, checks that the local engine exits, and runs a native UI smoke check against sanitized fixtures.
 
-The tag-based GitHub Release workflow repeats the required source checks, audit, benchmark, sanitized reference parity harness, package build, packaged app smoke, and native UI smoke before creating a release.
+The tag-based GitHub Release workflow repeats the required source checks, audit, benchmark, sanitized reference parity harness, package build, packaged app smoke, native UI smoke, checksum verification, and release-note rendering before creating a release.
 
 ## Private Reference Parity
 
@@ -57,6 +59,7 @@ When those variables are set, the packaging script signs with hardened runtime, 
 
 - Confirm `dist/macos/Codex-Log-Viewer-vX.Y.Z-macOS.zip` exists.
 - Confirm the matching `.sha256` file exists.
+- Confirm the checksum file contains the zip basename, not a build-machine absolute path.
 - Unzip the artifact and launch the app from Finder.
 - Confirm the app opens without `CODEX_LOG_VIEWER_REPO`.
 - Confirm the app can scan `fixtures/codex/sample-session.jsonl`.

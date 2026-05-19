@@ -63,7 +63,7 @@ This audit reconciles the original work plan with the current implementation. Th
 | Privacy-first exports | Complete for v0.1 aggregate exports. Raw/detail views remain explicitly private. | `packages/analytics/src/export.ts`, analytics tests, `docs/privacy-and-redaction.md`, `docs/usage.md`. |
 | Search and session workflows | Complete for v0.1. Saved searches remain a later enhancement. | Search filters, selected-session scoping, result-to-session context, matching-message highlight, repeated-prompt grouping, and copy actions in analytics and native app code. |
 | UX, accessibility, and recovery | Complete for first public source release. | Empty states, retry action, keyboard shortcuts, and stable accessibility identifiers in the native app; release-critical UI smoke in CI. |
-| Release operations | Complete for repeatable source/tag releases. Official notarized macOS distribution still requires credentials. | `CHANGELOG.md`, `docs/release-checklist.md`, `docs/release-notes-template.md`, `.github/workflows/release.yml`, tag/version guard, checksum guidance. |
+| Release operations | Complete for repeatable source/tag releases. Official notarized macOS distribution still requires credentials. | `CHANGELOG.md`, `docs/release-checklist.md`, `docs/release-notes-template.md`, `.github/workflows/release.yml`, tag/version guard, basename checksum output, rendered release notes, checksum guidance. |
 
 The remaining gates are external to this branch: human PR review, maintainer-local private parity, Developer ID/notary credentials, then merge/tag/release.
 

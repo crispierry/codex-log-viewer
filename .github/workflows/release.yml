@@ -30,6 +30,8 @@ jobs:
       - run: npm run package:mac
       - run: npm run smoke:mac-package
       - run: npm run smoke:mac-ui
+      - run: cd dist/macos && shasum -a 256 -c Codex-Log-Viewer-*-macOS.zip.sha256
+      - run: node scripts/render-release-notes.mjs --tag "$GITHUB_REF_NAME" --output dist/macos/release-notes.md
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -37,4 +39,5 @@ jobs:
           gh release create "$GITHUB_REF_NAME" \
             dist/macos/Codex-Log-Viewer-*-macOS.zip \
             dist/macos/Codex-Log-Viewer-*-macOS.zip.sha256 \
-            --generate-notes
+            --title "Codex Log Viewer $GITHUB_REF_NAME" \
+            --notes-file dist/macos/release-notes.md

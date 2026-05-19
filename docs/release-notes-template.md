@@ -1,6 +1,6 @@
 # Release Notes Template
 
-Use this template when drafting the GitHub Release body for `vX.Y.Z`.
+Use this template when drafting the GitHub Release body for `vX.Y.Z`. The tag-based release workflow renders this file with `scripts/render-release-notes.mjs`.
 
 ## Codex Log Viewer vX.Y.Z
 
@@ -37,6 +37,7 @@ Codex Log Viewer is a local-first native macOS app for inspecting OpenAI Codex s
 - `npm run benchmark:search`
 - `npm run check:reference -- --reference fixtures/codex/sample-reference-summary.json --path fixtures/codex/sample-session.jsonl --project sample-app`
 - `npm run release:mac`
+- `shasum -a 256 -c Codex-Log-Viewer-vX.Y.Z-macOS.zip.sha256`
 - maintainer-local private reference parity check, if this is an official public release
 
 ## Downloads

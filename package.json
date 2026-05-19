@@ -34,6 +34,7 @@
     "smoke:mac-package": "node scripts/smoke-packaged-app.mjs",
     "smoke:mac-ui": "node scripts/smoke-native-ui.mjs",
     "release:mac": "npm run package:mac && npm run smoke:mac-package && npm run smoke:mac-ui",
+    "release:notes": "node scripts/render-release-notes.mjs",
     "benchmark:search": "npm run build -w @codex-log-viewer/parser && npm run build -w @codex-log-viewer/analytics && node scripts/benchmark-search.mjs",
     "check:reference": "npm run build -w @codex-log-viewer/parser && npm run build -w @codex-log-viewer/analytics && node scripts/check-reference-report.mjs",
     "app:mac": "npm run build:native-engine && CODEX_LOG_VIEWER_REPO=$PWD swift run --package-path apps/macos CodexLogViewerMac",

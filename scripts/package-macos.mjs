@@ -217,8 +217,8 @@ async function createReleaseArchive() {
   await rm(checksumPath, { force: true });
 
   run("ditto", ["-c", "-k", "--sequesterRsrc", "--keepParent", appDir, archivePath], { quiet: true });
-  const checksum = execFileSync("shasum", ["-a", "256", archivePath], {
-    cwd: repoRoot,
+  const checksum = execFileSync("shasum", ["-a", "256", basename(archivePath)], {
+    cwd: buildDir,
     encoding: "utf8"
   });
   await writeFile(checksumPath, checksum);
