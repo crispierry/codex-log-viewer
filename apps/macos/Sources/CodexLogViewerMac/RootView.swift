@@ -650,88 +650,8 @@ struct DetailPane: View {
 struct SessionDetailInspector: View {
   let detail: SessionDetail
 
-  private var userMessages: [MessageDetail] {
-    detail.messages.filter { $0.role == "user" }
-  }
-
-  private var assistantMessages: [MessageDetail] {
-    detail.messages.filter { $0.role == "assistant" }
-  }
-
-  private var totalTokens: Int {
-    detail.tokenUsage.reduce(0) { $0 + $1.usage.totalTokens }
-  }
-
   var body: some View {
-    ScrollView {
-      VStack(alignment: .leading, spacing: 14) {
-        Label("Session", systemImage: "terminal")
-          .font(.title3)
-          .fontWeight(.semibold)
-        LabeledContent("ID", value: detail.file.sessionId)
-        LabeledContent("Lines", value: detail.file.lineCount.formatted())
-        LabeledContent("Turns", value: detail.turns.count.formatted())
-        LabeledContent("Messages", value: "\(userMessages.count.formatted()) user, \(assistantMessages.count.formatted()) assistant")
-        LabeledContent("Tokens", value: totalTokens.formatted())
-        Text(detail.file.filePath)
-          .font(.caption)
-          .foregroundStyle(.secondary)
-          .textSelection(.enabled)
-
-        Divider()
-        InspectorSectionTitle("Turns")
-        ForEach(Array(detail.turns.prefix(24).enumerated()), id: \.offset) { _, turn in
-          VStack(alignment: .leading, spacing: 3) {
-            Text(turn.model ?? "unknown model")
-              .fontWeight(.medium)
-            Text([turn.effort, formattedDate(turn.timestamp), turn.cwd].compactMap { $0 }.joined(separator: " · "))
-              .font(.caption)
-              .foregroundStyle(.secondary)
-              .lineLimit(2)
-          }
-        }
-
-        Divider()
-        InspectorSectionTitle("Messages")
-        ForEach(Array(detail.messages.prefix(50).enumerated()), id: \.offset) { _, message in
-          VStack(alignment: .leading, spacing: 4) {
-            Text(message.role.capitalized)
-              .font(.caption)
-              .fontWeight(.semibold)
-              .foregroundStyle(.secondary)
-            Text(message.content.isEmpty ? message.sourceEvent : message.content)
-              .textSelection(.enabled)
-          }
-          .padding(.vertical, 4)
-        }
-
-        Divider()
-        DisclosureGroup("Token Events") {
-          VStack(alignment: .leading, spacing: 8) {
-            ForEach(Array(detail.tokenUsage.prefix(24).enumerated()), id: \.offset) { _, event in
-              LabeledContent(formattedDate(event.timestamp), value: event.usage.totalTokens.formatted())
-            }
-          }
-          .padding(.top, 6)
-        }
-
-        DisclosureGroup("Parser Diagnostics") {
-          VStack(alignment: .leading, spacing: 8) {
-            LabeledContent("Tool Events", value: detail.toolEvents.count.formatted())
-            LabeledContent("Unknown Events", value: detail.unknownEvents.count.formatted())
-            LabeledContent("Warnings", value: detail.warnings.count.formatted())
-            ForEach(Array(detail.warnings.prefix(20).enumerated()), id: \.offset) { _, warning in
-              Text("Line \(warning.lineNumber): \(warning.code) - \(warning.message)")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .textSelection(.enabled)
-            }
-          }
-          .padding(.top, 6)
-        }
-      }
-      .frame(maxWidth: .infinity, alignment: .leading)
-    }
+    SessionUserMessagesInspector(detail: detail)
   }
 }
 
@@ -811,24 +731,7 @@ struct SearchResultInspector: View {
           ProgressView("Loading session")
             .padding(.vertical, 16)
         } else if let detail {
-          ForEach(Array(detail.messages.enumerated()), id: \.offset) { index, message in
-            VStack(alignment: .leading, spacing: 4) {
-              Text(message.role.capitalized)
-                .font(.caption)
-                .fontWeight(.semibold)
-                .foregroundStyle(.secondary)
-              Text(message.content.isEmpty ? message.sourceEvent : message.content)
-                .textSelection(.enabled)
-            }
-            .padding(8)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-              index == matchingMessageIndex
-                ? Color.accentColor.opacity(0.16)
-                : Color.clear,
-              in: RoundedRectangle(cornerRadius: 6)
-            )
-          }
+          SessionUserMessagesInspector(detail: detail, highlightedMessageIndex: matchingMessageIndex)
         } else {
           Text("Session context is not available.")
             .foregroundStyle(.secondary)
@@ -836,6 +739,158 @@ struct SearchResultInspector: View {
       }
       .frame(maxWidth: .infinity, alignment: .leading)
     }
+  }
+}
+
+struct SessionUserMessagesInspector: View {
+  let detail: SessionDetail
+  var highlightedMessageIndex: Int?
+  @State private var selectedUserMessageIndex: Int?
+
+  private var sessionIdentity: String {
+    "\(detail.file.filePath)#\(detail.file.sessionId)"
+  }
+
+  private var userMessages: [(offset: Int, element: MessageDetail)] {
+    Array(detail.messages.enumerated())
+      .filter { $0.element.sourceEvent == "event_msg.user_message" }
+  }
+
+  private var selectedResponseMessages: [MessageDetail] {
+    guard let selectedUserMessageIndex else { return [] }
+    return responseMessages(after: selectedUserMessageIndex)
+  }
+
+  var body: some View {
+    ScrollView {
+      VStack(alignment: .leading, spacing: 14) {
+        Label("User Messages", systemImage: "person.text.rectangle")
+          .font(.title3)
+          .fontWeight(.semibold)
+        Text("\(userMessages.count.formatted()) messages in this session")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+
+        if userMessages.isEmpty {
+          ContentUnavailableView(
+            "No User Messages",
+            systemImage: "text.bubble",
+            description: Text("This session has no submitted user messages.")
+          )
+          .frame(maxWidth: .infinity, minHeight: 220)
+        } else {
+          VStack(alignment: .leading, spacing: 8) {
+            ForEach(userMessages, id: \.offset) { item in
+              Button {
+                selectedUserMessageIndex = item.offset
+              } label: {
+                userMessageRow(message: item.element, isSelected: selectedUserMessageIndex == item.offset)
+              }
+              .buttonStyle(.plain)
+              .accessibilityIdentifier("session-user-message-row")
+            }
+          }
+        }
+
+        if selectedUserMessageIndex != nil {
+          Divider()
+          InspectorSectionTitle("Codex Response")
+
+          if selectedResponseMessages.isEmpty {
+            Text("No Codex response was found after this message.")
+              .foregroundStyle(.secondary)
+          } else {
+            VStack(alignment: .leading, spacing: 10) {
+              ForEach(Array(selectedResponseMessages.enumerated()), id: \.offset) { _, message in
+                responseCard(message)
+              }
+            }
+          }
+        } else if !userMessages.isEmpty {
+          Divider()
+          Text("Select a user message to show the Codex response.")
+            .font(.callout)
+            .foregroundStyle(.secondary)
+        }
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
+    }
+    .onChange(of: sessionIdentity) { _, _ in
+      selectedUserMessageIndex = nil
+    }
+  }
+
+  private func userMessageRow(message: MessageDetail, isSelected: Bool) -> some View {
+    VStack(alignment: .leading, spacing: 6) {
+      Text(formattedDate(message.timestamp))
+        .font(.caption.monospacedDigit())
+        .foregroundStyle(.secondary)
+      Text(displayText(message))
+        .font(.body)
+        .lineLimit(4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+    .padding(10)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(
+      rowBackground(isSelected: isSelected),
+      in: RoundedRectangle(cornerRadius: 8)
+    )
+    .overlay(
+      RoundedRectangle(cornerRadius: 8)
+        .stroke(
+          isSelected || highlightedMessageIndex == messageIndex(message)
+            ? Color.accentColor.opacity(0.45)
+            : Color.clear,
+          lineWidth: 1
+        )
+    )
+  }
+
+  private func responseCard(_ message: MessageDetail) -> some View {
+    VStack(alignment: .leading, spacing: 6) {
+      Text(formattedDate(message.timestamp))
+        .font(.caption.monospacedDigit())
+        .foregroundStyle(.secondary)
+      Text(displayText(message))
+        .textSelection(.enabled)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+    .padding(10)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 8))
+  }
+
+  private func rowBackground(isSelected: Bool) -> Color {
+    isSelected ? Color.accentColor.opacity(0.16) : Color.primary.opacity(0.05)
+  }
+
+  private func responseMessages(after messageIndex: Int) -> [MessageDetail] {
+    let followingMessages = detail.messages.dropFirst(messageIndex + 1)
+    let sameTurnMessages = followingMessages.prefix { message in
+      message.sourceEvent != "event_msg.user_message"
+    }
+    return uniqueMessages(
+      sameTurnMessages.filter { message in
+        message.role == "assistant" && !displayText(message).isEmpty
+      }
+    )
+  }
+
+  private func uniqueMessages(_ messages: [MessageDetail]) -> [MessageDetail] {
+    var seen = Set<String>()
+    return messages.filter { message in
+      seen.insert(displayText(message)).inserted
+    }
+  }
+
+  private func displayText(_ message: MessageDetail) -> String {
+    let text = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+    return text.isEmpty ? message.sourceEvent : text
+  }
+
+  private func messageIndex(_ message: MessageDetail) -> Int? {
+    detail.messages.firstIndex(of: message)
   }
 }
 
