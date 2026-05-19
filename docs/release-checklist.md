@@ -59,9 +59,14 @@ When those variables are set, the packaging script signs with hardened runtime, 
 The tag-based GitHub Release workflow sets `CODEX_LOG_VIEWER_REQUIRE_NOTARIZATION=1` for packaging. It will not publish an ad-hoc signed artifact as an official release. Configure these repository secrets before pushing `vX.Y.Z`:
 
 - `CODEX_LOG_VIEWER_CODESIGN_IDENTITY`
+- `CODEX_LOG_VIEWER_MACOS_CERTIFICATE_BASE64`
+- `CODEX_LOG_VIEWER_MACOS_CERTIFICATE_PASSWORD`
 - `CODEX_LOG_VIEWER_NOTARY_PROFILE`
+- `CODEX_LOG_VIEWER_APPLE_ID`
+- `CODEX_LOG_VIEWER_APPLE_TEAM_ID`
+- `CODEX_LOG_VIEWER_APP_SPECIFIC_PASSWORD`
 
-The runner must also have the matching Developer ID certificate and notarytool keychain profile installed.
+`CODEX_LOG_VIEWER_MACOS_CERTIFICATE_BASE64` should be a base64-encoded `.p12` export containing the matching Developer ID Application certificate and private key. The workflow imports it into a temporary keychain, creates the notarytool keychain profile from the Apple ID/team/app-specific password secrets, signs, notarizes, staples, verifies the checksum, and only then creates the GitHub Release.
 
 ## Artifact Review
 

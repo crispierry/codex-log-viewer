@@ -13,6 +13,7 @@ const version = readPackageVersion();
 const configuration = process.env.CONFIGURATION ?? "release";
 const codeSignIdentity = process.env.CODEX_LOG_VIEWER_CODESIGN_IDENTITY?.trim() || "-";
 const notaryProfile = process.env.CODEX_LOG_VIEWER_NOTARY_PROFILE?.trim();
+const notaryKeychain = process.env.CODEX_LOG_VIEWER_NOTARY_KEYCHAIN?.trim();
 const requireNotarization = process.env.CODEX_LOG_VIEWER_REQUIRE_NOTARIZATION === "1";
 const buildDir = resolve(repoRoot, "dist/macos");
 const appDir = join(buildDir, `${appName}.app`);
@@ -223,7 +224,11 @@ async function notarizeBundle() {
   const notaryArchivePath = join(buildDir, "Codex-Log-Viewer-notary-submit.zip");
   await rm(notaryArchivePath, { force: true });
   run("ditto", ["-c", "-k", "--sequesterRsrc", "--keepParent", appDir, notaryArchivePath], { quiet: true });
-  run("xcrun", ["notarytool", "submit", notaryArchivePath, "--keychain-profile", notaryProfile, "--wait"]);
+  const submitArgs = ["notarytool", "submit", notaryArchivePath, "--keychain-profile", notaryProfile, "--wait"];
+  if (notaryKeychain) {
+    submitArgs.push("--keychain", notaryKeychain);
+  }
+  run("xcrun", submitArgs);
   run("xcrun", ["stapler", "staple", appDir]);
   await rm(notaryArchivePath, { force: true });
 }

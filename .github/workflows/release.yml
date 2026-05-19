@@ -27,6 +27,44 @@ jobs:
       - run: npm audit --audit-level=moderate
       - run: npm run benchmark:search
       - run: npm run check:reference -- --reference fixtures/codex/sample-reference-summary.json --path fixtures/codex/sample-session.jsonl --project sample-app
+      - name: Install Apple signing assets
+        env:
+          CODEX_LOG_VIEWER_CODESIGN_IDENTITY: ${{ secrets.CODEX_LOG_VIEWER_CODESIGN_IDENTITY }}
+          CODEX_LOG_VIEWER_MACOS_CERTIFICATE_BASE64: ${{ secrets.CODEX_LOG_VIEWER_MACOS_CERTIFICATE_BASE64 }}
+          CODEX_LOG_VIEWER_MACOS_CERTIFICATE_PASSWORD: ${{ secrets.CODEX_LOG_VIEWER_MACOS_CERTIFICATE_PASSWORD }}
+          CODEX_LOG_VIEWER_NOTARY_PROFILE: ${{ secrets.CODEX_LOG_VIEWER_NOTARY_PROFILE }}
+          CODEX_LOG_VIEWER_APPLE_ID: ${{ secrets.CODEX_LOG_VIEWER_APPLE_ID }}
+          CODEX_LOG_VIEWER_APPLE_TEAM_ID: ${{ secrets.CODEX_LOG_VIEWER_APPLE_TEAM_ID }}
+          CODEX_LOG_VIEWER_APP_SPECIFIC_PASSWORD: ${{ secrets.CODEX_LOG_VIEWER_APP_SPECIFIC_PASSWORD }}
+        run: |
+          set -euo pipefail
+          : "${CODEX_LOG_VIEWER_CODESIGN_IDENTITY:?Missing CODEX_LOG_VIEWER_CODESIGN_IDENTITY}"
+          : "${CODEX_LOG_VIEWER_MACOS_CERTIFICATE_BASE64:?Missing CODEX_LOG_VIEWER_MACOS_CERTIFICATE_BASE64}"
+          : "${CODEX_LOG_VIEWER_MACOS_CERTIFICATE_PASSWORD:?Missing CODEX_LOG_VIEWER_MACOS_CERTIFICATE_PASSWORD}"
+          : "${CODEX_LOG_VIEWER_NOTARY_PROFILE:?Missing CODEX_LOG_VIEWER_NOTARY_PROFILE}"
+          : "${CODEX_LOG_VIEWER_APPLE_ID:?Missing CODEX_LOG_VIEWER_APPLE_ID}"
+          : "${CODEX_LOG_VIEWER_APPLE_TEAM_ID:?Missing CODEX_LOG_VIEWER_APPLE_TEAM_ID}"
+          : "${CODEX_LOG_VIEWER_APP_SPECIFIC_PASSWORD:?Missing CODEX_LOG_VIEWER_APP_SPECIFIC_PASSWORD}"
+
+          KEYCHAIN_PATH="$RUNNER_TEMP/codex-log-viewer-signing.keychain-db"
+          CERTIFICATE_PATH="$RUNNER_TEMP/codex-log-viewer-certificate.p12"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+
+          echo "$CODEX_LOG_VIEWER_MACOS_CERTIFICATE_BASE64" | base64 --decode > "$CERTIFICATE_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERTIFICATE_PATH" -P "$CODEX_LOG_VIEWER_MACOS_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
+          security default-keychain -s "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          xcrun notarytool store-credentials "$CODEX_LOG_VIEWER_NOTARY_PROFILE" \
+            --apple-id "$CODEX_LOG_VIEWER_APPLE_ID" \
+            --team-id "$CODEX_LOG_VIEWER_APPLE_TEAM_ID" \
+            --password "$CODEX_LOG_VIEWER_APP_SPECIFIC_PASSWORD" \
+            --keychain "$KEYCHAIN_PATH"
+
+          echo "CODEX_LOG_VIEWER_NOTARY_KEYCHAIN=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
       - run: npm run package:mac
         env:
           CODEX_LOG_VIEWER_REQUIRE_NOTARIZATION: "1"
