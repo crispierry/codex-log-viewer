@@ -92,7 +92,15 @@ test("message search can limit browse mode to submitted user messages through th
         type: "event_msg",
         payload: {
           type: "user_message",
-          message: "Typed prompt"
+          message: [
+            "",
+            "# In app browser:",
+            "- The user has the in-app browser open.",
+            "- Current URL: http://127.0.0.1:5173/projects/sample-app",
+            "",
+            "## My request for Codex:",
+            "Typed prompt"
+          ].join("\n")
         }
       }),
       JSON.stringify({
@@ -130,6 +138,7 @@ test("message search can limit browse mode to submitted user messages through th
     assert.equal(submittedMessagesBody.search.totalMatches, 1);
     assert.equal(submittedMessagesBody.search.results[0]?.sourceEvent, "event_msg.user_message");
     assert.equal(submittedMessagesBody.search.results[0]?.snippet, "Typed prompt");
+    assert.equal(submittedMessagesBody.search.results[0]?.snippet.includes("# In app browser:"), false);
   } finally {
     await server.close();
     await rm(tempDir, { recursive: true, force: true });

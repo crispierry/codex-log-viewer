@@ -48,6 +48,8 @@ const KNOWN_PAYLOAD_TYPES = new Set([
   "user_message"
 ]);
 
+const USER_REQUEST_MARKER = "## My request for Codex:";
+
 export async function parseCodexCorpus(options: ParseOptions = {}): Promise<ParsedCodexCorpus> {
   const files = await discoverCodexLogFiles(options.paths);
   const parsedFiles = await Promise.all(files.map((file) => parseCodexLogFile(file)));
@@ -245,7 +247,7 @@ function classifyEvent(context: ClassifyContext): void {
       timestamp,
       role: "user",
       sourceEvent: "event_msg.user_message",
-      content: stringValue(payload.message) ?? "",
+      content: submittedUserMessageContent(payload.message),
       imagesCount: arrayValue(payload.images).length,
       localImagesCount: arrayValue(payload.local_images).length
     });
@@ -406,6 +408,15 @@ function contentToText(value: unknown): string {
     .join("\n");
 }
 
+function submittedUserMessageContent(value: unknown): string {
+  const raw = stringValue(value) ?? "";
+  const markerIndex = raw.indexOf(USER_REQUEST_MARKER);
+  if (markerIndex < 0) {
+    return raw;
+  }
+  return raw.slice(markerIndex + USER_REQUEST_MARKER.length).trim();
+}
+
 function messageRole(value?: string): MessageRecord["role"] {
   if (value === "user" || value === "assistant" || value === "system" || value === "developer") {
     return value;
@@ -432,4 +443,3 @@ function numberValue(value: unknown): number | undefined {
 function arrayValue(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
 }
-

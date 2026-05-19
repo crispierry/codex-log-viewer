@@ -31,7 +31,7 @@ Implemented for v0.1:
 - per-run local API bearer token for data endpoints
 - native source picker, recent source settings, date-filter settings, and local-only settings persistence
 - search result copy actions for session id, project, and sanitized snippets
-- native Messages I Sent action for browsing submitted user prompts by project without internal continuation context
+- native Messages I Sent action for browsing submitted user prompts by project without generated context wrappers
 - repeated-prompt grouping with counts across the current project/source/date filters
 - file-scoped handling for copied or archived logs that reuse a session id, covering summaries, search, and session detail
 - first-pass native empty states, failure retry action, and keyboard shortcuts for refresh, find, search, source picking, and exports
