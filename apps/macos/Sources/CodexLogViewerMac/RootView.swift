@@ -831,8 +831,8 @@ struct SessionsTableView: View {
               }
               .width(min: 150, ideal: 170)
 
-              TableColumn("Messages") { session in
-                Text(session.totalMessages.formatted())
+              TableColumn("Sent") { session in
+                Text(session.userMessages.formatted())
               }
               .width(92)
 
