@@ -1,5 +1,5 @@
 import { basename, normalize } from "node:path";
-import type { ParsedCodexCorpus, SessionRecord } from "@codex-log-viewer/parser";
+import type { ParsedCodexCorpus, ParsedCodexFile, SessionRecord } from "@codex-log-viewer/parser";
 import type { ProjectAlias, ProjectContext, ProjectListItem } from "./types.js";
 
 const WORKTREE_PATTERN = /\/\.codex\/worktrees\/[^/]+\/([^/]+)$/;
@@ -80,13 +80,23 @@ export function listProjects(corpus: ParsedCodexCorpus, aliases: ProjectAlias[] 
       sessions: 0,
       turns: 0,
       messages: 0,
-      totalTokens: 0
+      totalTokens: 0,
+      firstSeen: undefined,
+      lastSeen: undefined
     };
 
     existing.sessions += dailySessionCount(file);
     existing.turns += file.turns.length;
     existing.messages += file.messages.filter((message) => message.sourceEvent === "event_msg.user_message").length;
     existing.totalTokens += file.tokenUsage.reduce((sum, token) => sum + token.usage.totalTokens, 0);
+    for (const timestamp of projectActivityTimestamps(file)) {
+      if (!existing.firstSeen || timestamp < existing.firstSeen) {
+        existing.firstSeen = timestamp;
+      }
+      if (!existing.lastSeen || timestamp > existing.lastSeen) {
+        existing.lastSeen = timestamp;
+      }
+    }
     if (context.cwd && !existing.cwdSamples.includes(context.cwd) && existing.cwdSamples.length < 5) {
       existing.cwdSamples.push(context.cwd);
     }
@@ -94,6 +104,15 @@ export function listProjects(corpus: ParsedCodexCorpus, aliases: ProjectAlias[] 
   }
 
   return [...projects.values()].sort((a, b) => b.totalTokens - a.totalTokens || a.project.localeCompare(b.project));
+}
+
+function projectActivityTimestamps(file: ParsedCodexFile): string[] {
+  return [
+    ...file.sessions.map((session) => session.timestamp),
+    ...file.messages.map((message) => message.timestamp),
+    ...file.turns.map((turn) => turn.timestamp),
+    ...file.tokenUsage.map((token) => token.timestamp)
+  ].filter((timestamp): timestamp is string => typeof timestamp === "string" && timestamp.length > 0);
 }
 
 function sameSessionFile(record: SessionLocator, locator: SessionLocator): boolean {

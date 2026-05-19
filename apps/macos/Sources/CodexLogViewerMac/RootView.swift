@@ -220,22 +220,26 @@ struct SidebarView: View {
           sessions: model.projects.reduce(0) { $0 + $1.sessions },
           userMessages: model.projects.reduce(0) { $0 + $1.messages },
           tokenCount: model.projects.reduce(0) { $0 + $1.totalTokens },
+          lastSeen: model.projects.compactMap(\.lastSeen).max(),
           systemImage: "square.grid.2x2"
         )
         .tag(AppConstants.allProjectsName)
       }
 
-      Section("Projects") {
-        ForEach(model.projects) { project in
+      Section {
+        ForEach(model.sortedProjects) { project in
           ProjectListRow(
             title: project.project,
             sessions: project.sessions,
             userMessages: project.messages,
             tokenCount: project.totalTokens,
+            lastSeen: project.lastSeen,
             systemImage: "folder"
           )
           .tag(project.project)
         }
+      } header: {
+        ProjectSectionHeader()
       }
     }
     .listStyle(.sidebar)
@@ -251,11 +255,43 @@ struct SidebarView: View {
   }
 }
 
+struct ProjectSectionHeader: View {
+  @EnvironmentObject private var model: AppModel
+
+  var body: some View {
+    HStack(spacing: 6) {
+      Text("Projects")
+      Spacer()
+      Menu {
+        Picker(
+          "Sort Projects",
+          selection: Binding(
+            get: { model.projectSortOption },
+            set: { model.setProjectSortOption($0) }
+          )
+        ) {
+          ForEach(ProjectSortOption.allCases) { option in
+            Text(option.label).tag(option)
+          }
+        }
+      } label: {
+        Label("Sort: \(model.projectSortOption.shortLabel)", systemImage: "arrow.up.arrow.down")
+      }
+      .font(.caption)
+      .menuStyle(.borderlessButton)
+      .fixedSize()
+      .help("Sort projects by \(model.projectSortOption.label)")
+      .accessibilityIdentifier("project-sort-menu")
+    }
+  }
+}
+
 struct ProjectListRow: View {
   let title: String
   let sessions: Int
   let userMessages: Int
   let tokenCount: Int
+  let lastSeen: String?
   let systemImage: String
 
   var body: some View {
@@ -277,10 +313,18 @@ struct ProjectListRow: View {
     } icon: {
       Image(systemName: systemImage)
     }
+    .help(helpText)
   }
 
   private var metadataText: String {
     "\(countLabel(sessions, singular: "session", plural: "sessions")) - \(tokenCount.formatted(.number.notation(.compactName))) tokens"
+  }
+
+  private var helpText: String {
+    if let lastSeen, !lastSeen.isEmpty {
+      return "\(title), last session \(formattedDate(lastSeen))"
+    }
+    return title
   }
 
   private func countLabel(_ count: Int, singular: String, plural: String) -> String {
@@ -1144,7 +1188,12 @@ struct MessageSearchView: View {
               .width(min: 118, ideal: 132, max: 146)
 
               TableColumn("Message") { result in
-                HighlightedSearchSnippetText(text: result.snippet, query: model.messageQuery)
+                HighlightedSearchText(
+                  text: result.snippet,
+                  query: model.messageQuery,
+                  lineLimit: 2,
+                  collapsesWhitespace: true
+                )
               }
 
               TableColumn("Project") { result in
@@ -1199,7 +1248,12 @@ struct SearchResultDetailView: View {
               .font(.headline)
 
             ScrollView {
-              Text(result.content)
+              HighlightedSearchText(
+                text: result.content,
+                query: model.messageQuery,
+                lineLimit: nil,
+                collapsesWhitespace: false
+              )
                 .font(.body)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -1309,33 +1363,106 @@ struct SearchResultDetailView: View {
   }
 }
 
-struct HighlightedSearchSnippetText: View {
+struct HighlightedSearchText: View {
   let text: String
   let query: String
+  let lineLimit: Int?
+  let collapsesWhitespace: Bool
 
   var body: some View {
-    if let parts = highlightedParts {
-      (Text(parts.prefix) + Text(parts.match).bold().foregroundColor(.yellow) + Text(parts.suffix))
-        .lineLimit(2)
+    highlightedText
+      .lineLimit(lineLimit)
+  }
+
+  private var highlightedText: Text {
+    guard let parts = highlightedParts else {
+      return Text(displayText)
+    }
+    return Text(parts.prefix) + Text(parts.match).bold().foregroundColor(.yellow) + Text(parts.suffix)
+  }
+
+  private var displayText: String {
+    if collapsesWhitespace {
+      return Self.collapseWhitespace(text)
     } else {
-      Text(text)
-        .lineLimit(2)
+      return text
     }
   }
 
   private var highlightedParts: (prefix: String, match: String, suffix: String)? {
-    let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmedQuery.isEmpty,
-      let range = text.range(of: trimmedQuery, options: [.caseInsensitive, .diacriticInsensitive])
-    else {
+    let trimmedQuery = Self.collapseWhitespace(query).trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmedQuery.isEmpty else {
+      return nil
+    }
+    let range = collapsesWhitespace
+      ? displayText.range(of: trimmedQuery, options: [.caseInsensitive, .diacriticInsensitive])
+      : Self.whitespaceNormalizedRange(in: displayText, query: trimmedQuery)
+    guard let range else { return nil }
+
+    return (
+      String(displayText[..<range.lowerBound]),
+      String(displayText[range]),
+      String(displayText[range.upperBound...])
+    )
+  }
+
+  private static func collapseWhitespace(_ value: String) -> String {
+    value
+      .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+
+  private static func whitespaceNormalizedRange(in source: String, query: String) -> Range<String.Index>? {
+    let normalizedQuery = collapseWhitespace(query).lowercased()
+    guard !normalizedQuery.isEmpty else { return nil }
+
+    var normalized = ""
+    var sourceIndexes: [String.Index] = []
+    var previousWasWhitespace = false
+    var index = source.startIndex
+
+    while index < source.endIndex {
+      let character = source[index]
+      if isWhitespace(character) {
+        if !normalized.isEmpty && !previousWasWhitespace {
+          normalized.append(" ")
+          sourceIndexes.append(index)
+        }
+        previousWasWhitespace = true
+      } else {
+        let folded = String(character)
+          .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
+          .lowercased()
+        normalized.append(folded)
+        for _ in folded {
+          sourceIndexes.append(index)
+        }
+        previousWasWhitespace = false
+      }
+      index = source.index(after: index)
+    }
+
+    while normalized.last == " " {
+      normalized.removeLast()
+      sourceIndexes.removeLast()
+    }
+
+    guard let normalizedRange = normalized.range(of: normalizedQuery) else {
+      return nil
+    }
+    let lowerOffset = normalized.distance(from: normalized.startIndex, to: normalizedRange.lowerBound)
+    let upperOffset = normalized.distance(from: normalized.startIndex, to: normalizedRange.upperBound)
+    guard lowerOffset < sourceIndexes.count, upperOffset > lowerOffset else {
       return nil
     }
 
-    return (
-      String(text[..<range.lowerBound]),
-      String(text[range]),
-      String(text[range.upperBound...])
-    )
+    let sourceLowerBound = sourceIndexes[lowerOffset]
+    let sourceLastMatchIndex = sourceIndexes[min(upperOffset - 1, sourceIndexes.count - 1)]
+    return sourceLowerBound..<source.index(after: sourceLastMatchIndex)
+  }
+
+  private static func isWhitespace(_ character: Character) -> Bool {
+    character.unicodeScalars.allSatisfy { CharacterSet.whitespacesAndNewlines.contains($0) }
   }
 }
 

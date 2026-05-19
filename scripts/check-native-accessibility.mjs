@@ -19,6 +19,7 @@ const requiredIdentifiers = [
   "source-default-menu-item",
   "recent-sources-menu",
   "project-sidebar",
+  "project-sort-menu",
   "date-range-button",
   "date-range-mode-picker",
   "date-anchor-picker",

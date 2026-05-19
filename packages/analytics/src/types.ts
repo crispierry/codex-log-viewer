@@ -147,6 +147,8 @@ export interface ProjectListItem {
   turns: number;
   messages: number;
   totalTokens: number;
+  firstSeen?: string;
+  lastSeen?: string;
 }
 
 export interface LoadedCorpus {

@@ -35,6 +35,7 @@ test("local API requires bearer token when auth is enabled", async () => {
     assert.equal(authorized.status, 200);
     const body = await authorized.json();
     assert.equal(body.projects[0]?.project, "sample-app");
+    assert.equal(body.projects[0]?.lastSeen, "2026-04-27T19:01:12.000Z");
   } finally {
     await server.close();
   }

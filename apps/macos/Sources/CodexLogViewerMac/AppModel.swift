@@ -51,6 +51,7 @@ final class AppModel: ObservableObject {
   @Published var untilDate = Date()
   @Published var dateRangeMode: DateRangeMode = .all
   @Published var dateAnchorDate = Date()
+  @Published var projectSortOption: ProjectSortOption = .mostUserMessages
   @Published var messageSearchFocusRequest = 0
   @Published var cacheMetadata: CacheMetadata?
 
@@ -90,6 +91,28 @@ final class AppModel: ObservableObject {
       .joined(separator: " ")
       .lowercased()
       .contains(query)
+    }
+  }
+
+  var sortedProjects: [ProjectListItem] {
+    projects.sorted { lhs, rhs in
+      switch projectSortOption {
+      case .mostUserMessages:
+        if lhs.messages != rhs.messages {
+          return lhs.messages > rhs.messages
+        }
+      case .fewestUserMessages:
+        if lhs.messages != rhs.messages {
+          return lhs.messages < rhs.messages
+        }
+      case .latestSession:
+        if lhs.lastSeen != rhs.lastSeen {
+          return (lhs.lastSeen ?? "") > (rhs.lastSeen ?? "")
+        }
+      case .projectName:
+        return lhs.project.localizedCaseInsensitiveCompare(rhs.project) == .orderedAscending
+      }
+      return lhs.project.localizedCaseInsensitiveCompare(rhs.project) == .orderedAscending
     }
   }
 
@@ -328,6 +351,12 @@ final class AppModel: ObservableObject {
     guard dateRangeMode != mode else { return }
     dateRangeMode = mode
     applyDateRangeMode()
+  }
+
+  func setProjectSortOption(_ option: ProjectSortOption) {
+    guard projectSortOption != option else { return }
+    projectSortOption = option
+    saveSettings()
   }
 
   func setDateAnchorDate(_ date: Date) {
@@ -775,6 +804,10 @@ final class AppModel: ObservableObject {
       dateRangeMode = .custom
       applyDateRangeMode(save: false, reload: false)
     }
+    if let savedProjectSort = UserDefaults.standard.string(forKey: DefaultsKeys.projectSortOption),
+      let sortOption = ProjectSortOption(rawValue: savedProjectSort) {
+      projectSortOption = sortOption
+    }
   }
 
   private func saveSettings() {
@@ -789,6 +822,7 @@ final class AppModel: ObservableObject {
     UserDefaults.standard.set(Self.dateFormatter.string(from: untilDate), forKey: DefaultsKeys.untilDate)
     UserDefaults.standard.set(dateRangeMode.rawValue, forKey: DefaultsKeys.dateRangeMode)
     UserDefaults.standard.set(Self.dateFormatter.string(from: dateAnchorDate), forKey: DefaultsKeys.dateAnchorDate)
+    UserDefaults.standard.set(projectSortOption.rawValue, forKey: DefaultsKeys.projectSortOption)
   }
 
   private func applyDateRangeMode(save: Bool = true, reload: Bool = true) {
@@ -1216,4 +1250,5 @@ private enum DefaultsKeys {
   static let untilDate = "untilDate"
   static let dateRangeMode = "dateRangeMode"
   static let dateAnchorDate = "dateAnchorDate"
+  static let projectSortOption = "projectSortOption"
 }

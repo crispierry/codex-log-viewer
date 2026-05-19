@@ -24,6 +24,82 @@ test("summarizeParsedCorpus aggregates messages, unique messages, tokens, models
   assert.equal(summary.messagesByDay[0]?.count, 1);
   assert.equal(summary.activity.firstSeen, "2026-04-27T19:01:00.745Z");
   assert.equal(summary.activity.lastSeen, "2026-04-27T19:01:12.000Z");
+
+  const projects = projectsFromCorpus(corpus);
+  assert.equal(projects[0]?.firstSeen, "2026-04-27T19:01:00.745Z");
+  assert.equal(projects[0]?.lastSeen, "2026-04-27T19:01:12.000Z");
+});
+
+test("projectsFromCorpus uses token and turn timestamps for activity metadata", () => {
+  const file = {
+    filePath: "activity.jsonl",
+    sessionId: "activity-session",
+    lineCount: 4,
+    sessions: [
+      {
+        filePath: "activity.jsonl",
+        sessionId: "activity-session",
+        cwd: "/tmp/activity-app",
+        timestamp: "2026-01-01T00:00:00.000Z"
+      }
+    ],
+    turns: [
+      {
+        filePath: "activity.jsonl",
+        sessionId: "activity-session",
+        turnId: "activity-turn",
+        timestamp: "2026-01-01T00:02:00.000Z"
+      }
+    ],
+    messages: [
+      {
+        filePath: "activity.jsonl",
+        sessionId: "activity-session",
+        timestamp: "2026-01-01T00:01:00.000Z",
+        role: "user",
+        sourceEvent: "event_msg.user_message",
+        content: "Sort project activity",
+        imagesCount: 0,
+        localImagesCount: 0
+      }
+    ],
+    tokenUsage: [
+      {
+        filePath: "activity.jsonl",
+        sessionId: "activity-session",
+        turnId: "activity-turn",
+        timestamp: "2026-01-01T00:03:00.000Z",
+        usage: {
+          inputTokens: 10,
+          cachedInputTokens: 0,
+          freshInputTokens: 10,
+          outputTokens: 5,
+          reasoningOutputTokens: 0,
+          totalTokens: 15
+        }
+      }
+    ],
+    taskTimings: [],
+    toolEvents: [],
+    unknownEvents: [],
+    warnings: []
+  };
+  const corpus = {
+    files: [file],
+    sessions: file.sessions,
+    turns: file.turns,
+    messages: file.messages,
+    tokenUsage: file.tokenUsage,
+    taskTimings: [],
+    toolEvents: [],
+    unknownEvents: [],
+    warnings: []
+  };
+
+  const projects = projectsFromCorpus(corpus);
+
+  assert.equal(projects[0]?.firstSeen, "2026-01-01T00:00:00.000Z");
+  assert.equal(projects[0]?.lastSeen, "2026-01-01T00:03:00.000Z");
 });
 
 test("summarizeParsedCorpus groups repeated user prompts without exposing them in redacted exports", () => {

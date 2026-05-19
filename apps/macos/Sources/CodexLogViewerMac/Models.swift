@@ -102,6 +102,41 @@ enum DateRangeMode: String, CaseIterable, Identifiable {
   }
 }
 
+enum ProjectSortOption: String, CaseIterable, Identifiable {
+  case mostUserMessages
+  case fewestUserMessages
+  case latestSession
+  case projectName
+
+  var id: String { rawValue }
+
+  var label: String {
+    switch self {
+    case .mostUserMessages:
+      return "Most User Messages"
+    case .fewestUserMessages:
+      return "Fewest User Messages"
+    case .latestSession:
+      return "Latest Session"
+    case .projectName:
+      return "Project Name"
+    }
+  }
+
+  var shortLabel: String {
+    switch self {
+    case .mostUserMessages:
+      return "Messages"
+    case .fewestUserMessages:
+      return "Fewest"
+    case .latestSession:
+      return "Latest"
+    case .projectName:
+      return "Name"
+    }
+  }
+}
+
 struct LogFilters: Equatable {
   var paths: [String] = []
   var since: String?
@@ -230,6 +265,8 @@ struct ProjectListItem: Decodable, Identifiable, Hashable {
   let turns: Int
   let messages: Int
   let totalTokens: Int
+  let firstSeen: String?
+  let lastSeen: String?
 
   var id: String { project }
 }
