@@ -1,3 +1,4 @@
+import Charts
 import SwiftUI
 
 struct RootView: View {
@@ -229,6 +230,7 @@ struct OverviewView: View {
 
         MetricsGrid(summary: model.summary)
         if let summary = model.summary, summary.totals.sessions > 0 {
+          ChartsSection(summary: summary)
           RepeatedPromptsView(messages: summary.repeatedUserMessages)
         }
         MessageSearchView()
@@ -282,6 +284,234 @@ struct MetricsGrid: View {
       }
     }
   }
+}
+
+struct ChartsSection: View {
+  let summary: ProjectSummary
+
+  var body: some View {
+    GroupBox("Charts") {
+      VStack(alignment: .leading, spacing: 18) {
+        ChartPanel(title: "Messages by Hour") {
+          if hourlyMessagePoints.isEmpty {
+            ChartEmptyState(title: "No Hourly Messages", systemImage: "clock")
+          } else {
+            Chart(hourlyMessagePoints) { point in
+              BarMark(
+                x: .value("Hour", point.hour),
+                y: .value("Messages", point.count)
+              )
+              .foregroundStyle(Color.accentColor.gradient)
+            }
+            .chartXAxis {
+              hourlyAxisMarks()
+            }
+            .chartXScale(domain: 0...23)
+            .chartYAxis {
+              AxisMarks(position: .leading)
+            }
+            .frame(height: 180)
+            .accessibilityIdentifier("messages-by-hour-chart")
+          }
+        }
+
+        ChartPanel(title: "Messages by Day of Week") {
+          if weekdayMessagePoints.isEmpty {
+            ChartEmptyState(title: "No Weekday Messages", systemImage: "calendar")
+          } else {
+            Chart(weekdayMessagePoints) { point in
+              BarMark(
+                x: .value("Day", point.label),
+                y: .value("Messages", point.count)
+              )
+              .foregroundStyle(Color.teal.gradient)
+            }
+            .chartYAxis {
+              AxisMarks(position: .leading)
+            }
+            .frame(height: 180)
+            .accessibilityIdentifier("messages-by-weekday-chart")
+          }
+        }
+
+        ChartPanel(title: "Tokens by Hour") {
+          if hourlyTokenPoints.isEmpty {
+            ChartEmptyState(title: "No Hourly Tokens", systemImage: "chart.bar")
+          } else {
+            Chart(hourlyTokenPoints) { point in
+              BarMark(
+                x: .value("Hour", point.hour),
+                y: .value("Tokens", point.value)
+              )
+              .foregroundStyle(by: .value("Type", point.kind))
+            }
+            .chartForegroundStyleScale([
+              "Input": Color.indigo,
+              "Output": Color.green
+            ])
+            .chartXAxis {
+              hourlyAxisMarks()
+            }
+            .chartXScale(domain: 0...23)
+            .chartYAxis {
+              AxisMarks(position: .leading)
+            }
+            .frame(height: 200)
+            .accessibilityIdentifier("tokens-by-hour-chart")
+          }
+        }
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .padding(.top, 4)
+    }
+    .accessibilityIdentifier("charts-section")
+  }
+
+  private var hourlyMessagePoints: [HourlyCountPoint] {
+    let counts = summary.messagesByHour.reduce(into: Array(repeating: 0, count: 24)) { result, bucket in
+      guard let hour = bucketHour(bucket.key) else { return }
+      result[hour] += bucket.count
+    }
+    guard counts.contains(where: { $0 > 0 }) else { return [] }
+    return counts.enumerated().map { HourlyCountPoint(hour: $0.offset, count: $0.element) }
+  }
+
+  private var weekdayMessagePoints: [WeekdayCountPoint] {
+    let counts = summary.messagesByDay.reduce(into: Array(repeating: 0, count: 7)) { result, bucket in
+      guard let weekday = bucketWeekday(bucket.key) else { return }
+      result[weekday - 1] += bucket.count
+    }
+    guard counts.contains(where: { $0 > 0 }) else { return [] }
+    return weekdayOrder.map { weekday in
+      let count = counts[weekday - 1]
+      return WeekdayCountPoint(weekday: weekday, label: weekdayLabel(weekday), count: count)
+    }
+  }
+
+  private var hourlyTokenPoints: [HourlyTokenPoint] {
+    var inputCounts = Array(repeating: 0, count: 24)
+    var outputCounts = Array(repeating: 0, count: 24)
+    for bucket in summary.messagesByHour {
+      guard let hour = bucketHour(bucket.key) else { continue }
+      inputCounts[hour] += bucket.tokens.inputTokens
+      outputCounts[hour] += bucket.tokens.outputTokens
+    }
+
+    var points: [HourlyTokenPoint] = []
+    for hour in 0..<24 {
+      if inputCounts[hour] > 0 {
+        points.append(HourlyTokenPoint(hour: hour, kind: "Input", value: inputCounts[hour]))
+      }
+      if outputCounts[hour] > 0 {
+        points.append(HourlyTokenPoint(hour: hour, kind: "Output", value: outputCounts[hour]))
+      }
+    }
+    return points
+  }
+}
+
+struct ChartPanel<Content: View>: View {
+  let title: String
+  @ViewBuilder let content: Content
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      Text(title)
+        .font(.headline)
+      content
+    }
+  }
+}
+
+struct ChartEmptyState: View {
+  let title: String
+  let systemImage: String
+
+  var body: some View {
+    ContentUnavailableView(title, systemImage: systemImage)
+      .frame(maxWidth: .infinity, minHeight: 160)
+  }
+}
+
+struct HourlyCountPoint: Identifiable {
+  let hour: Int
+  let count: Int
+
+  var id: Int { hour }
+}
+
+struct WeekdayCountPoint: Identifiable {
+  let weekday: Int
+  let label: String
+  let count: Int
+
+  var id: Int { weekday }
+}
+
+struct HourlyTokenPoint: Identifiable {
+  let hour: Int
+  let kind: String
+  let value: Int
+
+  var id: String { "\(hour)-\(kind)" }
+}
+
+private let weekdayOrder = [1, 2, 3, 4, 5, 6, 7]
+
+private func hourlyAxisMarks() -> some AxisContent {
+  AxisMarks(values: [0, 6, 12, 18, 23]) { value in
+    AxisGridLine()
+    AxisTick()
+    AxisValueLabel {
+      if let hour = value.as(Int.self) {
+        Text(hourLabel(hour))
+      }
+    }
+  }
+}
+
+private func hourLabel(_ hour: Int) -> String {
+  switch hour {
+  case 0:
+    return "12 AM"
+  case 1..<12:
+    return "\(hour) AM"
+  case 12:
+    return "12 PM"
+  default:
+    return "\(hour - 12) PM"
+  }
+}
+
+private func weekdayLabel(_ weekday: Int) -> String {
+  let symbols = Calendar.current.shortWeekdaySymbols
+  guard symbols.indices.contains(weekday - 1) else {
+    return String(weekday)
+  }
+  return symbols[weekday - 1]
+}
+
+private func bucketHour(_ key: String) -> Int? {
+  guard key.count >= 13 else { return nil }
+  let start = key.index(key.startIndex, offsetBy: 11)
+  let end = key.index(start, offsetBy: 2)
+  return Int(key[start..<end])
+}
+
+private func bucketWeekday(_ key: String) -> Int? {
+  guard let date = BucketDateFormatters.day.date(from: key) else {
+    return nil
+  }
+  return Calendar.current.component(.weekday, from: date)
+}
+
+private enum BucketDateFormatters {
+  static let day: DateFormatter = {
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.dateFormat = "yyyy-MM-dd"
+    return formatter
+  }()
 }
 
 struct RepeatedPromptsView: View {

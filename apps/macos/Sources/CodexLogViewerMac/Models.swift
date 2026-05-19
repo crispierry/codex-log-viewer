@@ -72,6 +72,9 @@ struct ProjectSummary: Decodable {
   let generatedAt: String
   let totals: SummaryTotals
   let tokens: TokenUsage
+  let messagesByDay: [DateBucket]
+  let messagesByHour: [DateBucket]
+  let tokensByDay: [DateBucket]
   let models: [ModelBucket]
   let sessions: [SessionSummary]
   let repeatedUserMessages: [RepeatedUserMessage]
@@ -95,6 +98,13 @@ struct TokenUsage: Decodable, Hashable {
   let outputTokens: Int
   let reasoningOutputTokens: Int
   let totalTokens: Int
+}
+
+struct DateBucket: Decodable, Hashable {
+  let key: String
+  let count: Int
+  let uniqueCount: Int
+  let tokens: TokenUsage
 }
 
 struct ModelBucket: Decodable, Hashable {
