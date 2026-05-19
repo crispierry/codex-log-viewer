@@ -36,16 +36,21 @@ See [Fixture Guidelines](docs/fixture-guidelines.md).
 ## Development Setup
 
 ```sh
-npm install
-npm run lint
-npm test
-npm run build
+npm ci
+npm run privacy:scan
+npm run test:all
 ```
 
 On macOS, also verify the native app build when touching `apps/macos` or app-facing APIs:
 
 ```sh
 npm run build:mac
+```
+
+For release-facing app, packaging, or local-engine changes, run the packaged app smoke workflow:
+
+```sh
+npm run release:mac
 ```
 
 Run the macOS app:
