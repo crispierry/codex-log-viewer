@@ -4,7 +4,10 @@ Use this checklist before publishing a public Codex Log Viewer version.
 
 ## Versioning
 
-- Use semantic versions beginning with `0.1.0`.
+- App versions use `major.minor (Build N)` from `app-version.json`.
+- Major and minor versions are intentional release decisions; the macOS build number is incremented by `npm run build:mac`, `npm run app:mac`, and `npm run package:mac`.
+- See [App Versioning](versioning.md) for maintainer details.
+- Use package semantic versions beginning with `0.1.0`.
 - Keep `package.json`, `CHANGELOG.md`, and Git tags aligned.
 - Tag releases as `vX.Y.Z`; the GitHub Release workflow runs from tags that start with `v`.
 - The release workflow fails if the tag does not match `package.json` as `v<version>`.
@@ -22,7 +25,7 @@ npm audit --audit-level=moderate
 npm run benchmark:search
 npm run check:reference -- --reference fixtures/codex/sample-reference-summary.json --path fixtures/codex/sample-session.jsonl --project sample-app
 npm run release:mac
-(cd dist/macos && shasum -a 256 -c Codex-Log-Viewer-v0.1.0-macOS.zip.sha256)
+(cd dist/macos && shasum -a 256 -c Codex-Log-Viewer-v*-macOS.zip.sha256)
 npm run release:notes -- --tag v0.1.0 --output dist/macos/release-notes.md
 git diff --check
 ```
@@ -88,7 +91,7 @@ Paste the copied value into the `CODEX_LOG_VIEWER_MACOS_CERTIFICATE_BASE64` repo
 
 ## Artifact Review
 
-- Confirm `dist/macos/Codex-Log-Viewer-vX.Y.Z-macOS.zip` exists.
+- Confirm `dist/macos/Codex-Log-Viewer-vX.Y-buildN-macOS.zip` exists.
 - Confirm the matching `.sha256` file exists.
 - Confirm the checksum file contains the zip basename, not a build-machine absolute path.
 - Unzip the artifact and launch the app from Finder.
@@ -106,5 +109,5 @@ Start from [Release Notes Template](release-notes-template.md). Release notes sh
 - checksum verification command:
 
 ```sh
-shasum -a 256 -c Codex-Log-Viewer-vX.Y.Z-macOS.zip.sha256
+shasum -a 256 -c Codex-Log-Viewer-vX.Y-buildN-macOS.zip.sha256
 ```

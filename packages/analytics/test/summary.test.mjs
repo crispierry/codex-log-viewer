@@ -701,6 +701,7 @@ test("searchMessages searches messages across all projects and supports project 
   assert.equal(sentMessages.totalMatches, 1);
   assert.equal(sentMessages.results[0]?.role, "user");
   assert.match(sentMessages.results[0]?.snippet, /parser test/);
+  assert.match(sentMessages.results[0]?.content, /parser test/);
 });
 
 test("searchMessages can browse only submitted user messages", () => {
@@ -762,6 +763,7 @@ test("searchMessages can browse only submitted user messages", () => {
   assert.equal(submittedMessages.results[0]?.sourceEvent, "event_msg.user_message");
   assert.equal(submittedMessages.results[0]?.lineNumber, 2);
   assert.equal(submittedMessages.results[0]?.snippet, "Typed prompt");
+  assert.equal(submittedMessages.results[0]?.content, "Typed prompt");
 });
 
 test("searchMessages anchors snippets for whitespace-normalized message matches", () => {
@@ -793,6 +795,7 @@ test("searchMessages anchors snippets for whitespace-normalized message matches"
   assert.equal(result.totalMatches, 1);
   assert.match(result.results[0]?.id ?? "", /session-1/);
   assert.match(result.results[0]?.snippet ?? "", /needle\n\nphrase/);
+  assert.equal((result.results[0]?.snippet ?? "").indexOf("needle") < 50, true);
   assert.equal(result.results[0]?.snippet.startsWith("..."), true);
 });
 

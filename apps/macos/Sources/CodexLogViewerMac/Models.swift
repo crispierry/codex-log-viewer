@@ -27,7 +27,7 @@ enum MessageRoleFilter: String, CaseIterable, Identifiable {
     case .all:
       return "All"
     case .user:
-      return "Sent"
+      return "User Sent"
     case .automation:
       return "Automation"
     case .assistant:
@@ -347,6 +347,7 @@ struct MessageSearchResult: Decodable, Identifiable, Hashable {
   let role: String
   let sourceEvent: String
   let snippet: String
+  let content: String
 }
 
 struct SessionDetail: Decodable {

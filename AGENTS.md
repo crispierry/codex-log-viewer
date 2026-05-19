@@ -20,3 +20,8 @@ Once tooling exists, parser changes should include:
 - aggregation tests for token and message metrics
 
 Documentation-only changes do not need app tests.
+
+## Native App Review Loop
+
+- After any user-visible native macOS app change, rebuild the app and relaunch the current packaged app so the user can immediately review the change.
+- When a change is documentation-only or otherwise cannot affect the running app, say that explicitly instead of relaunching.

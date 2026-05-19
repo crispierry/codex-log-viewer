@@ -8,6 +8,7 @@ const testDir = dirname(fileURLToPath(import.meta.url));
 const fixturePath = resolve(testDir, "../../../fixtures/codex/sample-session.jsonl");
 const eventShapesFixturePath = resolve(testDir, "../../../fixtures/codex/event-shapes.jsonl");
 const visualCommentWrapperFixturePath = resolve(testDir, "../../../fixtures/codex/visual-comment-wrapper.jsonl");
+const visualCommentImageEvidenceFixturePath = resolve(testDir, "../../../fixtures/codex/visual-comment-image-evidence.jsonl");
 const interactionDetailFixturePath = resolve(testDir, "../../../fixtures/codex/interaction-detail.jsonl");
 
 test("parseCodexLogFile normalizes known Codex rollout events and preserves warnings", async () => {
@@ -94,6 +95,15 @@ test("parseCodexLogFile extracts visual review comments instead of generated ima
   assert.equal(userMessage?.content, "Move the fixture button to the right side");
   assert.equal(userMessage?.content.includes("The next image shows"), false);
   assert.equal(parsed.messages.filter((message) => message.sourceEvent === "event_msg.user_message").length, 1);
+});
+
+test("parseCodexLogFile extracts visual comments when image evidence follows the request marker", async () => {
+  const parsed = await parseCodexLogFile(visualCommentImageEvidenceFixturePath);
+  const userMessage = parsed.messages.find((message) => message.sourceEvent === "event_msg.user_message");
+
+  assert.equal(userMessage?.content, "I don't know which design school this fixture went to");
+  assert.equal(userMessage?.content.includes("untrusted page evidence"), false);
+  assert.equal(userMessage?.content.includes("<image>"), false);
 });
 
 test("parseCodexLogFile preserves line order for interaction reconstruction", async () => {

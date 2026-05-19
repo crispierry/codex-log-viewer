@@ -128,6 +128,7 @@ export interface MessageSearchResult {
   role: MessageRole;
   sourceEvent: string;
   snippet: string;
+  content: string;
 }
 
 export interface MessageSearchSummary {

@@ -1071,7 +1071,7 @@ struct MessageSearchView: View {
         .padding(8)
         .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
 
-        HStack {
+        HStack(alignment: .center, spacing: 8) {
           Picker("Role", selection: $model.messageRoleFilter) {
             ForEach(MessageRoleFilter.allCases) { role in
               Text(role.label).tag(role)
@@ -1097,9 +1097,9 @@ struct MessageSearchView: View {
               model.refreshMessageResults()
             }
           }
-        }
 
-        HStack {
+          Spacer(minLength: 8)
+
           if let sessionLabel = model.messageSessionFilterLabel {
             Label("Daily session \(sessionLabel)", systemImage: "scope")
               .font(.caption)
@@ -1120,7 +1120,6 @@ struct MessageSearchView: View {
             }
             .accessibilityIdentifier("message-session-filter-button")
           }
-          Spacer()
         }
 
         if let search = model.searchSummary {
@@ -1139,30 +1138,26 @@ struct MessageSearchView: View {
           } else {
             Table(search.results, selection: $model.selectedSearchResultID) {
               TableColumn("Date/Time") { result in
-                Text(formattedDate(result.timestamp))
+                Text(compactFormattedDate(result.timestamp))
                   .lineLimit(1)
               }
-              .width(min: 150, ideal: 170)
+              .width(min: 118, ideal: 132, max: 146)
 
               TableColumn("Message") { result in
-                Text(result.snippet)
-                  .lineLimit(2)
+                HighlightedSearchSnippetText(text: result.snippet, query: model.messageQuery)
               }
 
               TableColumn("Project") { result in
                 Text(result.project)
+                  .lineLimit(1)
               }
-              .width(min: 120, ideal: 170)
-
-              TableColumn("Model") { result in
-                Text(result.model ?? "unknown")
-              }
-              .width(min: 100, ideal: 130)
+              .width(min: 118, ideal: 148, max: 178)
 
               TableColumn("Role") { result in
                 Text(result.role.capitalized)
+                  .lineLimit(1)
               }
-              .width(72)
+              .width(64)
             }
             .frame(minHeight: 220)
             .accessibilityIdentifier("message-search-results-table")
@@ -1203,27 +1198,32 @@ struct SearchResultDetailView: View {
             Text("Selected Result")
               .font(.headline)
 
-            Text(result.snippet)
-              .font(.body)
-              .lineLimit(5)
-              .textSelection(.enabled)
-              .frame(maxWidth: .infinity, alignment: .leading)
+            ScrollView {
+              Text(result.content)
+                .font(.body)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(8)
+            }
+            .frame(maxWidth: .infinity, minHeight: 96, maxHeight: 220, alignment: .leading)
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+            .accessibilityIdentifier("selected-search-message-preview")
 
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), alignment: .leading)], alignment: .leading, spacing: 8) {
               SearchResultMetadataItem(label: "Date/Time", value: formattedDate(result.timestamp))
               SearchResultMetadataItem(label: "Project", value: result.project)
               SearchResultMetadataItem(label: "Role", value: result.role.capitalized)
-              SearchResultMetadataItem(label: "Model", value: result.model ?? "unknown")
               SearchResultMetadataItem(label: "Daily Session", value: result.dateKey ?? "")
               SearchResultMetadataItem(label: "Session ID", value: String(result.sessionId.prefix(8)))
             }
           }
 
-          VStack(alignment: .trailing, spacing: 8) {
+          VStack(alignment: .leading, spacing: 8) {
             Button {
               model.selectSearchResult(result.id)
             } label: {
               Label("Show Conversation", systemImage: "text.bubble")
+                .frame(width: searchResultActionLabelWidth, alignment: .leading)
             }
             .accessibilityIdentifier("open-search-result-button")
 
@@ -1266,6 +1266,7 @@ struct SearchResultDetailView: View {
             }
             .accessibilityIdentifier("copy-search-snippet-button")
           }
+          .frame(width: searchResultActionColumnWidth, alignment: .topLeading)
           .buttonStyle(.bordered)
         }
       } else {
@@ -1308,11 +1309,44 @@ struct SearchResultDetailView: View {
   }
 }
 
+struct HighlightedSearchSnippetText: View {
+  let text: String
+  let query: String
+
+  var body: some View {
+    if let parts = highlightedParts {
+      (Text(parts.prefix) + Text(parts.match).bold().foregroundColor(.yellow) + Text(parts.suffix))
+        .lineLimit(2)
+    } else {
+      Text(text)
+        .lineLimit(2)
+    }
+  }
+
+  private var highlightedParts: (prefix: String, match: String, suffix: String)? {
+    let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmedQuery.isEmpty,
+      let range = text.range(of: trimmedQuery, options: [.caseInsensitive, .diacriticInsensitive])
+    else {
+      return nil
+    }
+
+    return (
+      String(text[..<range.lowerBound]),
+      String(text[range]),
+      String(text[range.upperBound...])
+    )
+  }
+}
+
 private enum SearchResultCopyAction {
   case session
   case project
   case snippet
 }
+
+private let searchResultActionLabelWidth: CGFloat = 150
+private let searchResultActionColumnWidth: CGFloat = 172
 
 struct CopyFeedbackLabel: View {
   let title: String
@@ -1328,6 +1362,7 @@ struct CopyFeedbackLabel: View {
         .foregroundStyle(isCopied ? .green : .primary)
         .scaleEffect(isCopied ? 1.08 : 1)
     }
+    .frame(width: searchResultActionLabelWidth, alignment: .leading)
     .animation(.snappy(duration: 0.18), value: isCopied)
   }
 }
@@ -1508,7 +1543,6 @@ struct SearchResultInspector: View {
           .fontWeight(.semibold)
         LabeledContent("Role", value: result.role.capitalized)
         LabeledContent("Project", value: result.project)
-        LabeledContent("Model", value: result.model ?? "unknown")
         LabeledContent("Session", value: result.sessionId)
         LabeledContent("Time", value: formattedDate(result.timestamp))
         HStack {
@@ -1537,7 +1571,7 @@ struct SearchResultInspector: View {
         .buttonStyle(.bordered)
 
         Divider()
-        Text(result.snippet)
+        Text(result.content)
           .textSelection(.enabled)
 
         Divider()
@@ -2033,19 +2067,31 @@ struct ErrorBanner: View {
 }
 
 func formattedDate(_ value: String?) -> String {
-  guard let value, !value.isEmpty else { return "" }
+  guard let date = parsedISODate(value) else { return value ?? "" }
+
+  return date.formatted(date: .abbreviated, time: .shortened)
+}
+
+func compactFormattedDate(_ value: String?) -> String {
+  guard let date = parsedISODate(value) else { return value ?? "" }
+
+  return date.formatted(.dateTime.month(.twoDigits).day().year(.twoDigits).hour().minute())
+}
+
+private func parsedISODate(_ value: String?) -> Date? {
+  guard let value, !value.isEmpty else { return nil }
 
   let fractionalFormatter = ISO8601DateFormatter()
   fractionalFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
   if let date = fractionalFormatter.date(from: value) {
-    return date.formatted(date: .abbreviated, time: .shortened)
+    return date
   }
 
   let formatter = ISO8601DateFormatter()
   formatter.formatOptions = [.withInternetDateTime]
   if let date = formatter.date(from: value) {
-    return date.formatted(date: .abbreviated, time: .shortened)
+    return date
   }
 
-  return value
+  return nil
 }

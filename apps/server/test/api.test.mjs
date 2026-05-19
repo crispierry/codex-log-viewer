@@ -67,6 +67,7 @@ test("message search supports model and session filters through the local API", 
     assert.equal(sentMessagesBody.search.totalMatches, 1);
     assert.equal(sentMessagesBody.search.results[0]?.role, "user");
     assert.match(sentMessagesBody.search.results[0]?.snippet, /parser test/);
+    assert.match(sentMessagesBody.search.results[0]?.content, /parser test/);
   } finally {
     await server.close();
   }
@@ -139,6 +140,7 @@ test("message search can limit browse mode to submitted user messages through th
     assert.equal(submittedMessagesBody.search.totalMatches, 1);
     assert.equal(submittedMessagesBody.search.results[0]?.sourceEvent, "event_msg.user_message");
     assert.equal(submittedMessagesBody.search.results[0]?.snippet, "Typed prompt");
+    assert.equal(submittedMessagesBody.search.results[0]?.content, "Typed prompt");
     assert.equal(submittedMessagesBody.search.results[0]?.snippet.includes("# In app browser:"), false);
   } finally {
     await server.close();

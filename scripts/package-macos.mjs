@@ -9,7 +9,9 @@ const repoRoot = resolve(scriptDir, "..");
 const appName = "Codex Log Viewer";
 const executableName = "CodexLogViewerMac";
 const bundleIdentifier = "com.crispierry.codex-log-viewer";
-const version = readPackageVersion();
+const appVersion = bumpAppBuildVersion();
+const version = appVersion.marketingVersion;
+const buildVersion = appVersion.bundleVersion;
 const configuration = process.env.CONFIGURATION ?? "release";
 const codeSignIdentity = process.env.CODEX_LOG_VIEWER_CODESIGN_IDENTITY?.trim() || "-";
 const notaryProfile = process.env.CODEX_LOG_VIEWER_NOTARY_PROFILE?.trim();
@@ -173,7 +175,7 @@ async function writeInfoPlist() {
   <key>CFBundleShortVersionString</key>
   <string>${version}</string>
   <key>CFBundleVersion</key>
-  <string>${version}</string>
+  <string>${buildVersion}</string>
   <key>LSMinimumSystemVersion</key>
   <string>14.0</string>
   <key>NSHighResolutionCapable</key>
@@ -244,7 +246,7 @@ async function createReleaseArchive() {
     return;
   }
 
-  const archiveName = `Codex-Log-Viewer-v${version}-macOS.zip`;
+  const archiveName = `Codex-Log-Viewer-v${version}-build${buildVersion}-macOS.zip`;
   const archivePath = join(buildDir, archiveName);
   const checksumPath = `${archivePath}.sha256`;
   await rm(archivePath, { force: true });
@@ -363,10 +365,9 @@ function resolveDylibPath(dependency, referencingBinaryPath, sourceNodePath) {
   return existsSync(dependency) ? dependency : undefined;
 }
 
-function readPackageVersion() {
-  const packageJson = JSON.parse(execFileSync("node", ["-p", "JSON.stringify(require('./package.json'))"], {
+function bumpAppBuildVersion() {
+  return JSON.parse(execFileSync("node", ["scripts/update-app-version.mjs", "--bump-build", "--json"], {
     cwd: repoRoot,
     encoding: "utf8"
   }));
-  return packageJson.version ?? "0.1.0";
 }

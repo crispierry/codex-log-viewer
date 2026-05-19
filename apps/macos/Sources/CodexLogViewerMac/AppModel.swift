@@ -35,7 +35,7 @@ final class AppModel: ObservableObject {
   @Published var isDetailLoading = false
   @Published var sessionQuery = ""
   @Published var messageQuery = ""
-  @Published var messageRoleFilter: MessageRoleFilter = .all
+  @Published var messageRoleFilter: MessageRoleFilter = .user
   @Published var messageModelFilter = AppConstants.allModelsName
   @Published var messageSessionFilter: String?
   @Published private var messageSessionFilePathFilter: String?
@@ -1176,7 +1176,6 @@ final class AppModel: ObservableObject {
   }
 
   func showAboutBox() {
-    let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.0"
     let credits = NSAttributedString(
       string: "A local-first native macOS viewer for Codex session logs.\n\nCodex logs stay on this Mac unless you explicitly export data.",
       attributes: [
@@ -1186,8 +1185,8 @@ final class AppModel: ObservableObject {
     )
     NSApp.orderFrontStandardAboutPanel(options: [
       .applicationName: "Codex Log Viewer",
-      .applicationVersion: version,
-      .version: version,
+      .applicationVersion: AppVersion.marketingVersion,
+      .version: AppVersion.displayVersion,
       .credits: credits
     ])
     NSApp.activate(ignoringOtherApps: true)

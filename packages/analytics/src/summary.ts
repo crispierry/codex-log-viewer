@@ -224,7 +224,8 @@ export function searchMessages(corpus: ParsedCodexCorpus, options: MessageSearch
       timestamp: message.timestamp,
       role: message.role,
       sourceEvent: message.sourceEvent,
-      snippet: snippetFor(message.content, query)
+      snippet: snippetFor(message.content, query),
+      content: message.content
     });
   }
 
@@ -258,8 +259,8 @@ function clampLimit(limit: number | undefined): number {
 function snippetFor(content: string, query: string): string {
   const trimmed = content.trim();
   const matchIndex = normalizedMatchStart(trimmed, query);
-  const start = matchIndex >= 0 ? Math.max(0, matchIndex - 80) : 0;
-  const end = Math.min(trimmed.length, start + 280);
+  const start = matchIndex >= 0 ? Math.max(0, matchIndex - 32) : 0;
+  const end = Math.min(trimmed.length, start + 240);
   const prefix = start > 0 ? "..." : "";
   const suffix = end < trimmed.length ? "..." : "";
   return `${prefix}${trimmed.slice(start, end)}${suffix}`;

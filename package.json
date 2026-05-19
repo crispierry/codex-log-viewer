@@ -29,7 +29,8 @@
     "test:all": "npm test && npm run lint && npm run build:mac",
     "lint": "npm run build",
     "build:native-engine": "npm run build -w @codex-log-viewer/parser && npm run build -w @codex-log-viewer/analytics && npm run build -w @codex-log-viewer/server",
-    "build:mac": "swift build --package-path apps/macos",
+    "version:build": "node scripts/update-app-version.mjs --bump-build",
+    "build:mac": "npm run version:build && swift build --package-path apps/macos",
     "package:mac": "node scripts/package-macos.mjs",
     "smoke:mac-package": "node scripts/smoke-packaged-app.mjs",
     "smoke:mac-ui": "node scripts/smoke-native-ui.mjs",
@@ -39,7 +40,7 @@
     "check:mac-accessibility": "node scripts/check-native-accessibility.mjs",
     "benchmark:search": "npm run build -w @codex-log-viewer/parser && npm run build -w @codex-log-viewer/analytics && node scripts/benchmark-search.mjs",
     "check:reference": "npm run build -w @codex-log-viewer/parser && npm run build -w @codex-log-viewer/analytics && node scripts/check-reference-report.mjs",
-    "app:mac": "npm run build:native-engine && CODEX_LOG_VIEWER_REPO=$PWD swift run --package-path apps/macos CodexLogViewerMac",
+    "app:mac": "npm run build:native-engine && npm run version:build && CODEX_LOG_VIEWER_REPO=$PWD swift run --package-path apps/macos CodexLogViewerMac",
     "desktop": "npm run app:mac",
     "desktop:dev": "npm run app:mac",
     "cli": "npm run build -w @codex-log-viewer/parser && npm run build -w @codex-log-viewer/analytics && npm run build -w @codex-log-viewer/cli && node apps/cli/dist/index.js"
