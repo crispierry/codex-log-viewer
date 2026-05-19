@@ -21,6 +21,9 @@ From the app you can:
 - use the default Codex log locations
 - add custom files or directories with the native source picker or source panel
 - select a project from the sidebar
+- use Browse to move from project to session to sent message to Codex interaction
+- use Overview for metrics, charts, and repeated prompts for the selected project
+- use Search for cross-project or project-filtered message search
 - filter by date range
 - search messages across all selected projects
 - filter message search by role, model, and selected session
@@ -50,13 +53,13 @@ Click `Apply` to rescan typed paths. Click `Default` to return to `~/.codex/sess
 
 ## Message Search
 
-Use the message search panel to search across parsed messages. Search respects the current source, project, date, role, model, and session filters. Choose `All Projects` to search across every discovered project.
+Use the Search section to search across parsed messages. Search respects the current source, project, date, role, model, and session filters. Choose `All Projects` to search across every discovered project.
 
 Click `Messages I Sent` to list prompts you typed and submitted for the selected project without typing a search phrase. Generated context wrappers, such as browser state, file attachments, review metadata, and goal-resume prompts, are excluded from that view.
 
-Selecting a sent message opens its session context in the inspector. Click the user message to see the related Codex interaction split into user message, Codex response, tool activity, system/developer context, and token/timing sections.
+In Browse, the first column lists projects, the second lists sessions, the third lists sent messages for the selected session, and the fourth shows the selected message's Codex interaction split into user message, Codex response, tool activity, system/developer context, and token/timing sections.
 
-Selecting a search result opens its session context in the inspector. The inspector includes copy actions for the result's session id, project, and a whitespace-normalized snippet with local home paths shortened.
+Select a search result to copy its session id, project, or a whitespace-normalized snippet with local home paths shortened. Use `Open in Browse` to jump from the result into the four-column session and interaction view.
 
 Keyboard shortcuts:
 

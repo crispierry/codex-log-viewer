@@ -55,6 +55,8 @@ The app is the primary product experience. From the desktop UI you can:
 - scan default Codex logs
 - add custom files or directories
 - select projects or all projects
+- browse projects, sessions, sent messages, and Codex interactions in a four-column native layout
+- switch between Browse, Overview, and Search sections for the selected project
 - filter by date range
 - search messages across projects
 - list the prompts you typed and submitted for the selected project

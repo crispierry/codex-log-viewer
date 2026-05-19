@@ -40,6 +40,25 @@ enum MessageRoleFilter: String, CaseIterable, Identifiable {
   }
 }
 
+enum AppSection: String, CaseIterable, Identifiable {
+  case browse
+  case overview
+  case search
+
+  var id: String { rawValue }
+
+  var label: String {
+    switch self {
+    case .browse:
+      return "Browse"
+    case .overview:
+      return "Overview"
+    case .search:
+      return "Search"
+    }
+  }
+}
+
 struct LogFilters: Equatable {
   var paths: [String] = []
   var since: String?

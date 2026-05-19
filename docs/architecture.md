@@ -76,7 +76,7 @@ Responsibilities:
 - start the private local API engine on an app-owned `127.0.0.1` port
 - generate and pass an ephemeral token to the local engine
 - render projects, summaries, sessions, search, and inspection with SwiftUI
-- provide native sidebar, toolbar, table, and inspector behavior
+- provide native project sidebar, split-column browser, section switching, toolbar, tables, and interaction behavior
 - reconstruct selected user-message interactions into readable response, tool activity, context, token, and timing sections
 - provide native file picking, local recent-source and date-filter settings, packaged app smoke support, and release metadata
 

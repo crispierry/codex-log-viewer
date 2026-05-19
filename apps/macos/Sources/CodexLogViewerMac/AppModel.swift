@@ -25,11 +25,13 @@ final class AppModel: ObservableObject {
   }
 
   @Published var status: Status = .starting
+  @Published var selectedSection: AppSection = .browse
   @Published var selectedProject = AppConstants.allProjectsName
   @Published var projects: [ProjectListItem] = []
   @Published var summary: ProjectSummary?
   @Published var selectedSessionID: SessionSummary.ID?
   @Published var selectedSessionDetail: SessionDetail?
+  @Published var selectedUserMessageIndex: Int?
   @Published var isDetailLoading = false
   @Published var sessionQuery = ""
   @Published var messageQuery = ""
@@ -60,6 +62,7 @@ final class AppModel: ObservableObject {
   private var reloadRequestID = 0
   private var detailRequestID = 0
   private var searchRequestID = 0
+  private var pendingSelectedMessageLineNumber: Int?
   private let isEphemeralSettingsRun = ProcessInfo.processInfo.environment["CODEX_LOG_VIEWER_EPHEMERAL_SETTINGS"] == "1" ||
     ProcessInfo.processInfo.environment["CODEX_LOG_VIEWER_UI_TEST"] == "1"
   private var hasScheduledUITestQuit = false
@@ -268,6 +271,8 @@ final class AppModel: ObservableObject {
 
   func selectSession(_ sessionID: SessionSummary.ID?) {
     selectedSessionID = sessionID
+    selectedUserMessageIndex = nil
+    pendingSelectedMessageLineNumber = nil
     if !selectedSearchResultBelongsToSession(sessionID) {
       selectedSearchResultID = nil
     }
@@ -300,6 +305,7 @@ final class AppModel: ObservableObject {
         )
         guard !Task.isCancelled, requestID == detailRequestID else { return }
         selectedSessionDetail = detail
+        applyPendingMessageSelection(to: detail)
         isDetailLoading = false
       } catch is CancellationError {
         return
@@ -312,6 +318,7 @@ final class AppModel: ObservableObject {
   }
 
   func searchMessages(allowEmptyQuery: Bool = false, submittedOnly: Bool = false) {
+    selectedSection = .search
     let trimmedQuery = messageQuery.trimmingCharacters(in: .whitespacesAndNewlines)
     let isBrowseRequest = allowEmptyQuery && trimmedQuery.isEmpty
     guard !trimmedQuery.isEmpty || isBrowseRequest, let api else {
@@ -363,6 +370,7 @@ final class AppModel: ObservableObject {
   }
 
   func showSentMessagesForCurrentProject() {
+    selectedSection = .search
     messageQuery = ""
     messageRoleFilter = .user
     messageModelFilter = AppConstants.allModelsName
@@ -372,6 +380,7 @@ final class AppModel: ObservableObject {
   }
 
   func focusMessageSearch() {
+    selectedSection = .search
     messageSearchFocusRequest += 1
   }
 
@@ -382,6 +391,9 @@ final class AppModel: ObservableObject {
     else {
       return
     }
+    selectedSection = .browse
+    pendingSelectedMessageLineNumber = result.sourceEvent == "event_msg.user_message" ? result.lineNumber : nil
+    selectedUserMessageIndex = nil
     selectedSessionID = sessionSelectionID(sessionID: result.sessionId, filePath: result.filePath) ?? result.sessionId
     selectedSessionDetail = nil
     loadSelectedSession()
@@ -451,6 +463,8 @@ final class AppModel: ObservableObject {
     detailRequestID += 1
     selectedSessionID = nil
     selectedSessionDetail = nil
+    selectedUserMessageIndex = nil
+    pendingSelectedMessageLineNumber = nil
     isDetailLoading = false
     sessionQuery = ""
   }
@@ -459,6 +473,7 @@ final class AppModel: ObservableObject {
     searchTask?.cancel()
     searchRequestID += 1
     selectedSearchResultID = nil
+    pendingSelectedMessageLineNumber = nil
     messageSessionFilter = nil
     messageSessionFilePathFilter = nil
     isMessageBrowseMode = false
@@ -497,6 +512,21 @@ final class AppModel: ObservableObject {
 
   private func sessionSelectionID(sessionID: String, filePath: String) -> SessionSummary.ID? {
     summary?.sessions.first { $0.sessionId == sessionID && $0.filePath == filePath }?.id
+  }
+
+  private func applyPendingMessageSelection(to detail: SessionDetail) {
+    guard let pendingSelectedMessageLineNumber else {
+      if let selectedUserMessageIndex,
+        !SessionInteractionBuilder.userMessageOffsets(in: detail).contains(where: { $0.offset == selectedUserMessageIndex }) {
+        self.selectedUserMessageIndex = nil
+      }
+      return
+    }
+    selectedUserMessageIndex = detail.messages.firstIndex { message in
+      message.lineNumber == pendingSelectedMessageLineNumber &&
+        message.sourceEvent == "event_msg.user_message"
+    }
+    self.pendingSelectedMessageLineNumber = nil
   }
 
   private func hasMessageSessionFilter(in sessions: [SessionSummary], sessionID: String) -> Bool {

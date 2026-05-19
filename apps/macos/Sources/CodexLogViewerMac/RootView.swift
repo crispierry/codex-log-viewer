@@ -5,15 +5,11 @@ struct RootView: View {
   @EnvironmentObject private var model: AppModel
 
   var body: some View {
-    NavigationSplitView {
+    HSplitView {
       SidebarView()
-        .navigationSplitViewColumnWidth(min: 280, ideal: 320, max: 420)
-    } content: {
-      OverviewView()
-        .navigationSplitViewColumnWidth(min: 560, ideal: 780)
-    } detail: {
-      DetailPane()
-        .navigationSplitViewColumnWidth(min: 380, ideal: 500)
+        .frame(minWidth: 260, idealWidth: 300, maxWidth: 360)
+      ProjectWorkspaceView()
+        .frame(minWidth: 820)
     }
     .toolbar {
       ToolbarItem(placement: .navigation) {
@@ -43,6 +39,70 @@ struct RootView: View {
         StatusPill(status: model.status)
           .accessibilityIdentifier("status-pill")
       }
+    }
+  }
+}
+
+struct ProjectWorkspaceView: View {
+  @EnvironmentObject private var model: AppModel
+
+  var body: some View {
+    VStack(spacing: 0) {
+      WorkspaceHeaderView()
+        .padding(.horizontal, 20)
+        .padding(.vertical, 14)
+      Divider()
+
+      Group {
+        switch model.selectedSection {
+        case .browse:
+          BrowseWorkspaceView()
+        case .overview:
+          OverviewSectionView()
+        case .search:
+          SearchSectionView()
+        }
+      }
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+  }
+}
+
+struct WorkspaceHeaderView: View {
+  @EnvironmentObject private var model: AppModel
+
+  var body: some View {
+    HStack(alignment: .center, spacing: 16) {
+      VStack(alignment: .leading, spacing: 5) {
+        Text(model.selectedProject)
+          .font(.title2)
+          .fontWeight(.semibold)
+          .lineLimit(1)
+        HStack(spacing: 10) {
+          if let activityRangeText = model.activityRangeText {
+            Text(activityRangeText)
+              .accessibilityIdentifier("activity-range-label")
+          }
+          if let cacheStatusText = model.cacheStatusText {
+            Text(cacheStatusText)
+              .accessibilityIdentifier("cache-status-label")
+          }
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
+      }
+
+      Spacer(minLength: 12)
+
+      Picker("Section", selection: $model.selectedSection) {
+        ForEach(AppSection.allCases) { section in
+          Text(section.label).tag(section)
+        }
+      }
+      .labelsHidden()
+      .pickerStyle(.segmented)
+      .frame(width: 300)
     }
   }
 }
@@ -221,14 +281,304 @@ struct ProjectListRow: View {
   }
 }
 
-struct OverviewView: View {
+struct BrowseWorkspaceView: View {
+  @EnvironmentObject private var model: AppModel
+
+  var body: some View {
+    VStack(spacing: 0) {
+      if case .failed(let message) = model.status {
+        ErrorBanner(message: message) {
+          model.retryAfterFailure()
+        }
+        .padding(12)
+      }
+
+      HSplitView {
+        SessionBrowserColumn()
+          .frame(minWidth: 300, idealWidth: 340, maxWidth: 440)
+        SentMessagesBrowserColumn()
+          .frame(minWidth: 320, idealWidth: 380, maxWidth: 520)
+        InteractionBrowserColumn()
+          .frame(minWidth: 420, idealWidth: 580)
+      }
+    }
+  }
+}
+
+struct BrowserColumnHeader: View {
+  let title: String
+  let subtitle: String?
+
+  init(_ title: String, subtitle: String? = nil) {
+    self.title = title
+    self.subtitle = subtitle
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 3) {
+      Text(title)
+        .font(.headline)
+      if let subtitle {
+        Text(subtitle)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+          .lineLimit(1)
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .padding(.horizontal, 18)
+    .padding(.vertical, 12)
+  }
+}
+
+struct SessionBrowserColumn: View {
+  @EnvironmentObject private var model: AppModel
+
+  private var emptySessionsTitle: String {
+    model.summary?.totals.sessions == 0 ? "No Sessions Found" : "No Matching Sessions"
+  }
+
+  private var emptySessionsDescription: String {
+    if model.summary?.totals.sessions == 0 {
+      return "Choose another source or return to the default Codex log locations."
+    }
+    return "Clear the session search or adjust the current filters."
+  }
+
+  var body: some View {
+    VStack(spacing: 0) {
+      BrowserColumnHeader(
+        "Sessions",
+        subtitle: "\(model.filteredSessions.count.formatted()) visible"
+      )
+      Divider()
+      HStack {
+        Image(systemName: "line.3.horizontal.decrease.circle")
+          .foregroundStyle(.secondary)
+        TextField("Search sessions", text: $model.sessionQuery)
+          .textFieldStyle(.plain)
+          .accessibilityIdentifier("session-search-field")
+      }
+      .padding(8)
+      .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+      .padding(10)
+
+      if model.summary != nil {
+        if model.filteredSessions.isEmpty {
+          ContentUnavailableView(
+            emptySessionsTitle,
+            systemImage: "tray",
+            description: Text(emptySessionsDescription)
+          )
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+          .accessibilityIdentifier("sessions-empty-state")
+        } else {
+          List(model.filteredSessions) { session in
+            Button {
+              model.selectSession(session.id)
+            } label: {
+              SessionBrowserRow(
+                session: session,
+                isSelected: model.selectedSessionID == session.id
+              )
+            }
+            .buttonStyle(.plain)
+            .listRowInsets(EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8))
+          }
+          .listStyle(.plain)
+          .accessibilityIdentifier("sessions-table")
+        }
+      } else {
+        ProgressView("Scanning local logs")
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+      }
+    }
+    .background(.background)
+  }
+}
+
+struct SessionBrowserRow: View {
+  let session: SessionSummary
+  let isSelected: Bool
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 6) {
+      HStack(alignment: .firstTextBaseline) {
+        Text(formattedDate(session.lastSeen))
+          .font(.body)
+          .fontWeight(.medium)
+          .lineLimit(1)
+        Spacer()
+        Text(session.shortSessionId)
+          .font(.caption.monospacedDigit())
+          .foregroundStyle(.secondary)
+      }
+      HStack(spacing: 8) {
+        Label("\(session.userMessages.formatted()) sent", systemImage: "paperplane")
+        if session.automationMessages > 0 {
+          Label("\(session.automationMessages.formatted()) auto", systemImage: "clock.arrow.circlepath")
+        }
+      }
+      .font(.caption)
+      .foregroundStyle(.secondary)
+      Text(session.project)
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
+    }
+    .padding(10)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(
+      isSelected ? Color.accentColor.opacity(0.16) : Color.clear,
+      in: RoundedRectangle(cornerRadius: 8)
+    )
+  }
+}
+
+struct SentMessagesBrowserColumn: View {
+  @EnvironmentObject private var model: AppModel
+
+  private var userMessages: [(offset: Int, element: MessageDetail)] {
+    guard let detail = model.selectedSessionDetail else { return [] }
+    return SessionInteractionBuilder.userMessageOffsets(in: detail)
+  }
+
+  var body: some View {
+    VStack(spacing: 0) {
+      BrowserColumnHeader(
+        "Messages",
+        subtitle: model.selectedSessionID == nil ? "Select a session" : "\(userMessages.count.formatted()) sent"
+      )
+      Divider()
+
+      if model.isDetailLoading {
+        ProgressView("Loading messages")
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+      } else if model.selectedSessionID == nil {
+        ContentUnavailableView(
+          "Select a Session",
+          systemImage: "list.bullet.rectangle",
+          description: Text("Choose a session to see sent messages.")
+        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+      } else if userMessages.isEmpty {
+        ContentUnavailableView(
+          "No Sent Messages",
+          systemImage: "paperplane",
+          description: Text("This session has no submitted user messages.")
+        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+      } else {
+        List(userMessages, id: \.offset) { item in
+          Button {
+            model.selectedUserMessageIndex = item.offset
+          } label: {
+            SentMessageBrowserRow(
+              message: item.element,
+              isSelected: model.selectedUserMessageIndex == item.offset
+            )
+          }
+          .buttonStyle(.plain)
+          .listRowInsets(EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8))
+        }
+        .listStyle(.plain)
+      }
+    }
+    .background(.background)
+  }
+}
+
+struct SentMessageBrowserRow: View {
+  let message: MessageDetail
+  let isSelected: Bool
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 6) {
+      Text(formattedDate(message.timestamp))
+        .font(.caption.monospacedDigit())
+        .foregroundStyle(.secondary)
+      Text(messageDisplayText(message))
+        .font(.body)
+        .lineLimit(4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+    .padding(10)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(
+      isSelected ? Color.accentColor.opacity(0.16) : Color.primary.opacity(0.04),
+      in: RoundedRectangle(cornerRadius: 8)
+    )
+  }
+}
+
+struct InteractionBrowserColumn: View {
+  @EnvironmentObject private var model: AppModel
+
+  private var selectedInteraction: SessionInteraction? {
+    guard let detail = model.selectedSessionDetail,
+      let selectedUserMessageIndex = model.selectedUserMessageIndex
+    else {
+      return nil
+    }
+    return SessionInteractionBuilder.interaction(in: detail, selectedUserMessageIndex: selectedUserMessageIndex)
+  }
+
+  var body: some View {
+    VStack(spacing: 0) {
+      BrowserColumnHeader("Codex Interaction", subtitle: interactionSubtitle)
+      Divider()
+
+      if model.isDetailLoading {
+        ProgressView("Loading interaction")
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+      } else if model.selectedSessionID == nil {
+        ContentUnavailableView(
+          "Select a Session",
+          systemImage: "sidebar.right",
+          description: Text("Choose a session and sent message to inspect Codex's response.")
+        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+      } else if model.selectedUserMessageIndex == nil {
+        ContentUnavailableView(
+          "Select a Message",
+          systemImage: "text.bubble",
+          description: Text("Choose a sent message to show the Codex interaction.")
+        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+      } else if let selectedInteraction {
+        ScrollView {
+          CodexInteractionView(interaction: selectedInteraction)
+            .padding(16)
+        }
+      } else {
+        ContentUnavailableView(
+          "Interaction Not Found",
+          systemImage: "exclamationmark.triangle",
+          description: Text("This message could not be matched to a Codex response.")
+        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+      }
+    }
+    .background(.background)
+  }
+
+  private var interactionSubtitle: String? {
+    guard let selectedInteraction else { return nil }
+    let responseCount = selectedInteraction.assistantMessages.count
+    let toolCount = selectedInteraction.toolEvents.count
+    if toolCount > 0 {
+      return "\(responseCount.formatted()) response, \(toolCount.formatted()) tools"
+    }
+    return "\(responseCount.formatted()) response"
+  }
+}
+
+struct OverviewSectionView: View {
   @EnvironmentObject private var model: AppModel
 
   var body: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: 18) {
-        HeaderView()
-
         if case .failed(let message) = model.status {
           ErrorBanner(message: message) {
             model.retryAfterFailure()
@@ -244,12 +594,27 @@ struct OverviewView: View {
           ChartsSection(summary: summary)
           RepeatedPromptsView(messages: summary.repeatedUserMessages)
         }
-        MessageSearchView()
-        SessionsTableView()
       }
       .padding(20)
     }
-    .navigationTitle(model.selectedProject)
+  }
+}
+
+struct SearchSectionView: View {
+  @EnvironmentObject private var model: AppModel
+
+  var body: some View {
+    ScrollView {
+      VStack(alignment: .leading, spacing: 18) {
+        if case .failed(let message) = model.status {
+          ErrorBanner(message: message) {
+            model.retryAfterFailure()
+          }
+        }
+        MessageSearchView()
+      }
+      .padding(20)
+    }
   }
 }
 
@@ -670,6 +1035,10 @@ struct MessageSearchView: View {
   @EnvironmentObject private var model: AppModel
   @FocusState private var isSearchFocused: Bool
 
+  private var selectedSearchResult: MessageSearchResult? {
+    model.searchSummary?.results.first { $0.id == model.selectedSearchResultID }
+  }
+
   var body: some View {
     GroupBox("Message Search") {
       VStack(alignment: .leading, spacing: 12) {
@@ -795,9 +1164,7 @@ struct MessageSearchView: View {
             }
             .frame(minHeight: 220)
             .accessibilityIdentifier("message-search-results-table")
-            .onChange(of: model.selectedSearchResultID) { _, newValue in
-              model.selectSearchResult(newValue)
-            }
+            SearchResultActionsView(result: selectedSearchResult)
           }
         } else {
           Text("Search respects the current source, project, and date filters.")
@@ -841,6 +1208,63 @@ struct MessageSearchView: View {
       return "\(count) sent messages in \(search.project)"
     }
     return "\(count) messages in \(search.project)"
+  }
+}
+
+struct SearchResultActionsView: View {
+  @EnvironmentObject private var model: AppModel
+  let result: MessageSearchResult?
+
+  var body: some View {
+    HStack(spacing: 10) {
+      if let result {
+        VStack(alignment: .leading, spacing: 2) {
+          Text("Selected Result")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+          Text(result.project)
+            .font(.caption)
+            .lineLimit(1)
+        }
+
+        Spacer()
+
+        Button {
+          model.selectSearchResult(result.id)
+        } label: {
+          Label("Open in Browse", systemImage: "sidebar.right")
+        }
+        .accessibilityIdentifier("open-search-result-button")
+
+        Button {
+          model.copySearchResultSessionID(result)
+        } label: {
+          Label("Session ID", systemImage: "doc.on.doc")
+        }
+        .accessibilityIdentifier("copy-search-session-button")
+
+        Button {
+          model.copySearchResultProject(result)
+        } label: {
+          Label("Project", systemImage: "folder")
+        }
+        .accessibilityIdentifier("copy-search-project-button")
+
+        Button {
+          model.copySearchResultSnippet(result)
+        } label: {
+          Label("Snippet", systemImage: "text.quote")
+        }
+        .accessibilityIdentifier("copy-search-snippet-button")
+      } else {
+        Label("Select a result to copy details or open it in Browse.", systemImage: "cursorarrow.click")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+        Spacer()
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .padding(.top, 2)
   }
 }
 

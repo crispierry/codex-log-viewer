@@ -17,7 +17,7 @@ struct CodexLogViewerApp: App {
           .task {
             model.startIfNeeded()
           }
-          .frame(minWidth: 1120, minHeight: 760)
+          .frame(minWidth: 1360, minHeight: 760)
       }
     }
     .commands {
