@@ -28,6 +28,10 @@ jobs:
       - run: npm run benchmark:search
       - run: npm run check:reference -- --reference fixtures/codex/sample-reference-summary.json --path fixtures/codex/sample-session.jsonl --project sample-app
       - run: npm run package:mac
+        env:
+          CODEX_LOG_VIEWER_REQUIRE_NOTARIZATION: "1"
+          CODEX_LOG_VIEWER_CODESIGN_IDENTITY: ${{ secrets.CODEX_LOG_VIEWER_CODESIGN_IDENTITY }}
+          CODEX_LOG_VIEWER_NOTARY_PROFILE: ${{ secrets.CODEX_LOG_VIEWER_NOTARY_PROFILE }}
       - run: npm run smoke:mac-package
       - run: npm run smoke:mac-ui
       - run: cd dist/macos && shasum -a 256 -c Codex-Log-Viewer-*-macOS.zip.sha256

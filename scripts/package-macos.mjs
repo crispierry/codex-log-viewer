@@ -11,8 +11,9 @@ const executableName = "CodexLogViewerMac";
 const bundleIdentifier = "com.crispierry.codex-log-viewer";
 const version = readPackageVersion();
 const configuration = process.env.CONFIGURATION ?? "release";
-const codeSignIdentity = process.env.CODEX_LOG_VIEWER_CODESIGN_IDENTITY ?? "-";
-const notaryProfile = process.env.CODEX_LOG_VIEWER_NOTARY_PROFILE;
+const codeSignIdentity = process.env.CODEX_LOG_VIEWER_CODESIGN_IDENTITY?.trim() || "-";
+const notaryProfile = process.env.CODEX_LOG_VIEWER_NOTARY_PROFILE?.trim();
+const requireNotarization = process.env.CODEX_LOG_VIEWER_REQUIRE_NOTARIZATION === "1";
 const buildDir = resolve(repoRoot, "dist/macos");
 const appDir = join(buildDir, `${appName}.app`);
 const contentsDir = join(appDir, "Contents");
@@ -23,6 +24,7 @@ const nodeDir = join(resourcesDir, "node/bin");
 const nodeLibDir = join(resourcesDir, "node/lib");
 let didSignBundle = false;
 
+verifyReleaseSigningConfiguration();
 run("npm", ["run", "build:native-engine"]);
 run("swift", ["build", "--package-path", "apps/macos", "-c", configuration]);
 
@@ -41,6 +43,24 @@ await notarizeBundle();
 await createReleaseArchive();
 
 console.log(`Packaged ${appDir}`);
+
+function verifyReleaseSigningConfiguration() {
+  if (!requireNotarization) {
+    return;
+  }
+  if (process.platform !== "darwin") {
+    throw new Error("CODEX_LOG_VIEWER_REQUIRE_NOTARIZATION=1 requires macOS.");
+  }
+  if (process.env.CODEX_LOG_VIEWER_SKIP_CODESIGN === "1") {
+    throw new Error("CODEX_LOG_VIEWER_REQUIRE_NOTARIZATION=1 cannot be used with CODEX_LOG_VIEWER_SKIP_CODESIGN=1.");
+  }
+  if (codeSignIdentity === "-") {
+    throw new Error("CODEX_LOG_VIEWER_REQUIRE_NOTARIZATION=1 requires CODEX_LOG_VIEWER_CODESIGN_IDENTITY.");
+  }
+  if (!notaryProfile) {
+    throw new Error("CODEX_LOG_VIEWER_REQUIRE_NOTARIZATION=1 requires CODEX_LOG_VIEWER_NOTARY_PROFILE.");
+  }
+}
 
 function run(command, args, options = {}) {
   execFileSync(command, args, {
@@ -194,6 +214,9 @@ function codeSignArgs(target, extraArgs = []) {
 
 async function notarizeBundle() {
   if (process.platform !== "darwin" || !notaryProfile || codeSignIdentity === "-" || !didSignBundle) {
+    if (requireNotarization) {
+      throw new Error("Notarization was required but the app was not signed and submitted.");
+    }
     return;
   }
 

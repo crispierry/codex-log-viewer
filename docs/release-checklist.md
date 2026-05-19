@@ -50,10 +50,18 @@ Local builds use ad-hoc signing. For an official macOS artifact, configure a rel
 ```sh
 CODEX_LOG_VIEWER_CODESIGN_IDENTITY="Developer ID Application: Example (TEAMID)" \
 CODEX_LOG_VIEWER_NOTARY_PROFILE="codex-log-viewer-notary" \
+CODEX_LOG_VIEWER_REQUIRE_NOTARIZATION=1 \
 npm run release:mac
 ```
 
 When those variables are set, the packaging script signs with hardened runtime, submits the app for notarization, staples the ticket, and then creates the final zip and checksum.
+
+The tag-based GitHub Release workflow sets `CODEX_LOG_VIEWER_REQUIRE_NOTARIZATION=1` for packaging. It will not publish an ad-hoc signed artifact as an official release. Configure these repository secrets before pushing `vX.Y.Z`:
+
+- `CODEX_LOG_VIEWER_CODESIGN_IDENTITY`
+- `CODEX_LOG_VIEWER_NOTARY_PROFILE`
+
+The runner must also have the matching Developer ID certificate and notarytool keychain profile installed.
 
 ## Artifact Review
 
