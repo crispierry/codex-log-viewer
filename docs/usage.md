@@ -51,6 +51,8 @@ Click `Apply` to rescan typed paths. Click `Default` to return to `~/.codex/sess
 
 Use the message search panel to search across parsed messages. Search respects the current source, project, date, role, model, and session filters. Choose `All Projects` to search across every discovered project.
 
+Selecting a search result opens its session context in the inspector. The inspector includes copy actions for the result's session id, project, and a whitespace-normalized snippet with local home paths shortened.
+
 ## Exports
 
 Use the `JSON` and `CSV` buttons in the app toolbar. Exports respect the current source, project, and date filters.

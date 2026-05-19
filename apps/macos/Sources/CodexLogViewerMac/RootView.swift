@@ -606,6 +606,8 @@ struct InspectorSectionTitle: View {
 }
 
 struct SearchResultInspector: View {
+  @EnvironmentObject private var model: AppModel
+
   let result: MessageSearchResult
   let detail: SessionDetail?
   let isDetailLoading: Bool
@@ -630,6 +632,31 @@ struct SearchResultInspector: View {
         LabeledContent("Model", value: result.model ?? "unknown")
         LabeledContent("Session", value: result.sessionId)
         LabeledContent("Time", value: formattedDate(result.timestamp))
+        HStack {
+          Button {
+            model.copySearchResultSessionID(result)
+          } label: {
+            Label("Copy Session ID", systemImage: "doc.on.doc")
+          }
+          .accessibilityIdentifier("copy-search-session-button")
+
+          Button {
+            model.copySearchResultProject(result)
+          } label: {
+            Label("Copy Project", systemImage: "folder")
+          }
+          .accessibilityIdentifier("copy-search-project-button")
+
+          Button {
+            model.copySearchResultSnippet(result)
+          } label: {
+            Label("Copy Snippet", systemImage: "text.quote")
+          }
+          .help("Copies a whitespace-normalized snippet with local home paths shortened.")
+          .accessibilityIdentifier("copy-search-snippet-button")
+        }
+        .buttonStyle(.bordered)
+
         Divider()
         Text(result.snippet)
           .textSelection(.enabled)

@@ -86,6 +86,7 @@ The smoke workflow also drives the native app model through the release-critical
 - select the sample project
 - search messages across all projects
 - select a search result and load session context
+- verify search-result copy actions for session id, project, and sanitized snippet
 - rerun search scoped to the selected session
 - verify redacted JSON and aggregate CSV export data
 

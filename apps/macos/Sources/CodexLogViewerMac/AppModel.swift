@@ -301,6 +301,18 @@ final class AppModel: ObservableObject {
     }
   }
 
+  func copySearchResultSessionID(_ result: MessageSearchResult) {
+    copyTextToPasteboard(result.sessionId)
+  }
+
+  func copySearchResultProject(_ result: MessageSearchResult) {
+    copyTextToPasteboard(result.project)
+  }
+
+  func copySearchResultSnippet(_ result: MessageSearchResult) {
+    copyTextToPasteboard(Self.sanitizedClipboardSnippet(result.snippet))
+  }
+
   func exportSummary(_ format: ExportFormat) {
     guard let api else { return }
     let panel = NSSavePanel()
@@ -508,6 +520,22 @@ final class AppModel: ObservableObject {
     selectedSearchResultID = result.id
     selectedSessionID = result.sessionId
 
+    copySearchResultSessionID(result)
+    guard Self.pasteboardText() == result.sessionId else {
+      throw AppSmokeError.unexpected("The search result session copy action did not update the pasteboard.")
+    }
+    copySearchResultProject(result)
+    guard Self.pasteboardText() == result.project else {
+      throw AppSmokeError.unexpected("The search result project copy action did not update the pasteboard.")
+    }
+    copySearchResultSnippet(result)
+    guard let copiedSnippet = Self.pasteboardText(),
+      copiedSnippet.contains("parser test"),
+      !copiedSnippet.contains("/Users/example")
+    else {
+      throw AppSmokeError.unexpected("The search result snippet copy action did not write a sanitized snippet.")
+    }
+
     let detail = try await api.sessionDetail(
       sessionID: result.sessionId,
       project: AppConstants.allProjectsName,
@@ -596,6 +624,24 @@ final class AppModel: ObservableObject {
       return nil
     }
     return dateFormatter.date(from: value)
+  }
+
+  private func copyTextToPasteboard(_ value: String) {
+    let pasteboard = NSPasteboard.general
+    pasteboard.clearContents()
+    pasteboard.setString(value, forType: .string)
+  }
+
+  private static func pasteboardText() -> String? {
+    NSPasteboard.general.string(forType: .string)
+  }
+
+  private static func sanitizedClipboardSnippet(_ value: String) -> String {
+    value
+      .replacingOccurrences(of: NSHomeDirectory(), with: "~")
+      .replacingOccurrences(of: #"/Users/[^/\s]+/"#, with: "~/", options: .regularExpression)
+      .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+      .trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
   private static func writeStdout(_ message: String) {

@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Added persisted local date filter settings to the native app.
 - Added cross-project message search with project/date/source filtering.
 - Added role, model, and session filters for message search.
+- Added native search-result copy actions for session id, project, and sanitized snippets.
 - Added packaged macOS app creation with bundled local engine, bundled Node runtime, app icon, zip artifact, and checksum.
 - Added packaged app and native UI smoke tests.
 - Added Finder-style and relocated packaged app launch verification.
