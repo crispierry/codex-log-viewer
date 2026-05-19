@@ -1166,7 +1166,7 @@ struct MessageSearchView: View {
             }
             .frame(minHeight: 220)
             .accessibilityIdentifier("message-search-results-table")
-            SearchResultActionsView(result: selectedSearchResult)
+            SearchResultDetailView(result: selectedSearchResult)
           }
         } else {
           Text("Search current messages by source, project, and date filters.")
@@ -1187,60 +1187,165 @@ struct MessageSearchView: View {
   }
 }
 
-struct SearchResultActionsView: View {
+struct SearchResultDetailView: View {
   @EnvironmentObject private var model: AppModel
   let result: MessageSearchResult?
+  @State private var copiedAction: SearchResultCopyAction?
+  @State private var copyResetTask: Task<Void, Never>?
 
   var body: some View {
-    HStack(spacing: 10) {
+    VStack(alignment: .leading, spacing: 12) {
       if let result {
-        VStack(alignment: .leading, spacing: 2) {
-          Text("Selected Result")
-            .font(.caption)
-            .foregroundStyle(.secondary)
-          Text(result.project)
-            .font(.caption)
-            .lineLimit(1)
-        }
+        Divider()
 
-        Spacer()
+        HStack(alignment: .top, spacing: 16) {
+          VStack(alignment: .leading, spacing: 10) {
+            Text("Selected Result")
+              .font(.headline)
 
-        Button {
-          model.selectSearchResult(result.id)
-        } label: {
-          Label("Open in Browse", systemImage: "sidebar.right")
-        }
-        .accessibilityIdentifier("open-search-result-button")
+            Text(result.snippet)
+              .font(.body)
+              .lineLimit(5)
+              .textSelection(.enabled)
+              .frame(maxWidth: .infinity, alignment: .leading)
 
-        Button {
-          model.copySearchResultSessionID(result)
-        } label: {
-          Label("Session ID", systemImage: "doc.on.doc")
-        }
-        .accessibilityIdentifier("copy-search-session-button")
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), alignment: .leading)], alignment: .leading, spacing: 8) {
+              SearchResultMetadataItem(label: "Date/Time", value: formattedDate(result.timestamp))
+              SearchResultMetadataItem(label: "Project", value: result.project)
+              SearchResultMetadataItem(label: "Role", value: result.role.capitalized)
+              SearchResultMetadataItem(label: "Model", value: result.model ?? "unknown")
+              SearchResultMetadataItem(label: "Daily Session", value: result.dateKey ?? "")
+              SearchResultMetadataItem(label: "Session ID", value: String(result.sessionId.prefix(8)))
+            }
+          }
 
-        Button {
-          model.copySearchResultProject(result)
-        } label: {
-          Label("Project", systemImage: "folder")
-        }
-        .accessibilityIdentifier("copy-search-project-button")
+          VStack(alignment: .trailing, spacing: 8) {
+            Button {
+              model.selectSearchResult(result.id)
+            } label: {
+              Label("Show Conversation", systemImage: "text.bubble")
+            }
+            .accessibilityIdentifier("open-search-result-button")
 
-        Button {
-          model.copySearchResultSnippet(result)
-        } label: {
-          Label("Snippet", systemImage: "text.quote")
+            Button {
+              confirmCopy(.session) {
+                model.copySearchResultSessionID(result)
+              }
+            } label: {
+              CopyFeedbackLabel(
+                title: "Copy Session ID",
+                systemImage: "doc.on.doc",
+                isCopied: copiedAction == .session
+              )
+            }
+            .accessibilityIdentifier("copy-search-session-button")
+
+            Button {
+              confirmCopy(.project) {
+                model.copySearchResultProject(result)
+              }
+            } label: {
+              CopyFeedbackLabel(
+                title: "Copy Project Name",
+                systemImage: "folder",
+                isCopied: copiedAction == .project
+              )
+            }
+            .accessibilityIdentifier("copy-search-project-button")
+
+            Button {
+              confirmCopy(.snippet) {
+                model.copySearchResultSnippet(result)
+              }
+            } label: {
+              CopyFeedbackLabel(
+                title: "Copy Matched Text",
+                systemImage: "text.quote",
+                isCopied: copiedAction == .snippet
+              )
+            }
+            .accessibilityIdentifier("copy-search-snippet-button")
+          }
+          .buttonStyle(.bordered)
         }
-        .accessibilityIdentifier("copy-search-snippet-button")
       } else {
-        Label("Select a result to copy details or open it in Browse.", systemImage: "cursorarrow.click")
-          .font(.caption)
-          .foregroundStyle(.secondary)
-        Spacer()
+        Divider()
+        ContentUnavailableView(
+          "No Result Selected",
+          systemImage: "cursorarrow.click",
+          description: Text("Select a search result to inspect the matched message.")
+        )
+        .frame(maxWidth: .infinity, minHeight: 120)
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
-    .padding(.top, 2)
+    .onChange(of: result?.id) { _, _ in
+      copyResetTask?.cancel()
+      copiedAction = nil
+    }
+    .onDisappear {
+      copyResetTask?.cancel()
+    }
+  }
+
+  private func confirmCopy(_ action: SearchResultCopyAction, perform: () -> Void) {
+    perform()
+    copyResetTask?.cancel()
+    withAnimation(.snappy(duration: 0.18)) {
+      copiedAction = action
+    }
+    copyResetTask = Task {
+      try? await Task.sleep(for: .seconds(1.4))
+      guard !Task.isCancelled else { return }
+      await MainActor.run {
+        withAnimation(.easeOut(duration: 0.18)) {
+          if copiedAction == action {
+            copiedAction = nil
+          }
+        }
+      }
+    }
+  }
+}
+
+private enum SearchResultCopyAction {
+  case session
+  case project
+  case snippet
+}
+
+struct CopyFeedbackLabel: View {
+  let title: String
+  let systemImage: String
+  let isCopied: Bool
+
+  var body: some View {
+    Label {
+      Text(isCopied ? "Copied" : title)
+        .contentTransition(.opacity)
+    } icon: {
+      Image(systemName: isCopied ? "checkmark.circle.fill" : systemImage)
+        .foregroundStyle(isCopied ? .green : .primary)
+        .scaleEffect(isCopied ? 1.08 : 1)
+    }
+    .animation(.snappy(duration: 0.18), value: isCopied)
+  }
+}
+
+struct SearchResultMetadataItem: View {
+  let label: String
+  let value: String
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 2) {
+      Text(label)
+        .font(.caption)
+        .foregroundStyle(.secondary)
+      Text(value.isEmpty ? "unknown" : value)
+        .font(.caption)
+        .lineLimit(1)
+        .textSelection(.enabled)
+    }
   }
 }
 
@@ -1623,7 +1728,7 @@ struct CodexInteractionView: View {
         title: "User Message",
         subtitle: formattedDate(interaction.userMessage.timestamp),
         text: messageDisplayText(interaction.userMessage),
-        tint: .accentColor
+        tint: .green
       )
 
       InspectorSectionTitle("Codex Response")
@@ -1659,10 +1764,10 @@ struct CodexInteractionView: View {
           VStack(alignment: .leading, spacing: 8) {
             ForEach(Array(interaction.contextMessages.enumerated()), id: \.offset) { _, message in
               InteractionMessageCard(
-                title: message.role.capitalized,
+                title: contextTitle(message),
                 subtitle: formattedDate(message.timestamp),
                 text: messageDisplayText(message),
-                tint: .secondary,
+                tint: contextTint(message),
                 monospaced: true
               )
             }
@@ -1683,6 +1788,28 @@ struct CodexInteractionView: View {
       return "Codex Response - \(phase.replacingOccurrences(of: "_", with: " ").capitalized)"
     }
     return "Codex Response"
+  }
+
+  private func contextTitle(_ message: MessageDetail) -> String {
+    switch message.role {
+    case "system":
+      return "System Message"
+    case "developer":
+      return "Developer Message"
+    default:
+      return message.role.capitalized
+    }
+  }
+
+  private func contextTint(_ message: MessageDetail) -> Color {
+    switch message.role {
+    case "system":
+      return .orange
+    case "developer":
+      return .purple
+    default:
+      return .secondary
+    }
   }
 }
 
