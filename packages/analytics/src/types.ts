@@ -127,6 +127,7 @@ export interface MessageSearchResult {
   timestamp?: string;
   role: MessageRole;
   sourceEvent: string;
+  category?: string;
   snippet: string;
   content: string;
 }

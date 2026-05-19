@@ -43,7 +43,7 @@ open "dist/macos/Codex Log Viewer.app"
 
 Use `Logs > Choose Codex Log Location...` to pick custom Codex log files or folders. Use `Logs > Use Default Codex Log Locations` to return to `~/.codex/sessions` and `~/.codex/archived_sessions`. Recent custom sources and date filter choices are stored in local app settings.
 
-The date filter lives in the workspace header. Use the calendar control to switch between all time, a specific day, week, month, year, or a custom start/end range.
+The date filter lives in the workspace header. Use the calendar control to switch between all time, a specific day, week, month, year, or a custom start/end range. Future dates are disabled, and the current week, month, or year is capped at today.
 
 ## Message Search
 
@@ -51,7 +51,11 @@ Use the Search section to search across parsed messages. Search respects the cur
 
 Browse lists prompts you typed and submitted for the selected project without requiring a session first. Generated context wrappers, such as browser state, file attachments, review metadata, and goal-resume prompts, are excluded from that view.
 
-In Browse, the sidebar selects the project, the main Messages column lists submitted prompts for the current project and date filters, and the Codex Interaction column shows the selected message split into user message, Codex response, tool activity, system/developer context, and token/timing sections. Turn on `Show Sessions` when you want an extra session column before the message list.
+In Browse, the sidebar selects the project, the main Messages column lists submitted prompts for the current project and date filters, and the Codex Interaction column shows the selected message split into user message, Codex response, tool activity, system/developer context, and token/timing sections. Use `View > Show Sessions` when you want an extra session column before the message list.
+
+Use `View > Operational Messages` to hide or show all operational prompt families at once, or control families independently, such as `Git commands`, `Run app`, and `Code review`.
+
+The native macOS tab bar is hidden while there is only one viewer tab. Use `File > New Tab` when you want another app tab; the tab bar appears once multiple tabs are open.
 
 Select a search result to copy its session id, project, or a whitespace-normalized snippet with local home paths shortened. Use `Show Conversation` to jump from the result into Browse.
 
@@ -73,7 +77,7 @@ Refresh checks for added, changed, or deleted session files and updates only wha
 
 ## Exports
 
-Use the `JSON` and `CSV` buttons in the app toolbar. Exports respect the current source, project, and date filters.
+Use `Logs > Export Redacted JSON...` or `Logs > Export CSV...`. Exports respect the current source, project, and date filters.
 
 JSON exports redact local source paths and working directories by default. Treat them as private until reviewed because project names, timestamps, session IDs, and model metadata may still be sensitive.
 
@@ -129,6 +133,11 @@ You can pass multiple `--path` values.
 - User-message counts come from `event_msg.user_message`.
 - Unique user messages are trimmed, whitespace-collapsed, and lowercased.
 - Repeated prompts are grouped from normalized user messages and shown only for groups with more than one submission.
+- Short approvals such as `yes`, `go ahead`, or `sounds good` are grouped as `Plan approvals`.
+- Short Git workflow requests such as commit, push, branch, PR, worktree, or repo-cleanliness checks are grouped as `Git commands`.
+- Short app launch requests such as run, start, restart, launch, or open the app/server are grouped as `Run app`.
+- Short review requests such as `do a code review`, `review the diff`, or `inspect the changes` are grouped as `Code review`.
+- Browse and the Overview repeated-prompt card can hide or show grouped prompt families with individual checkboxes.
 - Token totals sum `token_count.info.last_token_usage` records.
 - `token_count` events with `info: null` are ignored for token totals.
 - Unknown event shapes are preserved and counted.

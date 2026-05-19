@@ -55,6 +55,8 @@ final class AppModel: ObservableObject {
   @Published var dateRangeMode: DateRangeMode = .all
   @Published var dateAnchorDate = Date()
   @Published var projectSortOption: ProjectSortOption = .mostUserMessages
+  @Published var hiddenOperationalMessageCategories: Set<String> = []
+  @Published var hiddenRepeatedPromptCategories: Set<String> = []
   @Published var messageSearchFocusRequest = 0
   @Published var cacheMetadata: CacheMetadata?
   @Published var auditRepoPathDraft = ""
@@ -87,7 +89,15 @@ final class AppModel: ObservableObject {
   }
 
   var browseMessages: [MessageSearchResult] {
-    browseMessagesSummary?.results ?? []
+    visibleBrowseMessages(in: browseMessagesSummary?.results ?? [])
+  }
+
+  var operationalMessageCategoryOptions: [String] {
+    Self.operationalPromptCategoryOrder
+  }
+
+  var areAllOperationalMessageCategoriesVisible: Bool {
+    hiddenOperationalMessageCategories.isDisjoint(with: Self.operationalPromptCategorySet)
   }
 
   var sortedProjects: [ProjectListItem] {
@@ -248,6 +258,10 @@ final class AppModel: ObservableObject {
     }
   }
 
+  var latestSelectableDate: Date {
+    Self.startOfToday()
+  }
+
   func refresh(force: Bool = false, rebuildCache: Bool = false) {
     guard let api else { return }
     let shouldRefreshCache = force || rebuildCache
@@ -384,8 +398,58 @@ final class AppModel: ObservableObject {
     saveSettings()
   }
 
+  func setRepeatedPromptCategory(_ category: String, isVisible: Bool) {
+    if isVisible {
+      hiddenRepeatedPromptCategories.remove(category)
+    } else {
+      hiddenRepeatedPromptCategories.insert(category)
+    }
+    saveSettings()
+  }
+
+  func setOperationalMessageCategory(_ category: String, isVisible: Bool) {
+    guard isOperationalPromptCategory(category) else { return }
+    if isVisible {
+      hiddenOperationalMessageCategories.remove(category)
+    } else {
+      hiddenOperationalMessageCategories.insert(category)
+    }
+    saveSettings()
+
+    guard let browseMessagesSummary else { return }
+    if let selectedBrowseMessageID,
+      let selected = browseMessagesSummary.results.first(where: { $0.id == selectedBrowseMessageID }),
+      !isBrowseMessageVisible(selected) {
+      selectBrowseMessage(browseMessages.first?.id)
+    }
+  }
+
+  func setAllOperationalMessageCategoriesVisible(_ isVisible: Bool) {
+    if isVisible {
+      hiddenOperationalMessageCategories.subtract(Self.operationalPromptCategorySet)
+    } else {
+      hiddenOperationalMessageCategories.formUnion(Self.operationalPromptCategorySet)
+    }
+    saveSettings()
+
+    guard let browseMessagesSummary else { return }
+    if let selectedBrowseMessageID,
+      let selected = browseMessagesSummary.results.first(where: { $0.id == selectedBrowseMessageID }),
+      !isBrowseMessageVisible(selected) {
+      selectBrowseMessage(browseMessages.first?.id)
+    }
+  }
+
+  func isOperationalPromptCategory(_ category: String) -> Bool {
+    Self.operationalPromptCategorySet.contains(category)
+  }
+
+  func isOperationalPromptCategoryVisible(_ category: String) -> Bool {
+    !hiddenOperationalMessageCategories.contains(category)
+  }
+
   func setDateAnchorDate(_ date: Date) {
-    dateAnchorDate = Calendar.current.startOfDay(for: date)
+    dateAnchorDate = Self.clampedToToday(date)
     guard dateRangeMode != .all, dateRangeMode != .custom else {
       saveSettings()
       return
@@ -395,7 +459,8 @@ final class AppModel: ObservableObject {
 
   func setCustomSinceDate(_ date: Date) {
     dateRangeMode = .custom
-    sinceDate = Calendar.current.startOfDay(for: date)
+    sinceDate = Self.clampedToToday(date)
+    untilDate = Self.clampedToToday(untilDate)
     if untilDate < sinceDate {
       untilDate = sinceDate
     }
@@ -404,7 +469,8 @@ final class AppModel: ObservableObject {
 
   func setCustomUntilDate(_ date: Date) {
     dateRangeMode = .custom
-    untilDate = Calendar.current.startOfDay(for: date)
+    sinceDate = Self.clampedToToday(sinceDate)
+    untilDate = Self.clampedToToday(date)
     if sinceDate > untilDate {
       sinceDate = untilDate
     }
@@ -514,9 +580,10 @@ final class AppModel: ObservableObject {
         browseMessagesSummary = searchResult.search
         cacheMetadata = searchResult.cache ?? cacheMetadata
         isBrowseMessagesLoading = false
+        let visibleResults = visibleBrowseMessages(in: searchResult.search.results)
 
         let currentSelectionIsVisible = selectedBrowseMessageID.map { selectedID in
-          searchResult.search.results.contains { $0.id == selectedID }
+          visibleResults.contains { $0.id == selectedID }
         } ?? false
 
         if !currentSelectionIsVisible {
@@ -526,7 +593,7 @@ final class AppModel: ObservableObject {
           }
         }
 
-        if selectFirstIfNeeded, selectedBrowseMessageID == nil, let firstMessage = searchResult.search.results.first {
+        if selectFirstIfNeeded, selectedBrowseMessageID == nil, let firstMessage = visibleResults.first {
           selectBrowseMessage(firstMessage.id)
         }
       } catch is CancellationError {
@@ -545,6 +612,8 @@ final class AppModel: ObservableObject {
       let result = browseMessagesSummary?.results.first(where: { $0.id == messageID })
     else {
       selectedUserMessageIndex = nil
+      selectedSessionID = nil
+      selectedSessionDetail = nil
       return
     }
 
@@ -919,6 +988,15 @@ final class AppModel: ObservableObject {
     return result.sessionId == sessionID
   }
 
+  private func visibleBrowseMessages(in messages: [MessageSearchResult]) -> [MessageSearchResult] {
+    return messages.filter(isBrowseMessageVisible)
+  }
+
+  private func isBrowseMessageVisible(_ message: MessageSearchResult) -> Bool {
+    guard let category = message.category else { return true }
+    return !hiddenOperationalMessageCategories.contains(category)
+  }
+
   private func detailTarget(for selectionID: SessionSummary.ID) -> (sessionID: String, filePath: String?, dateKey: String?) {
     if let session = sessionForSelectionID(selectionID) {
       return (session.sessionId, session.filePath, session.dateKey)
@@ -1105,6 +1183,15 @@ final class AppModel: ObservableObject {
       let sortOption = ProjectSortOption(rawValue: savedProjectSort) {
       projectSortOption = sortOption
     }
+    let savedHiddenOperationalCategories = Set(Self.stringArray(forKey: DefaultsKeys.hiddenOperationalMessageCategories))
+    if savedHiddenOperationalCategories.isEmpty,
+      UserDefaults.standard.object(forKey: DefaultsKeys.showOperationalMessages) != nil,
+      !UserDefaults.standard.bool(forKey: DefaultsKeys.showOperationalMessages) {
+      hiddenOperationalMessageCategories = Self.operationalPromptCategorySet
+    } else {
+      hiddenOperationalMessageCategories = savedHiddenOperationalCategories
+    }
+    hiddenRepeatedPromptCategories = Set(Self.stringArray(forKey: DefaultsKeys.hiddenRepeatedPromptCategories))
     showSessionBrowser = UserDefaults.standard.bool(forKey: DefaultsKeys.showSessionBrowser)
   }
 
@@ -1121,12 +1208,17 @@ final class AppModel: ObservableObject {
     UserDefaults.standard.set(dateRangeMode.rawValue, forKey: DefaultsKeys.dateRangeMode)
     UserDefaults.standard.set(Self.dateFormatter.string(from: dateAnchorDate), forKey: DefaultsKeys.dateAnchorDate)
     UserDefaults.standard.set(projectSortOption.rawValue, forKey: DefaultsKeys.projectSortOption)
+    UserDefaults.standard.set(Array(hiddenOperationalMessageCategories).sorted(), forKey: DefaultsKeys.hiddenOperationalMessageCategories)
+    UserDefaults.standard.removeObject(forKey: DefaultsKeys.showOperationalMessages)
+    UserDefaults.standard.set(Array(hiddenRepeatedPromptCategories).sorted(), forKey: DefaultsKeys.hiddenRepeatedPromptCategories)
     UserDefaults.standard.set(showSessionBrowser, forKey: DefaultsKeys.showSessionBrowser)
   }
 
   private func applyDateRangeMode(save: Bool = true, reload: Bool = true) {
     let calendar = Calendar.current
-    dateAnchorDate = calendar.startOfDay(for: dateAnchorDate)
+    dateAnchorDate = Self.clampedToToday(dateAnchorDate, calendar: calendar)
+    sinceDate = Self.clampedToToday(sinceDate, calendar: calendar)
+    untilDate = Self.clampedToToday(untilDate, calendar: calendar)
 
     switch dateRangeMode {
     case .all:
@@ -1167,10 +1259,15 @@ final class AppModel: ObservableObject {
   private func applyInterval(_ interval: DateInterval?) {
     let calendar = Calendar.current
     let interval = interval ?? DateInterval(start: dateAnchorDate, duration: 86_400)
+    let today = Self.startOfToday(calendar: calendar)
     hasSinceFilter = true
     hasUntilFilter = true
     sinceDate = calendar.startOfDay(for: interval.start)
-    untilDate = calendar.date(byAdding: .day, value: -1, to: interval.end) ?? sinceDate
+    let intervalEndDate = calendar.date(byAdding: .day, value: -1, to: interval.end) ?? sinceDate
+    untilDate = min(calendar.startOfDay(for: intervalEndDate), today)
+    if sinceDate > untilDate {
+      sinceDate = untilDate
+    }
   }
 
   private func scheduleUITestWorkflowIfNeeded(api: LogEngineAPI, filters: LogFilters) {
@@ -1451,6 +1548,14 @@ final class AppModel: ObservableObject {
     displayYearFormatter.string(from: date)
   }
 
+  private static func startOfToday(calendar: Calendar = .current) -> Date {
+    calendar.startOfDay(for: Date())
+  }
+
+  private static func clampedToToday(_ date: Date, calendar: Calendar = .current) -> Date {
+    min(calendar.startOfDay(for: date), startOfToday(calendar: calendar))
+  }
+
   private static func displayDateTime(_ value: String?) -> String? {
     guard let value,
       let date = Self.isoDateFormatter.date(from: value) ?? Self.isoDateFormatterWithoutFractionalSeconds.date(from: value)
@@ -1500,6 +1605,13 @@ final class AppModel: ObservableObject {
       .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
       .trimmingCharacters(in: .whitespacesAndNewlines)
   }
+
+  private static let operationalPromptCategoryOrder = [
+    "Code review",
+    "Git commands",
+    "Run app"
+  ]
+  private static let operationalPromptCategorySet = Set(operationalPromptCategoryOrder)
 
   private static func writeStdout(_ message: String) {
     FileHandle.standardOutput.write(Data(message.utf8))
@@ -1551,5 +1663,8 @@ private enum DefaultsKeys {
   static let dateRangeMode = "dateRangeMode"
   static let dateAnchorDate = "dateAnchorDate"
   static let projectSortOption = "projectSortOption"
+  static let showOperationalMessages = "showOperationalMessages"
+  static let hiddenOperationalMessageCategories = "hiddenOperationalMessageCategories"
+  static let hiddenRepeatedPromptCategories = "hiddenRepeatedPromptCategories"
   static let showSessionBrowser = "showSessionBrowser"
 }

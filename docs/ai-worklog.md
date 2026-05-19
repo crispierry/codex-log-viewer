@@ -52,6 +52,85 @@ The committed worklog is intentionally sanitized. Raw Codex session JSONL files 
 - Ran `npm run smoke:mac-ui`.
 - Relaunched the packaged macOS app.
 
+## 2026-05-19 - Add operational message filters
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> what are the user message grouping we created (git, start app, etc)... I would like the ability to filter out some of these groups (via a checkbox)
+
+> mostly I am interested in being able to filter out messages that are operational
+>
+> like - commit, merge, start server, run app, do a code review, etc
+
+> i want to break down the operational messages -- not just bumbled them all into "operational"
+
+> and show operationa should move to the view menu
+
+> Move this to the app view menu and give me an option for all
+
+### Interpreted Intent
+
+The user wanted clarity on the semantic repeated-prompt groups and wanted native View-menu controls to hide specific operational prompt families from the main message list and repeated-prompt summary, with an all-operational shortcut.
+
+### Response / Work Done
+
+- Confirmed the existing semantic repeated-prompt groups were `Plan approvals`, `Git commands`, and `Run app`.
+- Added a `Code review` semantic group for short review requests such as `do a code review`, `review the diff`, and `inspect the changes`.
+- Added message categories to local search/browse results so the macOS Browse message list can classify operational prompts.
+- Added persistent per-category checkboxes for operational message categories: `Git commands`, `Run app`, and `Code review`.
+- Moved the session browser toggle and operational message category toggles into the macOS `View` menu.
+- Added a `View > Operational Messages > All` toggle for showing or hiding every operational family at once.
+- Kept short approvals separate so they can still be controlled independently in the repeated-prompt summary.
+- Documented the grouping rules and checkbox behavior.
+
+### Privacy Notes
+
+No raw Codex logs or unsanitized session content were added. The change only stores local checkbox preferences and category names selected for filtering.
+
+### Verification
+
+- Ran `npm test`.
+- Ran `npm run check:mac-accessibility`.
+- Ran `npm run privacy:scan`.
+- Ran `npm run lint`.
+- Ran `npm run build:mac`.
+- Ran `npm run package:mac`.
+- Relaunched the packaged macOS app.
+
+## 2026-05-19 - Simplify project sidebar rows
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> How can I improve the visibility and usability of this section? It seems really cluttered right now. Maybe we don't need the sessions and the tokens? Is there something we can do? Color coding as well? Separation? This needs to be done better. Please act as a senior principal designer
+
+### Interpreted Intent
+
+The user wanted the project sidebar to feel less cluttered and easier to scan, with less visible operational metadata and clearer hierarchy.
+
+### Response / Work Done
+
+- Simplified project rows to a single-line navigation shape focused on project name and sent-message count.
+- Removed visible session and token metadata from each sidebar row while preserving those details in hover/help and accessibility text.
+- Added a compact message-count badge and subtle icon tinting to improve scanability without making the sidebar feel like a dense analytics table.
+
+### Privacy Notes
+
+No raw logs or unsanitized session content were added. Existing aggregate counts remain local-only.
+
+### Verification
+
+- Ran `npm run check:mac-accessibility`.
+- Ran `npm run privacy:scan`.
+- Ran `npm run build:mac`.
+- Ran `npm run package:mac`.
+- Relaunched the packaged macOS app.
+
 ## 2026-05-19 - Fix audit review findings
 
 Status: Completed
@@ -133,3 +212,171 @@ No raw Codex session content was added. The Browse changes continue to use exist
 - Ran `npm run smoke:mac-package`.
 - Ran `npm run smoke:mac-ui`.
 - Relaunched the packaged macOS app.
+
+## 2026-05-19 - Hide single-window tab bar
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> I don't think we need the tabs. Right now it allows me to open multiple tabs but I am not sure this is useful for this project. In any case maybe we do keep the tabs open but if there is only one tab we can reclaim the screen real estate. Understand what I mean?
+>
+> To show the tab bar if I actually create a second tab via the menus
+
+### Interpreted Intent
+
+The user wanted to keep native macOS tabs available without permanently spending vertical space on the tab bar when only one app tab is open.
+
+### Response / Work Done
+
+- Added native window coordination that keeps Codex Log Viewer windows eligible for macOS tabbing.
+- Hid the macOS tab bar when the active Codex Log Viewer tab group has only one viewer window.
+- Revealed the tab bar automatically when the tab group contains multiple viewer windows.
+- Corrected the native window matcher to account for the app's displayed `Codex Logs` window title.
+- Added `File > New Tab` so users can intentionally create another viewer tab while the single-tab bar is hidden.
+- Fixed the new-tab attachment check so two un-tabbed viewer windows are merged into the same native tab group.
+- Made the new-tab command attach to the existing viewer window even when the app has no current key window.
+
+### Privacy Notes
+
+No raw logs or user session content were added. This change only affects native window chrome behavior.
+
+### Verification
+
+- Ran `npm run build:mac`.
+- Ran `npm run check:mac-accessibility`.
+- Ran `npm run privacy:scan`.
+- Ran `npm run package:mac`.
+- Relaunched the packaged macOS app.
+- Visually checked that the top-right toolbar utility cluster was removed.
+- Ran `npm run check:mac-accessibility`.
+- Ran `npm run privacy:scan`.
+- Ran `npm run package:mac`.
+- Relaunched the packaged macOS app.
+
+## 2026-05-19 - Align date range popover fields
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> We designed this better so that the date fields are aligned
+
+### Interpreted Intent
+
+The user wanted the Activity Range popover to feel more deliberate, with Start and End date controls aligned in a clean form layout.
+
+### Response / Work Done
+
+- Reworked the Activity Range popover rows to use a fixed label column and aligned control column.
+- Hid redundant DatePicker labels inside the controls so custom Start and End date fields line up exactly.
+- Indented helper text under the control column to reduce visual clutter.
+
+### Privacy Notes
+
+No raw logs or session content were added. This change only affects native layout.
+
+### Verification
+
+- Ran `npm run build:mac`.
+- Ran `npm run check:mac-accessibility`.
+- Ran `npm run privacy:scan`.
+- Ran `npm run package:mac`.
+- Relaunched the packaged macOS app.
+- Opened the Activity Range popover and visually checked the aligned custom date fields.
+
+## 2026-05-19 - Prevent future date filters
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> Also make sure I can not pick a date in the future
+
+### Interpreted Intent
+
+The user wanted the Activity Range filter to prevent future dates, both in the date controls and in computed day/week/month/year ranges.
+
+### Response / Work Done
+
+- Limited Activity Range date pickers to today or earlier.
+- Clamped saved and programmatic date-filter state to today so stale future values cannot persist.
+- Capped week, month, and year ranges at today when the selected period includes future days.
+- Updated usage docs to explain that future dates are disabled.
+
+### Privacy Notes
+
+No raw logs or session content were added. This change only affects native date filtering behavior.
+
+### Verification
+
+- Ran `npm run build:mac`.
+- Ran `npm run check:mac-accessibility`.
+- Ran `npm run privacy:scan`.
+- Ran `npm run package:mac`.
+- Relaunched the packaged macOS app.
+
+## 2026-05-19 - Move browse column status to footer
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> I think we need to move this status to the bottom and make it smaller with maybe a gray bar - Act as a principal designer and figure out the best way to do this
+
+### Interpreted Intent
+
+The user wanted the Browse column status headers to stop competing with the primary message and interaction content, while keeping useful counts visible in a quieter form.
+
+### Response / Work Done
+
+- Replaced the large top column headers in Browse with compact bottom status bars.
+- Applied the smaller gray status treatment consistently to Sessions, Messages, and Codex Interaction columns.
+- Updated interaction count copy to use compact pluralized text such as `8 responses · 179 tools`.
+
+### Privacy Notes
+
+No raw logs or session content were added. This change only affects native Browse layout.
+
+### Verification
+
+- Ran `npm run build:mac`.
+- Ran `npm run check:mac-accessibility`.
+- Ran `npm run privacy:scan`.
+- Ran `npm run package:mac`.
+- Relaunched the packaged macOS app.
+- Visually checked the Browse footer status bars in the relaunched app.
+
+## 2026-05-19 - Move toolbar utilities into menus
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> I think we can move these options to the app menu system
+>
+> Reclaim some of this screen real estate
+
+### Interpreted Intent
+
+The user wanted the top-right toolbar utility cluster removed so the window chrome feels lighter and the app relies on native menus for less-frequent actions.
+
+### Response / Work Done
+
+- Removed the Export JSON, Export CSV, and Ready status cluster from the primary toolbar.
+- Kept export actions in the native `Logs` menu and added menu accessibility identifiers for them.
+- Added a disabled `Logs > Status: ...` menu item so app status remains available without occupying toolbar space.
+- Updated usage docs to describe exports as menu commands.
+
+### Privacy Notes
+
+No raw logs or session content were added. This change only affects native app command placement.
+
+### Verification
+
+- Ran `npm run build:mac`.

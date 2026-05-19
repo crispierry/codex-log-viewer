@@ -410,6 +410,7 @@ struct MessageSearchResult: Decodable, Identifiable, Hashable {
   let timestamp: String?
   let role: String
   let sourceEvent: String
+  let category: String?
   let snippet: String
   let content: String
 }

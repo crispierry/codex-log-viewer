@@ -20,25 +20,6 @@ struct RootView: View {
         }
         .accessibilityIdentifier("refresh-button")
       }
-
-      ToolbarItemGroup(placement: .primaryAction) {
-        Button {
-          model.exportSummary(.json)
-        } label: {
-          Label("Export JSON", systemImage: "doc")
-        }
-        .accessibilityIdentifier("export-json-button")
-
-        Button {
-          model.exportSummary(.csv)
-        } label: {
-          Label("Export CSV", systemImage: "tablecells")
-        }
-        .accessibilityIdentifier("export-csv-button")
-
-        StatusPill(status: model.status)
-          .accessibilityIdentifier("status-pill")
-      }
     }
   }
 }
@@ -134,68 +115,83 @@ struct DateRangeControlView: View {
 
 struct DateRangePopoverView: View {
   @EnvironmentObject private var model: AppModel
+  private let labelColumnWidth: CGFloat = 52
 
   var body: some View {
     VStack(alignment: .leading, spacing: 14) {
       Text("Activity Range")
         .font(.headline)
 
-      Picker(
-        "Range",
-        selection: Binding(
-          get: { model.dateRangeMode },
-          set: { model.setDateRangeMode($0) }
-        )
-      ) {
-        ForEach(DateRangeMode.allCases) { mode in
-          Text(mode.label).tag(mode)
+      formRow(label: "Range") {
+        Picker(
+          "Range",
+          selection: Binding(
+            get: { model.dateRangeMode },
+            set: { model.setDateRangeMode($0) }
+          )
+        ) {
+          ForEach(DateRangeMode.allCases) { mode in
+            Text(mode.label).tag(mode)
+          }
         }
+        .labelsHidden()
+        .pickerStyle(.segmented)
+        .accessibilityIdentifier("date-range-mode-picker")
       }
-      .pickerStyle(.segmented)
-      .accessibilityIdentifier("date-range-mode-picker")
 
       switch model.dateRangeMode {
       case .all:
-        Text("All local Codex activity is included.")
-          .font(.callout)
-          .foregroundStyle(.secondary)
+        detailText("All local Codex activity is included.")
       case .custom:
         VStack(alignment: .leading, spacing: 10) {
-          DatePicker(
-            "Start",
-            selection: Binding(
-              get: { model.sinceDate },
-              set: { model.setCustomSinceDate($0) }
-            ),
-            displayedComponents: .date
-          )
-          .accessibilityIdentifier("date-range-start-picker")
+          formRow(label: "Start") {
+            DatePicker(
+              "Start",
+              selection: Binding(
+                get: { model.sinceDate },
+                set: { model.setCustomSinceDate($0) }
+              ),
+              in: ...model.latestSelectableDate,
+              displayedComponents: .date
+            )
+            .labelsHidden()
+            .frame(width: 116, alignment: .leading)
+            .accessibilityIdentifier("date-range-start-picker")
+          }
 
-          DatePicker(
-            "End",
-            selection: Binding(
-              get: { model.untilDate },
-              set: { model.setCustomUntilDate($0) }
-            ),
-            displayedComponents: .date
-          )
-          .accessibilityIdentifier("date-range-end-picker")
+          formRow(label: "End") {
+            DatePicker(
+              "End",
+              selection: Binding(
+                get: { model.untilDate },
+                set: { model.setCustomUntilDate($0) }
+              ),
+              in: ...model.latestSelectableDate,
+              displayedComponents: .date
+            )
+            .labelsHidden()
+            .frame(width: 116, alignment: .leading)
+            .accessibilityIdentifier("date-range-end-picker")
+          }
         }
       default:
-        DatePicker(
-          model.dateRangeMode.anchorLabel,
-          selection: Binding(
-            get: { model.dateAnchorDate },
-            set: { model.setDateAnchorDate($0) }
-          ),
-          displayedComponents: .date
-        )
-        .accessibilityIdentifier("date-anchor-picker")
+        formRow(label: model.dateRangeMode.anchorLabel) {
+          DatePicker(
+            model.dateRangeMode.anchorLabel,
+            selection: Binding(
+              get: { model.dateAnchorDate },
+              set: { model.setDateAnchorDate($0) }
+            ),
+            in: ...model.latestSelectableDate,
+            displayedComponents: .date
+          )
+          .labelsHidden()
+          .frame(width: 116, alignment: .leading)
+          .accessibilityIdentifier("date-anchor-picker")
+        }
       }
 
-      Text(model.dateRangeDetailText)
-        .font(.caption)
-        .foregroundStyle(.secondary)
+      detailText(model.dateRangeDetailText)
         .accessibilityIdentifier("date-range-summary-label")
 
       HStack {
@@ -208,6 +204,26 @@ struct DateRangePopoverView: View {
     }
     .padding(16)
     .frame(width: 430)
+  }
+
+  private func formRow<Content: View>(
+    label: String,
+    @ViewBuilder content: () -> Content
+  ) -> some View {
+    HStack(alignment: .center, spacing: 10) {
+      Text(label)
+        .font(.callout)
+        .frame(width: labelColumnWidth, alignment: .leading)
+      content()
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+  }
+
+  private func detailText(_ text: String) -> some View {
+    Text(text)
+      .font(.caption)
+      .foregroundStyle(.secondary)
+      .padding(.leading, labelColumnWidth + 10)
   }
 }
 
@@ -298,24 +314,22 @@ struct ProjectListRow: View {
 
   var body: some View {
     Label {
-      HStack {
-        VStack(alignment: .leading, spacing: 2) {
-          Text(title)
-            .lineLimit(1)
-          Text(metadataText)
-            .font(.caption)
-            .foregroundStyle(.secondary)
-        }
-        Spacer()
-        Text(userMessages.formatted())
-          .font(.body.monospacedDigit())
-          .fontWeight(.semibold)
-          .foregroundStyle(.secondary)
+      HStack(spacing: 8) {
+        Text(title)
+          .fontWeight(.medium)
+          .lineLimit(1)
+          .truncationMode(.middle)
+          .frame(maxWidth: .infinity, alignment: .leading)
+
+        ProjectMessageCountBadge(count: userMessages)
       }
     } icon: {
       Image(systemName: systemImage)
+        .foregroundStyle(systemImage == "square.grid.2x2" ? Color.accentColor : Color.secondary)
     }
+    .padding(.vertical, 3)
     .help(helpText)
+    .accessibilityLabel(accessibilityText)
   }
 
   private var metadataText: String {
@@ -323,14 +337,35 @@ struct ProjectListRow: View {
   }
 
   private var helpText: String {
+    let details = "\(userMessages.formatted()) sent messages, \(metadataText)"
     if let lastSeen, !lastSeen.isEmpty {
-      return "\(title), last session \(formattedDate(lastSeen))"
+      return "\(title)\n\(details)\nLast session \(formattedDate(lastSeen))"
     }
-    return title
+    return "\(title)\n\(details)"
+  }
+
+  private var accessibilityText: String {
+    "\(title), \(userMessages.formatted()) sent messages, \(metadataText)"
   }
 
   private func countLabel(_ count: Int, singular: String, plural: String) -> String {
     "\(count.formatted()) \(count == 1 ? singular : plural)"
+  }
+}
+
+struct ProjectMessageCountBadge: View {
+  let count: Int
+
+  var body: some View {
+    Text(count.formatted())
+      .font(.callout.monospacedDigit())
+      .fontWeight(.semibold)
+      .foregroundStyle(.secondary)
+      .lineLimit(1)
+      .minimumScaleFactor(0.8)
+      .padding(.horizontal, 6)
+      .padding(.vertical, 2)
+      .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
   }
 }
 
@@ -346,24 +381,6 @@ struct BrowseWorkspaceView: View {
         .padding(12)
       }
 
-      HStack {
-        Spacer()
-        Toggle(
-          isOn: Binding(
-            get: { model.showSessionBrowser },
-            set: { model.setSessionBrowserVisible($0) }
-          )
-        ) {
-          Label("Show Sessions", systemImage: "rectangle.split.3x1")
-        }
-        .toggleStyle(.button)
-        .help("Show the optional session browser before messages.")
-        .accessibilityIdentifier("browse-session-toggle")
-      }
-      .padding(.horizontal, 14)
-      .padding(.vertical, 8)
-      Divider()
-
       HSplitView {
         if model.showSessionBrowser {
           SessionBrowserColumn()
@@ -378,7 +395,7 @@ struct BrowseWorkspaceView: View {
   }
 }
 
-struct BrowserColumnHeader: View {
+struct BrowserColumnStatusBar: View {
   let title: String
   let subtitle: String?
 
@@ -388,19 +405,23 @@ struct BrowserColumnHeader: View {
   }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 3) {
+    HStack(spacing: 8) {
       Text(title)
-        .font(.headline)
+        .font(.caption)
+        .fontWeight(.semibold)
+        .foregroundStyle(.primary)
       if let subtitle {
         Text(subtitle)
-          .font(.caption)
+          .font(.caption2)
           .foregroundStyle(.secondary)
-          .lineLimit(1)
       }
+      Spacer(minLength: 0)
     }
+    .lineLimit(1)
+    .padding(.horizontal, 10)
+    .frame(height: 24)
     .frame(maxWidth: .infinity, alignment: .leading)
-    .padding(.horizontal, 18)
-    .padding(.vertical, 12)
+    .background(Color.primary.opacity(0.045))
   }
 }
 
@@ -422,43 +443,46 @@ struct SessionBrowserColumn: View {
     let sessions = model.summary?.sessions ?? []
 
     VStack(spacing: 0) {
-      BrowserColumnHeader(
+      Group {
+        if model.summary != nil {
+          if sessions.isEmpty {
+            ContentUnavailableView(
+              emptySessionsTitle,
+              systemImage: "tray",
+              description: Text(emptySessionsDescription)
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .accessibilityIdentifier("sessions-empty-state")
+          } else {
+            List(sessions) { session in
+              Button {
+                model.selectSession(session.id)
+              } label: {
+                SessionBrowserRow(
+                  session: session,
+                  isSelected: model.selectedSessionID == session.id
+                )
+              }
+              .frame(maxWidth: .infinity, alignment: .leading)
+              .contentShape(Rectangle())
+              .buttonStyle(.plain)
+              .listRowInsets(EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8))
+            }
+            .listStyle(.plain)
+            .accessibilityIdentifier("sessions-table")
+          }
+        } else {
+          ProgressView("Scanning local logs")
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+      }
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+      Divider()
+      BrowserColumnStatusBar(
         "Sessions",
         subtitle: "\(sessions.count.formatted()) visible"
       )
-      Divider()
-
-      if model.summary != nil {
-        if sessions.isEmpty {
-          ContentUnavailableView(
-            emptySessionsTitle,
-            systemImage: "tray",
-            description: Text(emptySessionsDescription)
-          )
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
-          .accessibilityIdentifier("sessions-empty-state")
-        } else {
-          List(sessions) { session in
-            Button {
-              model.selectSession(session.id)
-            } label: {
-              SessionBrowserRow(
-                session: session,
-                isSelected: model.selectedSessionID == session.id
-              )
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
-            .buttonStyle(.plain)
-            .listRowInsets(EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8))
-          }
-          .listStyle(.plain)
-          .accessibilityIdentifier("sessions-table")
-        }
-      } else {
-        ProgressView("Scanning local logs")
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
-      }
     }
     .background(.background)
   }
@@ -514,17 +538,20 @@ struct SentMessagesBrowserColumn: View {
 
   var body: some View {
     VStack(spacing: 0) {
-      BrowserColumnHeader(
-        "Messages",
-        subtitle: headerSubtitle
-      )
-      Divider()
-
-      if model.showSessionBrowser {
-        sessionMessagesView
-      } else {
-        projectMessagesView
+      Group {
+        if model.showSessionBrowser {
+          sessionMessagesView
+        } else {
+          projectMessagesView
+        }
       }
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+      Divider()
+      BrowserColumnStatusBar(
+        "Messages",
+        subtitle: statusSubtitle
+      )
     }
     .background(.background)
   }
@@ -570,6 +597,11 @@ struct SentMessagesBrowserColumn: View {
 
   @ViewBuilder
   private var projectMessagesView: some View {
+    projectMessagesContent
+  }
+
+  @ViewBuilder
+  private var projectMessagesContent: some View {
     if model.isBrowseMessagesLoading && browseMessages.isEmpty {
       ProgressView("Loading messages")
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -600,7 +632,7 @@ struct SentMessagesBrowserColumn: View {
     }
   }
 
-  private var headerSubtitle: String? {
+  private var statusSubtitle: String? {
     if model.showSessionBrowser {
       return model.selectedSessionID == nil ? "Select a session" : "\(sessionUserMessages.count.formatted()) sent"
     }
@@ -609,6 +641,9 @@ struct SentMessagesBrowserColumn: View {
     }
     guard let summary = model.browseMessagesSummary else {
       return nil
+    }
+    if browseMessages.count != summary.results.count {
+      return "\(browseMessages.count.formatted()) visible of \(summary.totalMatches.formatted()) sent"
     }
     if summary.totalMatches > summary.results.count {
       return "\(summary.results.count.formatted()) of \(summary.totalMatches.formatted()) sent"
@@ -665,6 +700,9 @@ struct SentMessageResultBrowserRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
       HStack(spacing: 8) {
         Label(message.project, systemImage: "folder")
+        if let category = message.category, !category.isEmpty {
+          Text(category)
+        }
         Text(String(message.sessionId.prefix(8)))
           .font(.caption.monospacedDigit())
       }
@@ -696,43 +734,46 @@ struct InteractionBrowserColumn: View {
 
   var body: some View {
     VStack(spacing: 0) {
-      BrowserColumnHeader("Codex Interaction", subtitle: interactionSubtitle)
-      Divider()
-
-      if model.isDetailLoading {
-        ProgressView("Loading interaction")
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
-      } else if model.selectedSessionID == nil {
-        ContentUnavailableView(
-          model.showSessionBrowser ? "Select a Session" : "Select a Message",
-          systemImage: "sidebar.right",
-          description: Text(
-            model.showSessionBrowser
-              ? "Choose a session and sent message to inspect Codex's response."
-              : "Choose a sent message to inspect Codex's response."
+      Group {
+        if model.isDetailLoading {
+          ProgressView("Loading interaction")
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if model.selectedSessionID == nil {
+          ContentUnavailableView(
+            model.showSessionBrowser ? "Select a Session" : "Select a Message",
+            systemImage: "sidebar.right",
+            description: Text(
+              model.showSessionBrowser
+                ? "Choose a session and sent message to inspect Codex's response."
+                : "Choose a sent message to inspect Codex's response."
+            )
           )
-        )
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-      } else if model.selectedUserMessageIndex == nil {
-        ContentUnavailableView(
-          "Select a Message",
-          systemImage: "text.bubble",
-          description: Text("Choose a sent message to show the Codex interaction.")
-        )
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-      } else if let selectedInteraction {
-        ScrollView {
-          CodexInteractionView(interaction: selectedInteraction)
-            .padding(16)
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if model.selectedUserMessageIndex == nil {
+          ContentUnavailableView(
+            "Select a Message",
+            systemImage: "text.bubble",
+            description: Text("Choose a sent message to show the Codex interaction.")
+          )
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if let selectedInteraction {
+          ScrollView {
+            CodexInteractionView(interaction: selectedInteraction)
+              .padding(16)
+          }
+        } else {
+          ContentUnavailableView(
+            "Interaction Not Found",
+            systemImage: "exclamationmark.triangle",
+            description: Text("This message could not be matched to a Codex response.")
+          )
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-      } else {
-        ContentUnavailableView(
-          "Interaction Not Found",
-          systemImage: "exclamationmark.triangle",
-          description: Text("This message could not be matched to a Codex response.")
-        )
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
       }
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+      Divider()
+      BrowserColumnStatusBar("Codex Interaction", subtitle: interactionSubtitle)
     }
     .background(.background)
   }
@@ -741,10 +782,12 @@ struct InteractionBrowserColumn: View {
     guard let selectedInteraction else { return nil }
     let responseCount = selectedInteraction.assistantMessages.count
     let toolCount = selectedInteraction.toolEvents.count
+    let responseLabel = "\(responseCount.formatted()) \(responseCount == 1 ? "response" : "responses")"
     if toolCount > 0 {
-      return "\(responseCount.formatted()) response, \(toolCount.formatted()) tools"
+      let toolLabel = "\(toolCount.formatted()) \(toolCount == 1 ? "tool" : "tools")"
+      return "\(responseLabel) · \(toolLabel)"
     }
-    return "\(responseCount.formatted()) response"
+    return responseLabel
   }
 }
 
@@ -1269,7 +1312,27 @@ private enum BucketDateFormatters {
 }
 
 struct RepeatedPromptsView: View {
+  @EnvironmentObject private var model: AppModel
+
   let messages: [RepeatedUserMessage]
+
+  private var categoryOptions: [(category: String, count: Int)] {
+    Dictionary(grouping: messages.compactMap(\.category), by: { $0 })
+      .map { category, values in (category: category, count: values.count) }
+      .sorted { lhs, rhs in
+        lhs.category.localizedCaseInsensitiveCompare(rhs.category) == .orderedAscending
+      }
+  }
+
+  private var visibleMessages: [RepeatedUserMessage] {
+    messages.filter { message in
+      guard let category = message.category else { return true }
+      if model.isOperationalPromptCategory(category), !model.isOperationalPromptCategoryVisible(category) {
+        return false
+      }
+      return !model.hiddenRepeatedPromptCategories.contains(category)
+    }
+  }
 
   private func sessionLabel(for message: RepeatedUserMessage) -> String {
     "\(message.sessionCount.formatted()) \(message.sessionCount == 1 ? "session" : "sessions")"
@@ -1286,7 +1349,20 @@ struct RepeatedPromptsView: View {
         .frame(maxWidth: .infinity, minHeight: 110)
       } else {
         VStack(alignment: .leading, spacing: 10) {
-          ForEach(messages.prefix(5)) { message in
+          if !categoryOptions.isEmpty {
+            repeatedPromptCategoryFilters
+          }
+
+          if visibleMessages.isEmpty {
+            ContentUnavailableView(
+              "No Visible Repeated Prompts",
+              systemImage: "line.3.horizontal.decrease.circle",
+              description: Text("Turn on at least one grouped prompt family to show repeated prompts.")
+            )
+            .frame(maxWidth: .infinity, minHeight: 110)
+          }
+
+          ForEach(visibleMessages.prefix(5)) { message in
             VStack(alignment: .leading, spacing: 4) {
               HStack(alignment: .firstTextBaseline) {
                 Text("\(message.count.formatted()) repeats")
@@ -1334,6 +1410,42 @@ struct RepeatedPromptsView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
       }
+    }
+  }
+
+  private var repeatedPromptCategoryFilters: some View {
+    HStack(alignment: .center, spacing: 12) {
+      Text("Show")
+        .font(.caption)
+        .foregroundStyle(.secondary)
+      ForEach(categoryOptions, id: \.category) { option in
+        Toggle(
+          isOn: Binding(
+            get: { categoryFilterIsVisible(option.category) },
+            set: { setCategoryFilter(option.category, isVisible: $0) }
+          )
+        ) {
+          Text(option.category)
+        }
+        .toggleStyle(.checkbox)
+        .font(.caption)
+        .accessibilityIdentifier("repeated-prompt-category-filter")
+      }
+    }
+  }
+
+  private func categoryFilterIsVisible(_ category: String) -> Bool {
+    if model.isOperationalPromptCategory(category) {
+      return model.isOperationalPromptCategoryVisible(category)
+    }
+    return !model.hiddenRepeatedPromptCategories.contains(category)
+  }
+
+  private func setCategoryFilter(_ category: String, isVisible: Bool) {
+    if model.isOperationalPromptCategory(category) {
+      model.setOperationalMessageCategory(category, isVisible: isVisible)
+    } else {
+      model.setRepeatedPromptCategory(category, isVisible: isVisible)
     }
   }
 }
@@ -2408,38 +2520,6 @@ struct CompactDurationStat: View {
       return "\(String(format: "%.1f", milliseconds / 1000)) s"
     }
     return "\(Int(milliseconds).formatted()) ms"
-  }
-}
-
-struct StatusPill: View {
-  let status: AppModel.Status
-
-  var body: some View {
-    Label(status.label, systemImage: icon)
-      .labelStyle(.titleAndIcon)
-      .foregroundStyle(color)
-  }
-
-  private var icon: String {
-    switch status {
-    case .starting, .loading:
-      return "arrow.triangle.2.circlepath"
-    case .ready:
-      return "checkmark.circle"
-    case .failed:
-      return "exclamationmark.triangle"
-    }
-  }
-
-  private var color: Color {
-    switch status {
-    case .failed:
-      return .red
-    case .ready:
-      return .green
-    default:
-      return .secondary
-    }
   }
 }
 

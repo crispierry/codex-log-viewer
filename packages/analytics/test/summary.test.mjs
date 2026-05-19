@@ -228,7 +228,10 @@ test("summarizeParsedCorpus groups command-style prompt families", () => {
     message({ content: "Are all files committed?", timestamp: "2026-01-01T00:09:00.000Z" }, 10),
     message({ content: "Have all changes been pushed?", timestamp: "2026-01-01T00:10:00.000Z" }, 11),
     message({ content: "is repo clean?", timestamp: "2026-01-01T00:11:00.000Z" }, 12),
-    message({ content: "anything uncommitted?", timestamp: "2026-01-01T00:12:00.000Z" }, 13)
+    message({ content: "anything uncommitted?", timestamp: "2026-01-01T00:12:00.000Z" }, 13),
+    message({ content: "do a code review", timestamp: "2026-01-01T00:13:00.000Z" }, 14),
+    message({ content: "review the diff", timestamp: "2026-01-01T00:14:00.000Z" }, 15),
+    message({ content: "inspect the changes", timestamp: "2026-01-01T00:15:00.000Z" }, 16)
   ];
   const corpus = {
     files: messages.map((item) => ({
@@ -260,9 +263,9 @@ test("summarizeParsedCorpus groups command-style prompt families", () => {
   };
 
   const summary = summarizeParsedCorpus(corpus, { project: "sample-app" });
-  assert.equal(summary.totals.userMessages, 13);
-  assert.equal(summary.totals.uniqueUserMessages, 2);
-  assert.equal(summary.messagesByDay[0]?.uniqueCount, 2);
+  assert.equal(summary.totals.userMessages, 16);
+  assert.equal(summary.totals.uniqueUserMessages, 3);
+  assert.equal(summary.messagesByDay[0]?.uniqueCount, 3);
 
   const gitGroup = summary.repeatedUserMessages.find((group) => group.sample === "Git commands");
   assert.equal(gitGroup?.count, 10);
@@ -288,6 +291,16 @@ test("summarizeParsedCorpus groups command-style prompt families", () => {
     runAppGroup?.variants.map((variant) => variant.sample),
     ["OK open the app for me", "start the server", "run the app"]
   );
+
+  const codeReviewGroup = summary.repeatedUserMessages.find((group) => group.sample === "Code review");
+  assert.equal(codeReviewGroup?.count, 3);
+  assert.deepEqual(
+    codeReviewGroup?.variants.map((variant) => variant.sample),
+    ["inspect the changes", "review the diff", "do a code review"]
+  );
+
+  const search = searchMessages(corpus, { query: "", role: "user", submittedOnly: true });
+  assert.equal(search.results.find((result) => result.content === "do a code review")?.category, "Code review");
 });
 
 test("summarizeParsedCorpus groups short plan approval prompt families", () => {

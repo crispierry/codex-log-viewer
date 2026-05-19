@@ -224,6 +224,9 @@ export function searchMessages(corpus: ParsedCodexCorpus, options: MessageSearch
       timestamp: message.timestamp,
       role: message.role,
       sourceEvent: message.sourceEvent,
+      category: message.sourceEvent === "event_msg.user_message"
+        ? userMessageCategory(normalizeLiteralMessage(message.content))?.label
+        : undefined,
       snippet: snippetFor(message.content, query),
       content: message.content
     });
@@ -524,6 +527,9 @@ function userMessageCategory(normalized: string): { key: string; label: string }
   if (isRunAppMessage(commandText)) {
     return { key: "run-app", label: "Run app" };
   }
+  if (isCodeReviewMessage(commandText)) {
+    return { key: "code-review", label: "Code review" };
+  }
   return undefined;
 }
 
@@ -582,6 +588,17 @@ function isRunAppMessage(normalized: string): boolean {
     /^(run|start|restart|launch|open) (the )?(app|application|desktop app|mac app|macos app|native app|packaged app|server|local server|dev server|development server)\b/.test(normalized);
   const devServerCommand = /^(run|start|restart) (npm run dev|dev|desktop|local app)\b/.test(normalized);
   return appLaunchCommand || devServerCommand;
+}
+
+function isCodeReviewMessage(normalized: string): boolean {
+  if (normalized.length > 160) {
+    return false;
+  }
+  const reviewCommand =
+    /^(code review|do a code review|run a code review|review code|review the code|review this code|review the diff|review the changes)\b/.test(normalized);
+  const reviewTarget =
+    /^(review|inspect|audit) (the )?(code|diff|changes|change set|pull request|pr)\b/.test(normalized);
+  return reviewCommand || reviewTarget;
 }
 
 function repeatedMessageId(normalized: string): string {

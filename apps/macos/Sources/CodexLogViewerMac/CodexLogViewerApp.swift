@@ -5,10 +5,11 @@ import SwiftUI
 @main
 struct CodexLogViewerApp: App {
   @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+  @Environment(\.openWindow) private var openWindow
   @StateObject private var model = AppModel()
 
   var body: some Scene {
-    WindowGroup("Codex Log Viewer") {
+    WindowGroup("Codex Log Viewer", id: AppWindowID.main) {
       if AppRuntime.isSmokeMode {
         EmptyView()
       } else {
@@ -28,8 +29,60 @@ struct CodexLogViewerApp: App {
         .accessibilityIdentifier("about-menu-item")
       }
 
-      CommandGroup(replacing: .newItem) {}
+      CommandGroup(replacing: .newItem) {
+        Button("New Tab") {
+          appDelegate.openViewerTab {
+            openWindow(id: AppWindowID.main)
+          }
+        }
+        .keyboardShortcut("t", modifiers: .command)
+        .accessibilityIdentifier("new-tab-menu-item")
+      }
+
+      CommandGroup(after: .sidebar) {
+        Toggle(
+          "Show Sessions",
+          isOn: Binding(
+            get: { model.showSessionBrowser },
+            set: { model.setSessionBrowserVisible($0) }
+          )
+        )
+        .accessibilityIdentifier("view-show-sessions-menu-item")
+
+        Divider()
+
+        Menu("Operational Messages") {
+          Toggle(
+            "All",
+            isOn: Binding(
+              get: { model.areAllOperationalMessageCategoriesVisible },
+              set: { model.setAllOperationalMessageCategoriesVisible($0) }
+            )
+          )
+          .accessibilityIdentifier("view-operational-all-filter")
+
+          Divider()
+
+          ForEach(model.operationalMessageCategoryOptions, id: \.self) { category in
+            Toggle(
+              category,
+              isOn: Binding(
+                get: { model.isOperationalPromptCategoryVisible(category) },
+                set: { model.setOperationalMessageCategory(category, isVisible: $0) }
+              )
+            )
+            .accessibilityIdentifier("view-operational-message-filter")
+          }
+        }
+      }
+
       CommandMenu("Logs") {
+        Button("Status: \(model.status.label)") {}
+          .disabled(true)
+          .accessibilityIdentifier("status-menu-item")
+
+        Divider()
+
         Button("Refresh") {
           model.refresh(force: true)
         }
@@ -86,17 +139,41 @@ struct CodexLogViewerApp: App {
           model.exportSummary(.json)
         }
         .keyboardShortcut("e", modifiers: .command)
+        .accessibilityIdentifier("export-json-menu-item")
 
         Button("Export CSV...") {
           model.exportSummary(.csv)
         }
         .keyboardShortcut("e", modifiers: [.command, .shift])
+        .accessibilityIdentifier("export-csv-menu-item")
       }
     }
   }
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+  private var tabBarObservers: [NSObjectProtocol] = []
+
+  func openViewerTab(openWindow: @escaping () -> Void) {
+    let sourceWindow = preferredViewerWindow()
+    let existingWindowIDs = Set(NSApp.windows.filter(isViewerWindow).map(ObjectIdentifier.init))
+
+    openWindow()
+
+    guard let sourceWindow else {
+      DispatchQueue.main.async { [weak self] in
+        self?.syncViewerTabBars()
+      }
+      return
+    }
+
+    attachNewViewerWindow(
+      asTabOf: sourceWindow,
+      excluding: existingWindowIDs,
+      attemptsRemaining: 8
+    )
+  }
+
   func applicationDidFinishLaunching(_ notification: Notification) {
     if AppRuntime.isSmokeMode {
       Task {
@@ -107,13 +184,135 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       return
     }
 
+    installTabBarVisibilityObservers()
     NSApp.setActivationPolicy(.regular)
     NSApp.activate(ignoringOtherApps: true)
   }
 
   func applicationWillTerminate(_ notification: Notification) {
+    removeTabBarVisibilityObservers()
     LocalLogEngineServer.shared.stop()
   }
+
+  private func installTabBarVisibilityObservers() {
+    NSWindow.allowsAutomaticWindowTabbing = true
+
+    let center = NotificationCenter.default
+    let notifications: [Notification.Name] = [
+      NSApplication.didUpdateNotification,
+      NSWindow.didBecomeKeyNotification,
+      NSWindow.didBecomeMainNotification,
+      NSWindow.willCloseNotification
+    ]
+    tabBarObservers = notifications.map { notificationName in
+      center.addObserver(forName: notificationName, object: nil, queue: .main) { [weak self] _ in
+        self?.syncViewerTabBars()
+      }
+    }
+
+    DispatchQueue.main.async { [weak self] in
+      self?.syncViewerTabBars()
+    }
+  }
+
+  private func removeTabBarVisibilityObservers() {
+    let center = NotificationCenter.default
+    for observer in tabBarObservers {
+      center.removeObserver(observer)
+    }
+    tabBarObservers.removeAll()
+  }
+
+  private func syncViewerTabBars() {
+    var syncedTabGroupIDs = Set<ObjectIdentifier>()
+
+    for window in NSApp.windows where isViewerWindow(window) {
+      window.tabbingMode = .preferred
+
+      guard let tabGroup = window.tabGroup else {
+        continue
+      }
+
+      let tabGroupID = ObjectIdentifier(tabGroup)
+      guard syncedTabGroupIDs.insert(tabGroupID).inserted else {
+        continue
+      }
+
+      syncTabBarVisibility(for: tabGroup, fallbackWindow: window)
+    }
+  }
+
+  private func syncTabBarVisibility(for tabGroup: NSWindowTabGroup, fallbackWindow: NSWindow) {
+    let viewerWindowCount = tabGroup.windows.filter(isViewerWindow).count
+    let shouldShowTabBar = viewerWindowCount > 1
+
+    if tabGroup.isTabBarVisible != shouldShowTabBar {
+      (tabGroup.selectedWindow ?? fallbackWindow).toggleTabBar(nil)
+    }
+  }
+
+  private func attachNewViewerWindow(
+    asTabOf sourceWindow: NSWindow,
+    excluding existingWindowIDs: Set<ObjectIdentifier>,
+    attemptsRemaining: Int
+  ) {
+    if let newWindow = NSApp.windows.first(where: { window in
+      isViewerWindow(window)
+        && !existingWindowIDs.contains(ObjectIdentifier(window))
+    }) {
+      if !windowsShareTabGroup(newWindow, sourceWindow) {
+        sourceWindow.addTabbedWindow(newWindow, ordered: .above)
+      }
+      newWindow.makeKeyAndOrderFront(nil)
+      syncViewerTabBars()
+      return
+    }
+
+    guard attemptsRemaining > 0 else {
+      syncViewerTabBars()
+      return
+    }
+
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self, weak sourceWindow] in
+      guard let self, let sourceWindow else {
+        return
+      }
+      self.attachNewViewerWindow(
+        asTabOf: sourceWindow,
+        excluding: existingWindowIDs,
+        attemptsRemaining: attemptsRemaining - 1
+      )
+    }
+  }
+
+  private func windowsShareTabGroup(_ firstWindow: NSWindow, _ secondWindow: NSWindow) -> Bool {
+    guard let firstTabGroup = firstWindow.tabGroup,
+      let secondTabGroup = secondWindow.tabGroup
+    else {
+      return false
+    }
+
+    return firstTabGroup === secondTabGroup
+  }
+
+  private func preferredViewerWindow() -> NSWindow? {
+    [NSApp.keyWindow, NSApp.mainWindow].compactMap { window in
+      guard let window, isViewerWindow(window) else {
+        return nil
+      }
+      return window
+    }.first ?? NSApp.windows.first(where: isViewerWindow)
+  }
+
+  private func isViewerWindow(_ window: NSWindow) -> Bool {
+    ["Codex Log Viewer", "Codex Logs"].contains(window.title)
+      && window.canBecomeMain
+      && !(window is NSPanel)
+  }
+}
+
+enum AppWindowID {
+  static let main = "main"
 }
 
 enum AppRuntime {
