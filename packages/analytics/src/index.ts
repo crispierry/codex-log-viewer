@@ -8,7 +8,8 @@ export {
   projectsFromCorpus,
   searchMessages,
   summarizeParsedCorpus,
-  summarizeProject
+  summarizeProject,
+  userMessageCategoryLabel
 } from "./summary.js";
 export { addUsage, emptyUsage, usageFromTotal } from "./usage.js";
 export type {

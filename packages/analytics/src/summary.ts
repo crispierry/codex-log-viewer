@@ -150,6 +150,7 @@ export function searchMessages(corpus: ParsedCodexCorpus, options: MessageSearch
   const sessionFilter = options.sessionId?.trim();
   const filePathFilter = options.filePath?.trim();
   const dateKeyFilter = options.dateKey?.trim();
+  const hiddenCategories = new Set((options.hiddenCategories ?? []).map((category) => category.trim()).filter(Boolean));
 
   const range = dateRange(options);
   const sessionContexts = new Map<string, ReturnType<typeof projectContextForFile>>();
@@ -202,6 +203,13 @@ export function searchMessages(corpus: ParsedCodexCorpus, options: MessageSearch
       continue;
     }
 
+    const category = message.sourceEvent === "event_msg.user_message"
+      ? userMessageCategoryLabel(message.content)
+      : undefined;
+    if (category && hiddenCategories.has(category)) {
+      continue;
+    }
+
     matches.push({
       id: [
         message.filePath,
@@ -224,9 +232,7 @@ export function searchMessages(corpus: ParsedCodexCorpus, options: MessageSearch
       timestamp: message.timestamp,
       role: message.role,
       sourceEvent: message.sourceEvent,
-      category: message.sourceEvent === "event_msg.user_message"
-        ? userMessageCategory(normalizeLiteralMessage(message.content))?.label
-        : undefined,
+      category,
       snippet: snippetFor(message.content, query),
       content: message.content
     });
@@ -513,6 +519,10 @@ function userMessageGroup(message: string): {
 
 function normalizeLiteralMessage(message: string): string {
   return message.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+export function userMessageCategoryLabel(message: string): string | undefined {
+  return userMessageCategory(normalizeLiteralMessage(message))?.label;
 }
 
 function userMessageCategory(normalized: string): { key: string; label: string } | undefined {

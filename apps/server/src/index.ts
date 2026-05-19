@@ -11,6 +11,7 @@ import {
   summaryToCsv,
   summaryToJson,
   summarizeParsedCorpus,
+  userMessageCategoryLabel,
   type LoadedCorpus,
   type ParseCacheMetadata,
   type SummaryOptions
@@ -141,7 +142,12 @@ async function handleRequest(
         lineCount: file.lineCount
       },
       turns: file.turns,
-      messages: file.messages,
+      messages: file.messages.map((message) => ({
+        ...message,
+        category: message.sourceEvent === "event_msg.user_message"
+          ? userMessageCategoryLabel(message.content)
+          : undefined
+      })),
       tokenUsage: file.tokenUsage,
       taskTimings: file.taskTimings,
       toolEvents: file.toolEvents,
@@ -164,6 +170,7 @@ async function handleRequest(
         filePath: url.searchParams.get("filePath") ?? undefined,
         dateKey: url.searchParams.get("dateKey") ?? undefined,
         submittedOnly: url.searchParams.get("submittedOnly") === "true",
+        hiddenCategories: url.searchParams.getAll("hiddenCategory"),
         limit
       })
     }, loaded.cache));

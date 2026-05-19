@@ -6,25 +6,20 @@ import SwiftUI
 struct CodexLogViewerApp: App {
   @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
   @Environment(\.openWindow) private var openWindow
-  @StateObject private var model = AppModel()
+  @FocusedValue(\.appModel) private var focusedModel
 
   var body: some Scene {
     WindowGroup("Codex Log Viewer", id: AppWindowID.main) {
       if AppRuntime.isSmokeMode {
         EmptyView()
       } else {
-        RootView()
-          .environmentObject(model)
-          .task {
-            model.startIfNeeded()
-          }
-          .frame(minWidth: 1360, minHeight: 760)
+        AppWindowRootView()
       }
     }
     .commands {
       CommandGroup(replacing: .appInfo) {
         Button("About Codex Log Viewer") {
-          model.showAboutBox()
+          AppModel.showAboutBox()
         }
         .accessibilityIdentifier("about-menu-item")
       }
@@ -40,114 +35,164 @@ struct CodexLogViewerApp: App {
       }
 
       CommandGroup(after: .sidebar) {
-        Toggle(
-          "Show Sessions",
-          isOn: Binding(
-            get: { model.showSessionBrowser },
-            set: { model.setSessionBrowserVisible($0) }
-          )
-        )
-        .accessibilityIdentifier("view-show-sessions-menu-item")
-
-        Divider()
-
-        Menu("Operational Messages") {
+        if let model = focusedModel {
           Toggle(
-            "All",
+            "Show Sessions",
             isOn: Binding(
-              get: { model.areAllOperationalMessageCategoriesVisible },
-              set: { model.setAllOperationalMessageCategoriesVisible($0) }
+              get: { model.showSessionBrowser },
+              set: { model.setSessionBrowserVisible($0) }
             )
           )
-          .accessibilityIdentifier("view-operational-all-filter")
+          .accessibilityIdentifier("view-show-sessions-menu-item")
 
           Divider()
 
-          ForEach(model.operationalMessageCategoryOptions, id: \.self) { category in
+          Menu("Operational Messages") {
             Toggle(
-              category,
+              "All",
               isOn: Binding(
-                get: { model.isOperationalPromptCategoryVisible(category) },
-                set: { model.setOperationalMessageCategory(category, isVisible: $0) }
+                get: { model.areAllOperationalMessageCategoriesVisible },
+                set: { model.setAllOperationalMessageCategoriesVisible($0) }
               )
             )
-            .accessibilityIdentifier("view-operational-message-filter")
+            .accessibilityIdentifier("view-operational-all-filter")
+
+            Divider()
+
+            ForEach(model.operationalMessageCategoryOptions, id: \.self) { category in
+              Toggle(
+                category,
+                isOn: Binding(
+                  get: { model.isOperationalPromptCategoryVisible(category) },
+                  set: { model.setOperationalMessageCategory(category, isVisible: $0) }
+                )
+              )
+              .accessibilityIdentifier("view-operational-message-filter")
+            }
           }
+        } else {
+          Button("Show Sessions") {}
+            .disabled(true)
+            .accessibilityIdentifier("view-show-sessions-menu-item")
         }
       }
 
       CommandMenu("Logs") {
-        Button("Status: \(model.status.label)") {}
-          .disabled(true)
-          .accessibilityIdentifier("status-menu-item")
+        if let model = focusedModel {
+          Button("Status: \(model.status.label)") {}
+            .disabled(true)
+            .accessibilityIdentifier("status-menu-item")
 
-        Divider()
+          Divider()
 
-        Button("Refresh") {
-          model.refresh(force: true)
-        }
-        .keyboardShortcut("r", modifiers: .command)
+          Button("Refresh") {
+            model.refresh(force: true)
+          }
+          .keyboardShortcut("r", modifiers: .command)
 
-        Button("Rebuild Local Cache") {
-          model.rebuildLocalCache()
-        }
-        .keyboardShortcut("r", modifiers: [.command, .shift])
+          Button("Rebuild Local Cache") {
+            model.rebuildLocalCache()
+          }
+          .keyboardShortcut("r", modifiers: [.command, .shift])
 
-        Button("Find in Messages") {
-          model.focusMessageSearch()
-        }
-        .keyboardShortcut("f", modifiers: .command)
+          Button("Find in Messages") {
+            model.focusMessageSearch()
+          }
+          .keyboardShortcut("f", modifiers: .command)
 
-        Button("Search Messages") {
-          model.searchMessages()
-        }
-        .keyboardShortcut(.return, modifiers: .command)
+          Button("Search Messages") {
+            model.searchMessages()
+          }
+          .keyboardShortcut(.return, modifiers: .command)
 
-        Divider()
+          Divider()
 
-        Button(model.sourceMenuLabel) {}
-          .disabled(true)
+          Button(model.sourceMenuLabel) {}
+            .disabled(true)
 
-        Button("Choose Codex Log Location...") {
-          model.chooseSourcePaths()
-        }
-        .keyboardShortcut("o", modifiers: .command)
-        .accessibilityIdentifier("source-picker-menu-item")
+          Button("Choose Codex Log Location...") {
+            model.chooseSourcePaths()
+          }
+          .keyboardShortcut("o", modifiers: .command)
+          .accessibilityIdentifier("source-picker-menu-item")
 
-        Button("Use Default Codex Log Locations") {
-          model.resetSourcePaths()
-        }
-        .accessibilityIdentifier("source-default-menu-item")
+          Button("Use Default Codex Log Locations") {
+            model.resetSourcePaths()
+          }
+          .accessibilityIdentifier("source-default-menu-item")
 
-        Menu("Recent Log Locations") {
-          if model.recentSourcePaths.isEmpty {
-            Button("No Recent Locations") {}
-              .disabled(true)
-          } else {
-            ForEach(model.recentSourcePaths, id: \.self) { path in
-              Button(path) {
-                model.useRecentSourcePath(path)
+          Menu("Recent Log Locations") {
+            if model.recentSourcePaths.isEmpty {
+              Button("No Recent Locations") {}
+                .disabled(true)
+            } else {
+              ForEach(model.recentSourcePaths, id: \.self) { path in
+                Button(path) {
+                  model.useRecentSourcePath(path)
+                }
               }
             }
           }
-        }
-        .accessibilityIdentifier("recent-sources-menu")
+          .accessibilityIdentifier("recent-sources-menu")
 
-        Divider()
+          Divider()
 
-        Button("Export Redacted JSON...") {
-          model.exportSummary(.json)
-        }
-        .keyboardShortcut("e", modifiers: .command)
-        .accessibilityIdentifier("export-json-menu-item")
+          Button("Export Redacted JSON...") {
+            model.exportSummary(.json)
+          }
+          .keyboardShortcut("e", modifiers: .command)
+          .accessibilityIdentifier("export-json-menu-item")
 
-        Button("Export CSV...") {
-          model.exportSummary(.csv)
+          Button("Export CSV...") {
+            model.exportSummary(.csv)
+          }
+          .keyboardShortcut("e", modifiers: [.command, .shift])
+          .accessibilityIdentifier("export-csv-menu-item")
+        } else {
+          Button("Status: Unavailable") {}
+            .disabled(true)
+            .accessibilityIdentifier("status-menu-item")
         }
-        .keyboardShortcut("e", modifiers: [.command, .shift])
-        .accessibilityIdentifier("export-csv-menu-item")
+      }
+
+      CommandGroup(replacing: .help) {
+        Button("Codex Log Viewer Help") {
+          AppModel.showHelpBox()
+        }
+        .keyboardShortcut("?", modifiers: .command)
+        .accessibilityIdentifier("help-menu-item")
+
+        Button("Open Usage Guide") {
+          AppModel.openUsageGuide()
+        }
+        .accessibilityIdentifier("usage-guide-menu-item")
       }
     }
+  }
+}
+
+private struct AppWindowRootView: View {
+  @StateObject private var model = AppModel()
+
+  var body: some View {
+    RootView()
+      .environmentObject(model)
+      .focusedValue(\.appModel, model)
+      .task {
+        model.startIfNeeded()
+      }
+      .frame(minWidth: 1360, minHeight: 760)
+  }
+}
+
+private struct AppModelFocusedValueKey: FocusedValueKey {
+  typealias Value = AppModel
+}
+
+private extension FocusedValues {
+  var appModel: AppModel? {
+    get { self[AppModelFocusedValueKey.self] }
+    set { self[AppModelFocusedValueKey.self] = newValue }
   }
 }
 

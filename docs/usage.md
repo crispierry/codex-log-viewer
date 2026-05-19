@@ -31,6 +31,7 @@ From the app you can:
 - review repeated user prompts for the current filters
 - export redacted JSON or aggregate CSV
 - inspect session messages, token events, warnings, and unknown events
+- use `Help > Codex Log Viewer Help` for a quick native guide and `Help > Open Usage Guide` for the full usage document
 
 To build a packaged app from source:
 
@@ -53,9 +54,9 @@ Browse lists prompts you typed and submitted for the selected project without re
 
 In Browse, the sidebar selects the project, the main Messages column lists submitted prompts for the current project and date filters, and the Codex Interaction column shows the selected message split into user message, Codex response, tool activity, system/developer context, and token/timing sections. Use `View > Show Sessions` when you want an extra session column before the message list.
 
-Use `View > Operational Messages` to hide or show all operational prompt families at once, or control families independently, such as `Git commands`, `Run app`, and `Code review`.
+Use `View > Operational Messages` to hide or show all operational prompt families at once, or control families independently, such as `Git commands`, `Run app`, and `Code review`. The same operational filters apply in Browse, optional session-message lists, Search results, and repeated prompts.
 
-The native macOS tab bar is hidden while there is only one viewer tab. Use `File > New Tab` when you want another app tab; the tab bar appears once multiple tabs are open.
+The native macOS tab bar is hidden while there is only one viewer tab. Use `File > New Tab` when you want another app tab; each tab keeps its own project, date, filter, search, and selection state, and the tab bar appears once multiple tabs are open.
 
 Select a search result to copy its session id, project, or a whitespace-normalized snippet with local home paths shortened. Use `Show Conversation` to jump from the result into Browse.
 

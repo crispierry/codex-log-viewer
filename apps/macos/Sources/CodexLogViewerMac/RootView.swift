@@ -529,6 +529,11 @@ struct SentMessagesBrowserColumn: View {
 
   private var sessionUserMessages: [(offset: Int, element: MessageDetail)] {
     guard let detail = model.selectedSessionDetail else { return [] }
+    return model.visibleUserMessageOffsets(in: detail, dateKey: model.selectedSessionDateKey)
+  }
+
+  private var sessionAllUserMessages: [(offset: Int, element: MessageDetail)] {
+    guard let detail = model.selectedSessionDetail else { return [] }
     return SessionInteractionBuilder.userMessageOffsets(in: detail, dateKey: model.selectedSessionDateKey)
   }
 
@@ -570,9 +575,13 @@ struct SentMessagesBrowserColumn: View {
       .frame(maxWidth: .infinity, maxHeight: .infinity)
     } else if sessionUserMessages.isEmpty {
       ContentUnavailableView(
-        "No Sent Messages",
+        sessionAllUserMessages.isEmpty ? "No Sent Messages" : "No Visible Messages",
         systemImage: "paperplane",
-        description: Text("This session has no submitted user messages.")
+        description: Text(
+          sessionAllUserMessages.isEmpty
+            ? "This session has no submitted user messages."
+            : "Turn on at least one operational message family in the View menu."
+        )
       )
       .frame(maxWidth: .infinity, maxHeight: .infinity)
     } else {
@@ -634,7 +643,13 @@ struct SentMessagesBrowserColumn: View {
 
   private var statusSubtitle: String? {
     if model.showSessionBrowser {
-      return model.selectedSessionID == nil ? "Select a session" : "\(sessionUserMessages.count.formatted()) sent"
+      if model.selectedSessionID == nil {
+        return "Select a session"
+      }
+      if sessionUserMessages.count != sessionAllUserMessages.count {
+        return "\(sessionUserMessages.count.formatted()) visible of \(sessionAllUserMessages.count.formatted()) sent"
+      }
+      return "\(sessionUserMessages.count.formatted()) sent"
     }
     if model.isBrowseMessagesLoading && browseMessages.isEmpty {
       return "Loading"
@@ -1477,7 +1492,11 @@ struct MessageSearchView: View {
   @FocusState private var isSearchFocused: Bool
 
   private var selectedSearchResult: MessageSearchResult? {
-    model.searchSummary?.results.first { $0.id == model.selectedSearchResultID }
+    model.searchResults.first { $0.id == model.selectedSearchResultID }
+  }
+
+  private var searchResults: [MessageSearchResult] {
+    model.searchResults
   }
 
   var body: some View {
@@ -1554,20 +1573,20 @@ struct MessageSearchView: View {
         }
 
         if let search = model.searchSummary {
-          Text(searchSummaryLabel(search))
+          Text(searchSummaryLabel(search, visibleCount: searchResults.count))
             .font(.caption)
             .foregroundStyle(.secondary)
 
-          if search.results.isEmpty {
+          if searchResults.isEmpty {
             ContentUnavailableView(
               "No Matches",
               systemImage: "magnifyingglass",
-              description: Text("Try another phrase or broaden the current filters.")
+              description: Text(messageSearchEmptyDescription(search))
             )
             .frame(maxWidth: .infinity, minHeight: 220)
             .accessibilityIdentifier("message-search-empty-state")
           } else {
-            Table(search.results, selection: $model.selectedSearchResultID) {
+            Table(searchResults, selection: $model.selectedSearchResultID) {
               TableColumn("Date/Time") { result in
                 Text(compactFormattedDate(result.timestamp))
                   .lineLimit(1)
@@ -1612,9 +1631,20 @@ struct MessageSearchView: View {
     }
   }
 
-  private func searchSummaryLabel(_ search: MessageSearchSummary) -> String {
-    let count = search.totalMatches.formatted()
-    return "\(count) matches in \(search.project)"
+  private func searchSummaryLabel(_ search: MessageSearchSummary, visibleCount: Int) -> String {
+    if visibleCount != search.results.count {
+      return "\(visibleCount.formatted()) visible of \(search.totalMatches.formatted()) matches in \(search.project)"
+    }
+    return "\(search.totalMatches.formatted()) matches in \(search.project)"
+  }
+
+  private func messageSearchEmptyDescription(_ search: MessageSearchSummary) -> String {
+    if !model.areAllOperationalMessageCategoriesVisible && model.messageRoleFilter == .user {
+      return "Turn on at least one operational message family in the View menu."
+    }
+    return search.results.isEmpty
+      ? "Try another phrase or broaden the current filters."
+      : "Turn on at least one operational message family in the View menu."
   }
 }
 
@@ -1974,7 +2004,7 @@ struct DetailPane: View {
   @EnvironmentObject private var model: AppModel
 
   private var selectedSearchResult: MessageSearchResult? {
-    model.searchSummary?.results.first { $0.id == model.selectedSearchResultID }
+    model.searchResults.first { $0.id == model.selectedSearchResultID }
   }
 
   var body: some View {
@@ -2100,6 +2130,8 @@ struct SearchResultInspector: View {
 }
 
 struct SessionUserMessagesInspector: View {
+  @EnvironmentObject private var model: AppModel
+
   let detail: SessionDetail
   var highlightedMessageIndex: Int?
   @State private var selectedUserMessageIndex: Int?
@@ -2109,6 +2141,10 @@ struct SessionUserMessagesInspector: View {
   }
 
   private var userMessages: [(offset: Int, element: MessageDetail)] {
+    model.visibleUserMessageOffsets(in: detail)
+  }
+
+  private var allUserMessages: [(offset: Int, element: MessageDetail)] {
     SessionInteractionBuilder.userMessageOffsets(in: detail)
   }
 
@@ -2134,13 +2170,9 @@ struct SessionUserMessagesInspector: View {
 
         if userMessages.isEmpty {
           ContentUnavailableView(
-            automationMessages.isEmpty ? "No User Messages" : "No Sent Messages",
+            emptyUserMessagesTitle,
             systemImage: "text.bubble",
-            description: Text(
-              automationMessages.isEmpty
-                ? "This session has no submitted user messages."
-                : "This session was started by automation."
-            )
+            description: Text(emptyUserMessagesDescription)
           )
           .frame(maxWidth: .infinity, minHeight: 220)
         } else {
@@ -2197,11 +2229,30 @@ struct SessionUserMessagesInspector: View {
 
   private var sessionMessageCountLabel: String {
     let sent = "\(userMessages.count.formatted()) sent"
+    let visiblePrefix = userMessages.count == allUserMessages.count
+      ? sent
+      : "\(userMessages.count.formatted()) visible of \(allUserMessages.count.formatted()) sent"
     guard !automationMessages.isEmpty else {
-      return "\(sent) in this session"
+      return "\(visiblePrefix) in this session"
     }
     let automationLabel = automationMessages.count == 1 ? "automation" : "automations"
-    return "\(sent), \(automationMessages.count.formatted()) \(automationLabel) in this session"
+    return "\(visiblePrefix), \(automationMessages.count.formatted()) \(automationLabel) in this session"
+  }
+
+  private var emptyUserMessagesTitle: String {
+    if allUserMessages.isEmpty {
+      return automationMessages.isEmpty ? "No User Messages" : "No Sent Messages"
+    }
+    return "No Visible Messages"
+  }
+
+  private var emptyUserMessagesDescription: String {
+    if allUserMessages.isEmpty {
+      return automationMessages.isEmpty
+        ? "This session has no submitted user messages."
+        : "This session was started by automation."
+    }
+    return "Turn on at least one operational message family in the View menu."
   }
 
   private func userMessageRow(message: MessageDetail, isSelected: Bool) -> some View {

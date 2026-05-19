@@ -11,6 +11,8 @@ const requiredIdentifiers = [
   "refresh-button",
   "about-menu-item",
   "new-tab-menu-item",
+  "help-menu-item",
+  "usage-guide-menu-item",
   "status-menu-item",
   "export-json-menu-item",
   "export-csv-menu-item",

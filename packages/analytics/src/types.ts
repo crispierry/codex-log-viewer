@@ -111,6 +111,7 @@ export interface MessageSearchOptions extends SummaryOptions {
   filePath?: string;
   dateKey?: string;
   submittedOnly?: boolean;
+  hiddenCategories?: string[];
   limit?: number;
 }
 

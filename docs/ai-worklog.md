@@ -249,11 +249,43 @@ No raw logs or user session content were added. This change only affects native 
 - Ran `npm run privacy:scan`.
 - Ran `npm run package:mac`.
 - Relaunched the packaged macOS app.
-- Visually checked that the top-right toolbar utility cluster was removed.
+
+## 2026-05-19 - Replace unavailable native Help fallback
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> Screenshot showed the native Help dialog: "Help isn't available for Codex Log Viewer."
+
+> Okay so why is the help menu there? Is it a requirement? If it's a requirement can we please write a little help?
+
+### Interpreted Intent
+
+The user wanted the Help menu to stop opening macOS's default unavailable-help fallback and instead provide useful in-app guidance.
+
+### Response / Work Done
+
+- Replaced the default macOS Help command with custom `Help > Codex Log Viewer Help` and `Help > Open Usage Guide` menu items.
+- Added a small native help panel summarizing Browse, optional Sessions, operational-message filters, source selection, exports, and local-first privacy behavior.
+- Tightened the help panel into a brief practical guide covering Browse, filters, Search, Audit, source selection, exports, and privacy.
+- Added local usage-guide discovery with a GitHub docs fallback.
+- Added accessibility coverage for the new Help menu items.
+- Updated usage docs to mention the Help menu.
+
+### Privacy Notes
+
+No raw logs or session content were added. This change only affects native menu behavior and documentation.
+
+### Verification
+
 - Ran `npm run check:mac-accessibility`.
+- Ran `npm run build:mac`.
 - Ran `npm run privacy:scan`.
 - Ran `npm run package:mac`.
 - Relaunched the packaged macOS app.
+- Opened `Help > Codex Log Viewer Help` in the packaged app and confirmed it shows the new help panel.
 
 ## 2026-05-19 - Align date range popover fields
 
@@ -286,6 +318,52 @@ No raw logs or session content were added. This change only affects native layou
 - Ran `npm run package:mac`.
 - Relaunched the packaged macOS app.
 - Opened the Activity Range popover and visually checked the aligned custom date fields.
+
+## 2026-05-19 - Apply operational filters consistently and isolate tabs
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> Let's fix these two P2s and operational messages do not apply to the search section
+>
+> P2: Operational filters do not apply when Sessions are shown.
+> View > Operational Messages filters model.browseMessages, but the Messages column switches to raw session messages when Show Sessions is on. So unchecking Git commands, Run app, or Code review has no effect in that mode. See RootView.swift (line 530) and RootView.swift (line 542); the actual filter only lives in AppModel.swift (line 991).
+>
+> P2: New tabs share the same app state, so they are duplicate mirrors.
+> AppModel is owned once at the app level and injected into every WindowGroup instance. If the user creates a second tab, changing project/date/message/filter in one tab changes the other too. That makes the tab feature feel native visually but not functionally useful. See CodexLogViewerApp.swift (line 9), CodexLogViewerApp.swift (line 17), and CodexLogViewerApp.swift (line 33).
+>
+> Open Question
+> Should View > Operational Messages also filter the Search section, or only Browse and repeated prompts? Right now Search still returns operational messages.
+
+### Interpreted Intent
+
+The user wanted the operational-message filters to apply everywhere users encounter submitted messages, and wanted native tabs to be useful instead of mirrored copies of the same state.
+
+### Response / Work Done
+
+- Added shared operational category metadata for session detail messages so session-mode Browse can filter `Git commands`, `Run app`, and `Code review`.
+- Applied operational filters to Search through the local API and kept the native Search selection in sync when filters hide the selected result.
+- Updated Browse session-mode empty states and footer counts to distinguish hidden operational messages from truly empty sessions.
+- Moved `AppModel` ownership into each native window/tab and routed menu commands through the focused tab's model.
+- Updated usage docs to describe consistent operational filtering and independent tab state.
+- Added analytics and server tests for hidden operational categories and session-detail category metadata.
+
+### Privacy Notes
+
+No raw logs or unsanitized session content were added. New fixtures use synthetic local paths and short synthetic prompts.
+
+### Verification
+
+- Ran `npm test`.
+- Ran `npm run lint`.
+- Ran `npm run build:mac`.
+- Ran `npm run check:mac-accessibility`.
+- Ran `npm run privacy:scan`.
+- Ran `npm run package:mac`.
+- Relaunched the packaged macOS app.
+- Queried the packaged app menus to confirm focused-window `View` and `Logs` commands were present after the per-tab model refactor.
 
 ## 2026-05-19 - Prevent future date filters
 
@@ -380,3 +458,8 @@ No raw logs or session content were added. This change only affects native app c
 ### Verification
 
 - Ran `npm run build:mac`.
+- Ran `npm run check:mac-accessibility`.
+- Ran `npm run privacy:scan`.
+- Ran `npm run package:mac`.
+- Relaunched the packaged macOS app.
+- Visually checked that the top-right toolbar utility cluster was removed.

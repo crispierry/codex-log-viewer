@@ -149,6 +149,70 @@ test("message search can limit browse mode to submitted user messages through th
   }
 });
 
+test("message search and session detail expose operational prompt categories", async () => {
+  const tempDir = await mkdtemp(`${tmpdir()}/codex-log-viewer-operational-categories-`);
+  const fixture = resolve(tempDir, "operational-categories.jsonl");
+
+  await writeFile(
+    fixture,
+    [
+      JSON.stringify({
+        timestamp: "2026-04-27T20:00:00.000Z",
+        type: "session_meta",
+        payload: {
+          id: "operational-categories-session",
+          timestamp: "2026-04-27T20:00:00.000Z",
+          cwd: "/Users/example/projects/sample-app"
+        }
+      }),
+      JSON.stringify({
+        timestamp: "2026-04-27T20:00:01.000Z",
+        type: "event_msg",
+        payload: {
+          type: "user_message",
+          message: "commit"
+        }
+      }),
+      JSON.stringify({
+        timestamp: "2026-04-27T20:00:02.000Z",
+        type: "event_msg",
+        payload: {
+          type: "user_message",
+          message: "make the sidebar clearer"
+        }
+      })
+    ].join("\n") + "\n",
+    "utf8"
+  );
+
+  const server = await startServer({ port: 0, authToken: "test-token", paths: [fixture] });
+  const headers = { authorization: "Bearer test-token" };
+
+  try {
+    const search = await fetch(`${server.url}/api/messages/search?role=user&submittedOnly=true`, { headers });
+    assert.equal(search.status, 200);
+    const searchBody = await search.json();
+    assert.equal(searchBody.search.results.find((message) => message.content === "commit")?.category, "Git commands");
+
+    const filteredSearch = await fetch(
+      `${server.url}/api/messages/search?role=user&submittedOnly=true&hiddenCategory=${encodeURIComponent("Git commands")}`,
+      { headers }
+    );
+    assert.equal(filteredSearch.status, 200);
+    const filteredSearchBody = await filteredSearch.json();
+    assert.equal(filteredSearchBody.search.totalMatches, 1);
+    assert.equal(filteredSearchBody.search.results[0]?.content, "make the sidebar clearer");
+
+    const detail = await fetch(`${server.url}/api/session?sessionId=operational-categories-session`, { headers });
+    assert.equal(detail.status, 200);
+    const detailBody = await detail.json();
+    assert.equal(detailBody.messages.find((message) => message.content === "commit")?.category, "Git commands");
+  } finally {
+    await server.close();
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("session detail exposes ordered interaction records for native reconstruction", async () => {
   const server = await startServer({ port: 0, authToken: "test-token", paths: [interactionDetailFixturePath] });
   const headers = { authorization: "Bearer test-token" };

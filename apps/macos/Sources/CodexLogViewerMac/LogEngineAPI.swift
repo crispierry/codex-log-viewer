@@ -65,6 +65,7 @@ struct LogEngineAPI {
     project: String,
     filters: LogFilters,
     submittedOnly: Bool = false,
+    hiddenCategories: [String] = [],
     limit: Int = 100
   ) async throws -> MessageSearchSummary {
     try await searchMessagesWithMetadata(
@@ -77,6 +78,7 @@ struct LogEngineAPI {
       project: project,
       filters: filters,
       submittedOnly: submittedOnly,
+      hiddenCategories: hiddenCategories,
       limit: limit
     ).search
   }
@@ -91,6 +93,7 @@ struct LogEngineAPI {
     project: String,
     filters: LogFilters,
     submittedOnly: Bool = false,
+    hiddenCategories: [String] = [],
     limit: Int = 100
   ) async throws -> CachedSearch {
     var queryItems = [
@@ -112,6 +115,9 @@ struct LogEngineAPI {
     }
     if submittedOnly {
       queryItems.append(URLQueryItem(name: "submittedOnly", value: "true"))
+    }
+    for category in hiddenCategories {
+      queryItems.append(URLQueryItem(name: "hiddenCategory", value: category))
     }
     queryItems.append(contentsOf: self.queryItems(project: project, filters: filters))
     let response: MessageSearchResponse = try await get("api/messages/search", query: queryItems)

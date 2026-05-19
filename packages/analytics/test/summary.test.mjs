@@ -301,6 +301,16 @@ test("summarizeParsedCorpus groups command-style prompt families", () => {
 
   const search = searchMessages(corpus, { query: "", role: "user", submittedOnly: true });
   assert.equal(search.results.find((result) => result.content === "do a code review")?.category, "Code review");
+
+  const filteredSearch = searchMessages(corpus, {
+    query: "",
+    role: "user",
+    submittedOnly: true,
+    hiddenCategories: ["Code review", "Run app"]
+  });
+  assert.equal(filteredSearch.totalMatches, 10);
+  assert.equal(filteredSearch.results.some((result) => result.category === "Code review"), false);
+  assert.equal(filteredSearch.results.some((result) => result.category === "Run app"), false);
 });
 
 test("summarizeParsedCorpus groups short plan approval prompt families", () => {

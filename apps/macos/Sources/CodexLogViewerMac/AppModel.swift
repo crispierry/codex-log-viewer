@@ -92,6 +92,10 @@ final class AppModel: ObservableObject {
     visibleBrowseMessages(in: browseMessagesSummary?.results ?? [])
   }
 
+  var searchResults: [MessageSearchResult] {
+    visibleSearchResults(in: searchSummary?.results ?? [])
+  }
+
   var operationalMessageCategoryOptions: [String] {
     Self.operationalPromptCategoryOrder
   }
@@ -415,13 +419,8 @@ final class AppModel: ObservableObject {
       hiddenOperationalMessageCategories.insert(category)
     }
     saveSettings()
-
-    guard let browseMessagesSummary else { return }
-    if let selectedBrowseMessageID,
-      let selected = browseMessagesSummary.results.first(where: { $0.id == selectedBrowseMessageID }),
-      !isBrowseMessageVisible(selected) {
-      selectBrowseMessage(browseMessages.first?.id)
-    }
+    reconcileOperationalMessageFilters()
+    refreshSearchForOperationalFilterChangeIfNeeded()
   }
 
   func setAllOperationalMessageCategoriesVisible(_ isVisible: Bool) {
@@ -431,13 +430,8 @@ final class AppModel: ObservableObject {
       hiddenOperationalMessageCategories.formUnion(Self.operationalPromptCategorySet)
     }
     saveSettings()
-
-    guard let browseMessagesSummary else { return }
-    if let selectedBrowseMessageID,
-      let selected = browseMessagesSummary.results.first(where: { $0.id == selectedBrowseMessageID }),
-      !isBrowseMessageVisible(selected) {
-      selectBrowseMessage(browseMessages.first?.id)
-    }
+    reconcileOperationalMessageFilters()
+    refreshSearchForOperationalFilterChangeIfNeeded()
   }
 
   func isOperationalPromptCategory(_ category: String) -> Bool {
@@ -629,8 +623,10 @@ final class AppModel: ObservableObject {
     loadSelectedSession()
   }
 
-  func searchMessages() {
-    selectedSection = .search
+  func searchMessages(activateSearch: Bool = true) {
+    if activateSearch {
+      selectedSection = .search
+    }
     let trimmedQuery = messageQuery.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmedQuery.isEmpty, let api else {
       clearSearchResults()
@@ -649,6 +645,7 @@ final class AppModel: ObservableObject {
     let filePath = messageSessionFilePathFilter
     let dateKey = messageSessionDateKeyFilter
     let submittedOnly = role == .user
+    let hiddenCategories = Array(hiddenOperationalMessageCategories).sorted()
 
     searchTask = Task {
       do {
@@ -662,10 +659,15 @@ final class AppModel: ObservableObject {
           dateKey: dateKey,
           project: project,
           filters: filters,
-          submittedOnly: submittedOnly
+          submittedOnly: submittedOnly,
+          hiddenCategories: hiddenCategories
         )
         guard !Task.isCancelled, requestID == searchRequestID else { return }
         searchSummary = searchResult.search
+        if let selectedSearchResultID,
+          !searchResult.search.results.contains(where: { $0.id == selectedSearchResultID }) {
+          self.selectedSearchResultID = nil
+        }
         cacheMetadata = searchResult.cache ?? cacheMetadata
         status = .ready
       } catch is CancellationError {
@@ -678,7 +680,7 @@ final class AppModel: ObservableObject {
   }
 
   func refreshMessageResults() {
-    searchMessages()
+    searchMessages(activateSearch: false)
   }
 
   func focusMessageSearch() {
@@ -689,7 +691,7 @@ final class AppModel: ObservableObject {
   func selectSearchResult(_ resultID: MessageSearchResult.ID?) {
     selectedSearchResultID = resultID
     guard let resultID,
-      let result = searchSummary?.results.first(where: { $0.id == resultID })
+      let result = searchResults.first(where: { $0.id == resultID })
     else {
       return
     }
@@ -992,9 +994,57 @@ final class AppModel: ObservableObject {
     return messages.filter(isBrowseMessageVisible)
   }
 
+  private func visibleSearchResults(in messages: [MessageSearchResult]) -> [MessageSearchResult] {
+    return messages.filter(isSearchResultVisible)
+  }
+
   private func isBrowseMessageVisible(_ message: MessageSearchResult) -> Bool {
+    isSearchResultVisible(message)
+  }
+
+  private func isSearchResultVisible(_ message: MessageSearchResult) -> Bool {
     guard let category = message.category else { return true }
     return !hiddenOperationalMessageCategories.contains(category)
+  }
+
+  func visibleUserMessageOffsets(in detail: SessionDetail, dateKey: String? = nil) -> [(offset: Int, element: MessageDetail)] {
+    SessionInteractionBuilder.userMessageOffsets(in: detail, dateKey: dateKey)
+      .filter { isMessageDetailVisible($0.element) }
+  }
+
+  func isMessageDetailVisible(_ message: MessageDetail) -> Bool {
+    guard let category = message.category else { return true }
+    return !hiddenOperationalMessageCategories.contains(category)
+  }
+
+  private func reconcileOperationalMessageFilters() {
+    if let browseMessagesSummary,
+      let selectedBrowseMessageID,
+      let selected = browseMessagesSummary.results.first(where: { $0.id == selectedBrowseMessageID }),
+      !isBrowseMessageVisible(selected) {
+      selectBrowseMessage(browseMessages.first?.id)
+    }
+
+    if let searchSummary,
+      let selectedSearchResultID,
+      let selected = searchSummary.results.first(where: { $0.id == selectedSearchResultID }),
+      !isSearchResultVisible(selected) {
+      self.selectedSearchResultID = searchResults.first?.id
+    }
+
+    if let detail = selectedSessionDetail,
+      let selectedUserMessageIndex,
+      let selectedMessage = detail.messages.indices.contains(selectedUserMessageIndex)
+        ? detail.messages[selectedUserMessageIndex]
+        : nil,
+      !isMessageDetailVisible(selectedMessage) {
+      self.selectedUserMessageIndex = visibleUserMessageOffsets(in: detail, dateKey: selectedSessionDateKey).last?.offset
+    }
+  }
+
+  private func refreshSearchForOperationalFilterChangeIfNeeded() {
+    guard searchSummary != nil else { return }
+    refreshMessageResults()
   }
 
   private func detailTarget(for selectionID: SessionSummary.ID) -> (sessionID: String, filePath: String?, dateKey: String?) {
@@ -1028,7 +1078,7 @@ final class AppModel: ObservableObject {
 
   private func applyPendingMessageSelection(to detail: SessionDetail) {
     guard let pendingSearchResultTarget else {
-      let userMessageOffsets = SessionInteractionBuilder.userMessageOffsets(in: detail, dateKey: selectedSessionDateKey)
+      let userMessageOffsets = visibleUserMessageOffsets(in: detail, dateKey: selectedSessionDateKey)
       if let selectedUserMessageIndex,
         userMessageOffsets.contains(where: { $0.offset == selectedUserMessageIndex }) {
         return
@@ -1621,7 +1671,7 @@ final class AppModel: ObservableObject {
     FileHandle.standardError.write(Data(message.utf8))
   }
 
-  func showAboutBox() {
+  static func showAboutBox() {
     let credits = NSAttributedString(
       string: "A local-first native macOS viewer for Codex session logs.\n\nCodex logs stay on this Mac unless you explicitly export data.",
       attributes: [
@@ -1636,6 +1686,66 @@ final class AppModel: ObservableObject {
       .credits: credits
     ])
     NSApp.activate(ignoringOtherApps: true)
+  }
+
+  static func showHelpBox() {
+    let alert = NSAlert()
+    alert.messageText = "Codex Log Viewer Help"
+    alert.informativeText = """
+    Browse
+    Choose a project, pick a submitted message, and read the matching Codex interaction.
+
+    Filters
+    Use the date control in the header. Use View > Operational Messages to hide Git, run-app, and code-review prompts. Use View > Show Sessions only when you need the session column.
+
+    Search and Audit
+    Search finds messages across the current filters. Audit prepares a reviewed AI worklog for the selected repository.
+
+    Logs
+    Use Logs > Choose Codex Log Location to change sources. Exports are redacted by default, but still review them before sharing. Your Codex logs stay on this Mac unless you export them.
+    """
+    alert.alertStyle = .informational
+    alert.addButton(withTitle: "OK")
+    alert.addButton(withTitle: "Open Usage Guide")
+    if alert.runModal() == .alertSecondButtonReturn {
+      Self.openUsageGuide()
+    }
+  }
+
+  static func openUsageGuide() {
+    let usageGuideURL = Self.localUsageGuideURL() ??
+      URL(string: "https://github.com/crispierry/codex-log-viewer/blob/main/docs/usage.md")
+
+    if let usageGuideURL {
+      NSWorkspace.shared.open(usageGuideURL)
+    }
+  }
+
+  private static func localUsageGuideURL() -> URL? {
+    let fileManager = FileManager.default
+    let seeds = [
+      URL(fileURLWithPath: fileManager.currentDirectoryPath, isDirectory: true),
+      Bundle.main.bundleURL,
+      Bundle.main.executableURL?.deletingLastPathComponent()
+    ].compactMap { $0 }
+
+    for seed in seeds {
+      var directory = seed.standardizedFileURL
+      for _ in 0..<8 {
+        let candidate = directory.appendingPathComponent("docs").appendingPathComponent("usage.md")
+        if fileManager.fileExists(atPath: candidate.path) {
+          return candidate
+        }
+
+        let parent = directory.deletingLastPathComponent()
+        if parent.path == directory.path {
+          break
+        }
+        directory = parent
+      }
+    }
+
+    return nil
   }
 }
 

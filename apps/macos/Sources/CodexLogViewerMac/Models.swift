@@ -443,6 +443,7 @@ struct TurnDetail: Decodable, Hashable {
 struct MessageDetail: Decodable, Hashable {
   let role: String
   let sourceEvent: String
+  let category: String?
   let content: String
   let lineNumber: Int?
   let turnId: String?
