@@ -25,6 +25,8 @@ This project is safe to prepare as a public repository when this checklist stays
 After creating or publishing the repository:
 
 - Enable GitHub private vulnerability reporting.
+- Enable vulnerability alerts and Dependabot security updates.
+- Keep secret scanning and push protection enabled.
 - Keep branch protection on the default branch once collaboration begins.
 - Require the `verify` and `macos-app` CI jobs before merging.
 - Add repository topics such as `codex`, `macos`, `swiftui`, `jsonl`, `local-first`, and `analytics`.
