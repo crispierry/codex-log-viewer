@@ -217,10 +217,8 @@ struct SidebarView: View {
       Section("Library") {
         ProjectListRow(
           title: AppConstants.allProjectsName,
-          subtitle: projectSubtitle(
-            sessions: model.projects.reduce(0) { $0 + $1.sessions },
-            userMessages: model.projects.reduce(0) { $0 + $1.messages }
-          ),
+          sessions: model.projects.reduce(0) { $0 + $1.sessions },
+          userMessages: model.projects.reduce(0) { $0 + $1.messages },
           tokenCount: model.projects.reduce(0) { $0 + $1.totalTokens },
           systemImage: "square.grid.2x2"
         )
@@ -231,7 +229,8 @@ struct SidebarView: View {
         ForEach(model.projects) { project in
           ProjectListRow(
             title: project.project,
-            subtitle: projectSubtitle(sessions: project.sessions, userMessages: project.messages),
+            sessions: project.sessions,
+            userMessages: project.messages,
             tokenCount: project.totalTokens,
             systemImage: "folder"
           )
@@ -247,10 +246,6 @@ struct SidebarView: View {
     }
   }
 
-  private func projectSubtitle(sessions: Int, userMessages: Int) -> String {
-    "\(countLabel(sessions, singular: "session", plural: "sessions")) - \(countLabel(userMessages, singular: "user message", plural: "user messages"))"
-  }
-
   private func countLabel(_ count: Int, singular: String, plural: String) -> String {
     "\(count.formatted()) \(count == 1 ? singular : plural)"
   }
@@ -258,7 +253,8 @@ struct SidebarView: View {
 
 struct ProjectListRow: View {
   let title: String
-  let subtitle: String
+  let sessions: Int
+  let userMessages: Int
   let tokenCount: Int
   let systemImage: String
 
@@ -268,18 +264,27 @@ struct ProjectListRow: View {
         VStack(alignment: .leading, spacing: 2) {
           Text(title)
             .lineLimit(1)
-          Text(subtitle)
+          Text(metadataText)
             .font(.caption)
             .foregroundStyle(.secondary)
         }
         Spacer()
-        Text(tokenCount.formatted(.number.notation(.compactName)))
-          .font(.caption.monospacedDigit())
+        Text(userMessages.formatted())
+          .font(.body.monospacedDigit())
+          .fontWeight(.semibold)
           .foregroundStyle(.secondary)
       }
     } icon: {
       Image(systemName: systemImage)
     }
+  }
+
+  private var metadataText: String {
+    "\(countLabel(sessions, singular: "session", plural: "sessions")) - \(tokenCount.formatted(.number.notation(.compactName))) tokens"
+  }
+
+  private func countLabel(_ count: Int, singular: String, plural: String) -> String {
+    "\(count.formatted()) \(count == 1 ? singular : plural)"
   }
 }
 
