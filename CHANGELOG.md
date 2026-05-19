@@ -30,6 +30,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Updated documentation to reflect the native-macOS-first product workflow.
 - Fixed native app filter/session state races so project selections and session details update reliably.
 - Fixed project-scoped local API sessions and exports so selected-project views do not leak all-project results.
+- Strengthened native UI smoke coverage for accessibility identifiers and selected-project exports.
 - Removed the web dashboard and Electron prototype.
 - Added a UI test plan for native app workflows.
 - Added macOS app build verification to CI.

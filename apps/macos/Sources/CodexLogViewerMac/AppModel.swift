@@ -552,7 +552,7 @@ final class AppModel: ObservableObject {
 
     let detail = try await api.sessionDetail(
       sessionID: result.sessionId,
-      project: AppConstants.allProjectsName,
+      project: selectedProject,
       filters: dateFilters
     )
     guard detail.messages.contains(where: { $0.content.contains("parser test") }) else {
@@ -575,18 +575,20 @@ final class AppModel: ObservableObject {
 
     let jsonExport = try await api.exportSummary(
       format: .json,
-      project: AppConstants.allProjectsName,
+      project: selectedProject,
       filters: dateFilters
     )
     let csvExport = try await api.exportSummary(
       format: .csv,
-      project: AppConstants.allProjectsName,
+      project: selectedProject,
       filters: dateFilters
     )
     let jsonText = String(data: jsonExport, encoding: .utf8) ?? ""
     let csvText = String(data: csvExport, encoding: .utf8) ?? ""
     guard jsonText.contains("[redacted]"),
+      jsonText.contains(#""project": "sample-app""#),
       !jsonText.contains("/Users/example"),
+      csvText.contains("project,sample-app"),
       csvText.contains("user_messages")
     else {
       throw AppSmokeError.unexpected("The UI workflow export checks did not pass.")
