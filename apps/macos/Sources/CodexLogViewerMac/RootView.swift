@@ -457,10 +457,16 @@ struct MessageSearchView: View {
             .accessibilityIdentifier("message-search-empty-state")
           } else {
             Table(search.results, selection: $model.selectedSearchResultID) {
-              TableColumn("Role") { result in
-                Text(result.role.capitalized)
+              TableColumn("Date/Time") { result in
+                Text(formattedDate(result.timestamp))
+                  .lineLimit(1)
               }
-              .width(72)
+              .width(min: 150, ideal: 170)
+
+              TableColumn("Message") { result in
+                Text(result.snippet)
+                  .lineLimit(2)
+              }
 
               TableColumn("Project") { result in
                 Text(result.project)
@@ -472,15 +478,10 @@ struct MessageSearchView: View {
               }
               .width(min: 100, ideal: 130)
 
-              TableColumn("Message") { result in
-                Text(result.snippet)
-                  .lineLimit(2)
+              TableColumn("Role") { result in
+                Text(result.role.capitalized)
               }
-
-              TableColumn("Time") { result in
-                Text(formattedDate(result.timestamp))
-              }
-              .width(min: 120, ideal: 150)
+              .width(72)
             }
             .frame(minHeight: 220)
             .accessibilityIdentifier("message-search-results-table")
