@@ -438,14 +438,14 @@ function userMessageGroup(message: string): {
 } {
   const normalized = normalizeLiteralMessage(message);
   const variantSample = compactMessageSample(message);
-  const commandCategory = commandMessageCategory(normalized);
-  if (commandCategory) {
+  const category = userMessageCategory(normalized);
+  if (category) {
     return {
-      key: `category:${commandCategory.key}`,
-      sample: commandCategory.label,
+      key: `category:${category.key}`,
+      sample: category.label,
       variantKey: normalized,
       variantSample,
-      category: commandCategory.label
+      category: category.label
     };
   }
 
@@ -461,7 +461,11 @@ function normalizeLiteralMessage(message: string): string {
   return message.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
-function commandMessageCategory(normalized: string): { key: string; label: string } | undefined {
+function userMessageCategory(normalized: string): { key: string; label: string } | undefined {
+  if (isPlanApprovalMessage(normalized)) {
+    return { key: "plan-approvals", label: "Plan approvals" };
+  }
+
   const commandText = normalizedCommandText(normalized);
   if (isGitCommandMessage(commandText)) {
     return { key: "git-commands", label: "Git commands" };
@@ -470,6 +474,22 @@ function commandMessageCategory(normalized: string): { key: string; label: strin
     return { key: "run-app", label: "Run app" };
   }
   return undefined;
+}
+
+function isPlanApprovalMessage(normalized: string): boolean {
+  if (normalized.length > 70) {
+    return false;
+  }
+  const value = normalized
+    .replace(/[.!]+$/u, "")
+    .replace(/\s*,\s*/gu, ", ")
+    .trim();
+  const oneWordApproval = /^(yes|yeah|yep|yup|sure|ok|okay|approved|confirmed)$/u.test(value);
+  const shortApproval =
+    /^(yes|yeah|yep|yup|sure|ok|okay),? (please|go ahead|proceed|do it|sounds good|let's do it|lets do it)$/u.test(value);
+  const phraseApproval =
+    /^(sounds good|looks good|that works|works for me|go ahead|please do|do it|proceed|approved|confirmed|ship it|let's do it|lets do it)( please)?$/u.test(value);
+  return oneWordApproval || shortApproval || phraseApproval;
 }
 
 function normalizedCommandText(normalized: string): string {

@@ -196,6 +196,68 @@ test("summarizeParsedCorpus groups command-style prompt families", () => {
   );
 });
 
+test("summarizeParsedCorpus groups short plan approval prompt families", () => {
+  const message = ({ content, timestamp }, index) => ({
+    filePath: `approval-session-${index}.jsonl`,
+    sessionId: `approval-session-${index}`,
+    timestamp,
+    role: "user",
+    sourceEvent: "event_msg.user_message",
+    content,
+    imagesCount: 0,
+    localImagesCount: 0
+  });
+  const messages = [
+    message({ content: "yes", timestamp: "2026-01-01T00:00:00.000Z" }, 1),
+    message({ content: "Yes please.", timestamp: "2026-01-01T00:01:00.000Z" }, 2),
+    message({ content: "yeah", timestamp: "2026-01-01T00:02:00.000Z" }, 3),
+    message({ content: "go ahead", timestamp: "2026-01-01T00:03:00.000Z" }, 4),
+    message({ content: "sounds good", timestamp: "2026-01-01T00:04:00.000Z" }, 5),
+    message({ content: "yes, also add filtering", timestamp: "2026-01-01T00:05:00.000Z" }, 6)
+  ];
+  const corpus = {
+    files: messages.map((item) => ({
+      filePath: item.filePath,
+      sessionId: item.sessionId,
+      lineCount: 1,
+      sessions: [],
+      turns: [],
+      messages: [],
+      tokenUsage: [],
+      taskTimings: [],
+      toolEvents: [],
+      unknownEvents: [],
+      warnings: []
+    })),
+    sessions: messages.map((item) => ({
+      filePath: item.filePath,
+      sessionId: item.sessionId,
+      cwd: "/tmp/sample-app",
+      timestamp: item.timestamp
+    })),
+    turns: [],
+    messages,
+    tokenUsage: [],
+    taskTimings: [],
+    toolEvents: [],
+    unknownEvents: [],
+    warnings: []
+  };
+
+  const summary = summarizeParsedCorpus(corpus, { project: "sample-app" });
+  assert.equal(summary.totals.userMessages, 6);
+  assert.equal(summary.totals.uniqueUserMessages, 2);
+  assert.equal(summary.messagesByDay[0]?.uniqueCount, 2);
+
+  const approvalGroup = summary.repeatedUserMessages.find((group) => group.sample === "Plan approvals");
+  assert.equal(approvalGroup?.category, "Plan approvals");
+  assert.equal(approvalGroup?.count, 5);
+  assert.deepEqual(
+    approvalGroup?.variants.map((variant) => variant.sample),
+    ["sounds good", "go ahead", "yeah", "Yes please.", "yes"]
+  );
+});
+
 test("summarizeParsedCorpus attributes token usage to models by session and turn", () => {
   const corpus = {
     files: [
