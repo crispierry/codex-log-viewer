@@ -24,6 +24,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Added Finder-style and relocated packaged app launch verification.
 - Added packaged app missing-engine failure verification.
 - Added ephemeral-token authentication for the private local API.
+- Added Dependabot configuration for npm and GitHub Actions dependency maintenance.
 - Added redacted JSON exports by default, with explicit raw JSON for private local use.
 - Added a release notes template for public GitHub releases.
 - Added synthetic parser event-shape coverage and search performance benchmarking.

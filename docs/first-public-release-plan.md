@@ -39,7 +39,7 @@ Implemented for v0.1:
 - search benchmark with documented threshold and future SQLite FTS5 trigger
 - private-reference parity harness with a sanitized fixture reference report
 - release notes template, manual-update position, checksum guidance, and tag-based release workflow
-- public GitHub repository settings: description, topics, private vulnerability reporting, and protected `main` with required `verify` and `macos-app` checks
+- public GitHub repository settings: description, topics, private vulnerability reporting, vulnerability alerts, Dependabot security updates, secret scanning, and protected `main` with required `verify` and `macos-app` checks
 
 External release prerequisites:
 
@@ -64,7 +64,7 @@ This audit reconciles the original work plan with the current implementation. Th
 | Privacy-first exports | Complete for v0.1 aggregate exports. Raw/detail views remain explicitly private, and tracked-file privacy scanning is automated. | `packages/analytics/src/export.ts`, analytics/server tests, `scripts/privacy-scan.mjs`, `docs/privacy-and-redaction.md`, `docs/usage.md`. |
 | Search and session workflows | Complete for v0.1. Saved searches remain a later enhancement. | Search filters, file-scoped selected-session scoping, result-to-session context, matching-message highlight, repeated-prompt grouping, and copy actions in analytics and native app code. |
 | UX, accessibility, and recovery | Complete for first public source release. | Empty states, retry action, keyboard shortcuts, and stable accessibility identifiers in the native app; release-critical UI smoke in CI. |
-| Release operations | Complete for repeatable source/tag releases. Official notarized macOS distribution still requires credentials. | `CHANGELOG.md`, `docs/release-checklist.md`, `docs/release-notes-template.md`, `.github/workflows/release.yml`, tag/version guard, official-release notarization guard, runner certificate/notary setup, basename checksum output, rendered release notes, checksum guidance. |
+| Release operations | Complete for repeatable source/tag releases. Official notarized macOS distribution still requires credentials. | `CHANGELOG.md`, `docs/release-checklist.md`, `docs/release-notes-template.md`, `.github/workflows/release.yml`, `.github/dependabot.yml`, tag/version guard, official-release notarization guard, runner certificate/notary setup, basename checksum output, rendered release notes, checksum guidance, and verified GitHub security settings. |
 
 The remaining gates are external to this branch: human PR review, maintainer-local private parity, Developer ID/notary credentials, then merge/tag/release.
 
@@ -440,6 +440,7 @@ Before tagging the first public version, run and record:
 - [x] Export privacy modes are documented and tested.
 - [x] Issue templates warn against raw logs.
 - [x] Security policy explains private vulnerability reporting.
+- [x] GitHub vulnerability alerts, Dependabot security updates, and secret scanning are enabled.
 - [x] CI branch protection is enabled after publishing to GitHub.
 - [x] GitHub release artifacts are generated from CI.
 - [x] Known limitations are documented honestly.

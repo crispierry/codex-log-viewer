@@ -27,6 +27,14 @@ npm run release:notes -- --tag v0.1.0 --output dist/macos/release-notes.md
 git diff --check
 ```
 
+Confirm GitHub security settings before tagging:
+
+- vulnerability alerts enabled
+- Dependabot security updates enabled
+- private vulnerability reporting enabled
+- secret scanning and push protection enabled
+- `main` branch protection requires `verify` and `macos-app`
+
 On macOS, `npm run release:mac` builds `Codex Log Viewer.app`, launches the packaged smoke workflow twice, verifies Finder-style and relocated `.app` launches, verifies missing-engine failure diagnostics, checks that the local engine exits, and runs a native UI smoke check against sanitized fixtures.
 
 The tag-based GitHub Release workflow repeats the privacy scan, required source checks, audit, benchmark, sanitized reference parity harness, package build, packaged app smoke, native UI smoke, checksum verification, and release-note rendering before creating a release.
