@@ -20,6 +20,7 @@ const requiredIdentifiers = [
   "until-date-picker",
   "message-search-field",
   "message-search-button",
+  "show-sent-messages-button",
   "message-role-filter",
   "message-model-filter",
   "message-search-results-table",

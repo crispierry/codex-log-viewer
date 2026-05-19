@@ -406,6 +406,15 @@ test("searchMessages searches messages across all projects and supports project 
     project: "other-project"
   });
   assert.equal(filteredResults.totalMatches, 0);
+
+  const sentMessages = searchMessages(corpus, {
+    query: "",
+    role: "user",
+    project: "sample-app"
+  });
+  assert.equal(sentMessages.totalMatches, 1);
+  assert.equal(sentMessages.results[0]?.role, "user");
+  assert.match(sentMessages.results[0]?.snippet, /parser test/);
 });
 
 test("searchMessages anchors snippets for whitespace-normalized message matches", () => {

@@ -116,17 +116,6 @@ export function searchMessages(corpus: ParsedCodexCorpus, options: MessageSearch
   const sessionFilter = options.sessionId?.trim();
   const filePathFilter = options.filePath?.trim();
 
-  if (!normalizedQuery) {
-    return {
-      query,
-      project,
-      generatedAt: new Date().toISOString(),
-      totalMatches: 0,
-      limit,
-      results: []
-    };
-  }
-
   const range = dateRange(options);
   const sessionContexts = new Map<string, ReturnType<typeof projectContextForFile>>();
   const turnModels = new Map(
@@ -165,7 +154,7 @@ export function searchMessages(corpus: ParsedCodexCorpus, options: MessageSearch
       continue;
     }
 
-    if (!normalizeSearchText(message.content).includes(normalizedQuery)) {
+    if (normalizedQuery && !normalizeSearchText(message.content).includes(normalizedQuery)) {
       continue;
     }
 

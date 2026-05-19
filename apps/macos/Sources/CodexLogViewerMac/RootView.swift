@@ -378,6 +378,14 @@ struct MessageSearchView: View {
           }
           .keyboardShortcut(.return, modifiers: .command)
           .accessibilityIdentifier("message-search-button")
+
+          Button {
+            model.showSentMessagesForCurrentProject()
+          } label: {
+            Label("Messages I Sent", systemImage: "paperplane")
+          }
+          .help("Show your sent messages for the current project")
+          .accessibilityIdentifier("show-sent-messages-button")
         }
         .padding(8)
         .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
@@ -392,7 +400,7 @@ struct MessageSearchView: View {
           .accessibilityIdentifier("message-role-filter")
           .onChange(of: model.messageRoleFilter) { _, _ in
             if model.searchSummary != nil {
-              model.searchMessages()
+              model.refreshMessageResults()
             }
           }
 
@@ -405,7 +413,7 @@ struct MessageSearchView: View {
           .accessibilityIdentifier("message-model-filter")
           .onChange(of: model.messageModelFilter) { _, _ in
             if model.searchSummary != nil {
-              model.searchMessages()
+              model.refreshMessageResults()
             }
           }
         }
@@ -435,15 +443,15 @@ struct MessageSearchView: View {
         }
 
         if let search = model.searchSummary {
-          Text("\(search.totalMatches.formatted()) matches in \(search.project)")
+          Text(searchSummaryLabel(search))
             .font(.caption)
             .foregroundStyle(.secondary)
 
           if search.results.isEmpty {
             ContentUnavailableView(
-              "No Matches",
-              systemImage: "magnifyingglass",
-              description: Text("Try another phrase or broaden the current filters.")
+              emptySearchTitle,
+              systemImage: emptySearchSystemImage,
+              description: Text(emptySearchDescription)
             )
             .frame(maxWidth: .infinity, minHeight: 220)
             .accessibilityIdentifier("message-search-empty-state")
@@ -491,6 +499,37 @@ struct MessageSearchView: View {
         isSearchFocused = true
       }
     }
+  }
+
+  private var isBrowsingMessages: Bool {
+    guard let query = model.searchSummary?.query else { return false }
+    return model.isMessageBrowseMode && query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+  }
+
+  private var emptySearchTitle: String {
+    if isBrowsingMessages && model.messageRoleFilter == .user {
+      return "No Sent Messages"
+    }
+    return isBrowsingMessages ? "No Messages" : "No Matches"
+  }
+
+  private var emptySearchSystemImage: String {
+    isBrowsingMessages ? "paperplane" : "magnifyingglass"
+  }
+
+  private var emptySearchDescription: String {
+    isBrowsingMessages ? "Try another project, source, or date range." : "Try another phrase or broaden the current filters."
+  }
+
+  private func searchSummaryLabel(_ search: MessageSearchSummary) -> String {
+    let count = search.totalMatches.formatted()
+    guard isBrowsingMessages else {
+      return "\(count) matches in \(search.project)"
+    }
+    if model.messageRoleFilter == .user {
+      return "\(count) sent messages in \(search.project)"
+    }
+    return "\(count) messages in \(search.project)"
   }
 }
 

@@ -57,6 +57,13 @@ test("message search supports model and session filters through the local API", 
     assert.equal(miss.status, 200);
     const missBody = await miss.json();
     assert.equal(missBody.search.totalMatches, 0);
+
+    const sentMessages = await fetch(`${server.url}/api/messages/search?role=user&project=sample-app`, { headers });
+    assert.equal(sentMessages.status, 200);
+    const sentMessagesBody = await sentMessages.json();
+    assert.equal(sentMessagesBody.search.totalMatches, 1);
+    assert.equal(sentMessagesBody.search.results[0]?.role, "user");
+    assert.match(sentMessagesBody.search.results[0]?.snippet, /parser test/);
   } finally {
     await server.close();
   }

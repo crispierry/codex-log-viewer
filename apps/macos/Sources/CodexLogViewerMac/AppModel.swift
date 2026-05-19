@@ -37,6 +37,7 @@ final class AppModel: ObservableObject {
   @Published var messageModelFilter = AppConstants.allModelsName
   @Published var messageSessionFilter: String?
   @Published private var messageSessionFilePathFilter: String?
+  @Published var isMessageBrowseMode = false
   @Published var searchSummary: MessageSearchSummary?
   @Published var selectedSearchResultID: MessageSearchResult.ID?
   @Published var pathDraft = ""
@@ -253,15 +254,18 @@ final class AppModel: ObservableObject {
     }
   }
 
-  func searchMessages() {
+  func searchMessages(allowEmptyQuery: Bool = false) {
     let trimmedQuery = messageQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmedQuery.isEmpty, let api else {
+    let isBrowseRequest = allowEmptyQuery && trimmedQuery.isEmpty
+    guard !trimmedQuery.isEmpty || isBrowseRequest, let api else {
       clearSearchResults()
       return
     }
 
     searchTask?.cancel()
     searchRequestID += 1
+    selectedSearchResultID = nil
+    isMessageBrowseMode = isBrowseRequest
     let requestID = searchRequestID
     let filters = currentFilters()
     let project = selectedProject
@@ -294,6 +298,19 @@ final class AppModel: ObservableObject {
     }
   }
 
+  func refreshMessageResults() {
+    searchMessages(allowEmptyQuery: isMessageBrowseMode)
+  }
+
+  func showSentMessagesForCurrentProject() {
+    messageQuery = ""
+    messageRoleFilter = .user
+    messageModelFilter = AppConstants.allModelsName
+    messageSessionFilter = nil
+    messageSessionFilePathFilter = nil
+    searchMessages(allowEmptyQuery: true)
+  }
+
   func focusMessageSearch() {
     messageSearchFocusRequest += 1
   }
@@ -316,7 +333,7 @@ final class AppModel: ObservableObject {
     messageSessionFilter = target.sessionID
     messageSessionFilePathFilter = target.filePath
     if searchSummary != nil {
-      searchMessages()
+      refreshMessageResults()
     }
   }
 
@@ -324,7 +341,7 @@ final class AppModel: ObservableObject {
     messageSessionFilter = nil
     messageSessionFilePathFilter = nil
     if searchSummary != nil {
-      searchMessages()
+      refreshMessageResults()
     }
   }
 
@@ -384,6 +401,7 @@ final class AppModel: ObservableObject {
     selectedSearchResultID = nil
     messageSessionFilter = nil
     messageSessionFilePathFilter = nil
+    isMessageBrowseMode = false
     searchSummary = nil
   }
 
@@ -580,6 +598,21 @@ final class AppModel: ObservableObject {
     searchSummary = search
     selectedSearchResultID = result.id
     selectedSessionID = sessionSelectionID(sessionID: result.sessionId, filePath: result.filePath) ?? result.sessionId
+
+    let sentMessagesSearch = try await api.searchMessages(
+      query: "",
+      role: .user,
+      model: AppConstants.allModelsName,
+      sessionID: nil,
+      project: selectedProject,
+      filters: dateFilters
+    )
+    guard sentMessagesSearch.totalMatches == 1,
+      sentMessagesSearch.results.first?.role == MessageRoleFilter.user.rawValue,
+      sentMessagesSearch.results.first?.snippet.contains("parser test") == true
+    else {
+      throw AppSmokeError.unexpected("The UI workflow sent-messages search did not return the fixture prompt.")
+    }
 
     copySearchResultSessionID(result)
     guard Self.pasteboardText() == result.sessionId else {

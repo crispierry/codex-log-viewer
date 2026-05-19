@@ -38,6 +38,10 @@ struct CodexLogViewerApp: App {
         }
         .keyboardShortcut(.return, modifiers: .command)
 
+        Button("Messages I Sent") {
+          model.showSentMessagesForCurrentProject()
+        }
+
         Divider()
 
         Button("Choose Sources...") {
@@ -102,6 +106,14 @@ enum AppSmokeRunner {
         project: AppConstants.allProjectsName,
         filters: filters
       )
+      let sentMessagesSearch = try await api.searchMessages(
+        query: "",
+        role: .user,
+        model: AppConstants.allModelsName,
+        sessionID: nil,
+        project: AppConstants.allProjectsName,
+        filters: filters
+      )
       guard let firstSession = summary.sessions.first else {
         throw AppSmokeError.unexpected("No sessions found in smoke fixture.")
       }
@@ -113,7 +125,7 @@ enum AppSmokeRunner {
       )
       let jsonExport = try await api.exportSummary(format: .json, project: AppConstants.allProjectsName, filters: filters)
       let csvExport = try await api.exportSummary(format: .csv, project: AppConstants.allProjectsName, filters: filters)
-      if projects.isEmpty || search.totalMatches == 0 || jsonExport.isEmpty || csvExport.isEmpty {
+      if projects.isEmpty || search.totalMatches == 0 || sentMessagesSearch.totalMatches == 0 || jsonExport.isEmpty || csvExport.isEmpty {
         throw AppSmokeError.unexpected("Packaged app smoke workflow returned empty data.")
       }
       FileHandle.standardOutput.write(Data("Codex Log Viewer packaged smoke workflow passed.\n".utf8))

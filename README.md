@@ -57,6 +57,7 @@ The app is the primary product experience. From the desktop UI you can:
 - select projects or all projects
 - filter by date range
 - search messages across projects
+- list the messages you sent for the selected project
 - filter message search by role, model, session, project, source, and date range
 - review repeated prompts for the current filters
 - refresh the scan
