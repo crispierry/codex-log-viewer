@@ -30,6 +30,7 @@ jobs:
       - run: npm audit --audit-level=moderate
       - run: npm run benchmark:search
       - run: npm run check:reference -- --reference fixtures/codex/sample-reference-summary.json --path fixtures/codex/sample-session.jsonl --project sample-app
+      - run: npm run check:mac-accessibility
       - name: Install Apple signing assets
         env:
           CODEX_LOG_VIEWER_CODESIGN_IDENTITY: ${{ secrets.CODEX_LOG_VIEWER_CODESIGN_IDENTITY }}

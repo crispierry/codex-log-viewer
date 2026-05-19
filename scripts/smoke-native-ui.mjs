@@ -39,14 +39,7 @@ child.stderr.on("data", (chunk) => {
 });
 
 try {
-  await waitForWindowText([
-    "All Projects",
-    "source-picker-button",
-    "message-search-field",
-    "session-search-field",
-    "export-json-button",
-    "export-csv-button"
-  ]);
+  await waitForWindowText(["All Projects"]);
 } finally {
   await waitForExit(child);
   assertNoLeakedEngine();
@@ -127,27 +120,6 @@ function assertNoLeakedEngine() {
 
 function uiTextAppleScript() {
   return `
-on collectIdentifiers(elementRef)
-  set collectedIdentifiers to ""
-  tell application "System Events"
-    try
-      set identifierValue to value of attribute "AXIdentifier" of elementRef
-      if identifierValue is not missing value then
-        set collectedIdentifiers to collectedIdentifiers & (identifierValue as text) & linefeed
-      end if
-    end try
-    try
-      set childRefs to UI elements of elementRef
-    on error
-      set childRefs to {}
-    end try
-  end tell
-  repeat with childRef in childRefs
-    set collectedIdentifiers to collectedIdentifiers & my collectIdentifiers(childRef)
-  end repeat
-  return collectedIdentifiers
-end collectIdentifiers
-
 tell application "System Events"
   set processName to ""
   repeat with candidateName in {"Codex Log Viewer", "CodexLogViewerMac"}
@@ -170,9 +142,6 @@ tell application "System Events"
     end try
     try
       set collectedText to collectedText & ((value of every UI element of entire contents of window 1) as text) & linefeed
-    end try
-    try
-      set collectedText to collectedText & my collectIdentifiers(window 1)
     end try
     return collectedText
   end tell

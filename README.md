@@ -109,6 +109,7 @@ npm run privacy:scan
 npm run lint
 npm test
 npm run build
+npm run check:mac-accessibility
 npm run build:mac # macOS only
 npm run package:mac # macOS only
 npm run smoke:mac-package # macOS only

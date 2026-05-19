@@ -17,6 +17,7 @@ Run from a clean checkout:
 npm ci
 npm run privacy:scan
 npm run test:all
+npm run check:mac-accessibility
 npm audit --audit-level=moderate
 npm run benchmark:search
 npm run check:reference -- --reference fixtures/codex/sample-reference-summary.json --path fixtures/codex/sample-session.jsonl --project sample-app

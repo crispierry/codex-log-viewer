@@ -33,6 +33,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build:native-engine
+      - run: npm run check:mac-accessibility
       - run: npm run build:mac
       - run: npm run package:mac
       - run: npm run smoke:mac-package
