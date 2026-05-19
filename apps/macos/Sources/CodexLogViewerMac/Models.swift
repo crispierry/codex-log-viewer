@@ -117,6 +117,7 @@ struct SessionSummary: Decodable, Identifiable, Hashable {
 
   var id: String { "\(filePath)#\(sessionId)" }
   var shortSessionId: String { String(sessionId.prefix(8)) }
+  var totalMessages: Int { userMessages + assistantMessages }
 }
 
 struct RepeatedUserMessage: Decodable, Identifiable, Hashable {

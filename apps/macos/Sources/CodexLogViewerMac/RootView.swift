@@ -575,31 +575,27 @@ struct SessionsTableView: View {
             .accessibilityIdentifier("sessions-empty-state")
           } else {
             Table(model.filteredSessions, selection: $model.selectedSessionID) {
-              TableColumn("Session") { session in
-                Text(session.shortSessionId)
-                  .font(.system(.body, design: .monospaced))
+              TableColumn("Date/Time") { session in
+                Text(formattedDate(session.lastSeen))
+                  .lineLimit(1)
               }
-              .width(96)
+              .width(min: 150, ideal: 170)
+
+              TableColumn("Messages") { session in
+                Text(session.totalMessages.formatted())
+              }
+              .width(92)
 
               TableColumn("Project") { session in
                 Text(session.project)
               }
               .width(min: 140, ideal: 220)
 
-              TableColumn("User Messages") { session in
-                Text(session.userMessages.formatted())
+              TableColumn("Session ID") { session in
+                Text(session.shortSessionId)
+                  .font(.system(.body, design: .monospaced))
               }
-              .width(110)
-
-              TableColumn("Tokens") { session in
-                Text(session.totalTokens.formatted())
-              }
-              .width(120)
-
-              TableColumn("Last Seen") { session in
-                Text(formattedDate(session.lastSeen))
-              }
-              .width(min: 140, ideal: 180)
+              .width(100)
             }
             .frame(minHeight: 280)
             .accessibilityIdentifier("sessions-table")
