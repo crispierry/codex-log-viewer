@@ -9,6 +9,7 @@ This project is safe to prepare as a public repository when this checklist stays
 - CI verifies the TypeScript parser, analytics, private API engine, CLI, macOS Swift build, packaged app smoke path, and native UI smoke path.
 - Generated folders such as `node_modules`, `dist`, `.build`, coverage, and local caches are ignored.
 - The root package is marked private so the monorepo is not accidentally published to npm.
+- `npm run privacy:scan` checks tracked and untracked files for real Codex log paths, local artifacts, signing material, private keys, token-like values, and non-example macOS home paths.
 
 ## Privacy Gate
 

@@ -105,6 +105,7 @@ npm run cli -- export --format json --raw --output private-usage.json
 ## Verification
 
 ```sh
+npm run privacy:scan
 npm run lint
 npm test
 npm run build

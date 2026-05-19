@@ -83,14 +83,8 @@ async function handleRequest(request: IncomingMessage, response: ServerResponse,
 
   if (url.pathname === "/api/summary") {
     const loaded = await loadCachedCorpus(url, options.paths);
-    const summaryOptions = summaryOptionsFromQuery(url, options.paths);
-    const project = url.searchParams.get("project");
-    sendJson(response, 200, {
-      summary: summarizeParsedCorpus(loaded.corpus, {
-        ...summaryOptions,
-        project: project && project !== "All Projects" ? project : undefined
-      })
-    });
+    const summary = summarizeParsedCorpus(loaded.corpus, summaryOptionsFromQuery(url, options.paths));
+    sendJson(response, 200, { summary });
     return;
   }
 
@@ -109,11 +103,7 @@ async function handleRequest(request: IncomingMessage, response: ServerResponse,
     }
     const loaded = await loadCachedCorpus(url, options.paths);
     const summaryOptions = summaryOptionsFromQuery(url, options.paths);
-    const project = url.searchParams.get("project");
-    const summary = summarizeParsedCorpus(loaded.corpus, {
-      ...summaryOptions,
-      project: project && project !== "All Projects" ? project : undefined
-    });
+    const summary = summarizeParsedCorpus(loaded.corpus, summaryOptions);
     if (!summary.sessions.some((session) => session.sessionId === sessionId)) {
       sendJson(response, 404, { error: "Session not found" });
       return;
@@ -162,7 +152,8 @@ async function handleRequest(request: IncomingMessage, response: ServerResponse,
 
   if (url.pathname === "/api/export") {
     const loaded = await loadCachedCorpus(url, options.paths);
-    const summary = summarizeParsedCorpus(loaded.corpus, summaryOptionsFromQuery(url, options.paths));
+    const summaryOptions = summaryOptionsFromQuery(url, options.paths);
+    const summary = summarizeParsedCorpus(loaded.corpus, summaryOptions);
     const format = url.searchParams.get("format") === "csv" ? "csv" : "json";
     const isRawJson = url.searchParams.get("privacy") === "raw";
     const filename = `codex-log-viewer-${summary.project.replaceAll(/[^a-z0-9-]+/gi, "-").toLowerCase()}.${format}`;
@@ -202,10 +193,15 @@ function loadCachedCorpus(url: URL, fallbackPaths?: string[]): Promise<LoadedCor
 function summaryOptionsFromQuery(url: URL, fallbackPaths?: string[]): SummaryOptions {
   return {
     paths: pathsFromQuery(url, fallbackPaths),
-    project: url.searchParams.get("project") ?? undefined,
+    project: projectFromQuery(url),
     since: url.searchParams.get("since") ?? undefined,
     until: url.searchParams.get("until") ?? undefined
   };
+}
+
+function projectFromQuery(url: URL): string | undefined {
+  const project = url.searchParams.get("project")?.trim();
+  return project && project !== "All Projects" ? project : undefined;
 }
 
 function pathsFromQuery(url: URL, fallbackPaths?: string[]): string[] | undefined {

@@ -15,6 +15,7 @@ Run from a clean checkout:
 
 ```sh
 npm ci
+npm run privacy:scan
 npm run test:all
 npm audit --audit-level=moderate
 npm run benchmark:search
@@ -27,7 +28,7 @@ git diff --check
 
 On macOS, `npm run release:mac` builds `Codex Log Viewer.app`, launches the packaged smoke workflow twice, verifies Finder-style and relocated `.app` launches, verifies missing-engine failure diagnostics, checks that the local engine exits, and runs a native UI smoke check against sanitized fixtures.
 
-The tag-based GitHub Release workflow repeats the required source checks, audit, benchmark, sanitized reference parity harness, package build, packaged app smoke, native UI smoke, checksum verification, and release-note rendering before creating a release.
+The tag-based GitHub Release workflow repeats the privacy scan, required source checks, audit, benchmark, sanitized reference parity harness, package build, packaged app smoke, native UI smoke, checksum verification, and release-note rendering before creating a release.
 
 ## Private Reference Parity
 
