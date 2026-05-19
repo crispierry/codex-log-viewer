@@ -414,9 +414,44 @@ function submittedUserMessageContent(value: unknown): string {
   const raw = stringValue(value) ?? "";
   const markerIndex = raw.indexOf(USER_REQUEST_MARKER);
   if (markerIndex < 0) {
-    return raw;
+    return stripGeneratedAttachmentDescriptions(raw);
   }
-  return raw.slice(markerIndex + USER_REQUEST_MARKER.length).trim();
+  const beforeMarker = raw.slice(0, markerIndex);
+  const afterMarker = raw.slice(markerIndex + USER_REQUEST_MARKER.length);
+  const cleanedRequest = stripGeneratedAttachmentDescriptions(afterMarker);
+  if (cleanedRequest) {
+    return cleanedRequest;
+  }
+  return diffCommentContent(beforeMarker) ?? "";
+}
+
+function stripGeneratedAttachmentDescriptions(value: string): string {
+  return value
+    .split(/\r?\n/)
+    .filter((line) => !isGeneratedAttachmentDescription(line))
+    .join("\n")
+    .trim();
+}
+
+function isGeneratedAttachmentDescription(line: string): boolean {
+  const normalized = line.trim().replace(/\s+/g, " ");
+  return /^The next image shows .* at the time of Comment \d+\. .* (outlined in blue|marked by comment marker \d+)\.?$/i.test(normalized);
+}
+
+function diffCommentContent(value: string): string | undefined {
+  if (!value.includes("# Diff comments:")) {
+    return undefined;
+  }
+
+  const comments: string[] = [];
+  const pattern = /\nComment:\n([\s\S]*?)(?=\n\n(?:## Comment \d+|# In app browser(?: \(IAB\))?:|## My request for Codex:|$))/g;
+  for (const match of value.matchAll(pattern)) {
+    const comment = match[1]?.trim();
+    if (comment) {
+      comments.push(comment);
+    }
+  }
+  return comments.length > 0 ? comments.join("\n\n") : undefined;
 }
 
 function isAutomationMessageContent(value: string): boolean {

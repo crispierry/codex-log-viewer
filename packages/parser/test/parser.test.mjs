@@ -7,6 +7,7 @@ import { parseCodexLogFile } from "../dist/index.js";
 const testDir = dirname(fileURLToPath(import.meta.url));
 const fixturePath = resolve(testDir, "../../../fixtures/codex/sample-session.jsonl");
 const eventShapesFixturePath = resolve(testDir, "../../../fixtures/codex/event-shapes.jsonl");
+const visualCommentWrapperFixturePath = resolve(testDir, "../../../fixtures/codex/visual-comment-wrapper.jsonl");
 
 test("parseCodexLogFile normalizes known Codex rollout events and preserves warnings", async () => {
   const parsed = await parseCodexLogFile(fixturePath);
@@ -83,4 +84,13 @@ test("parseCodexLogFile normalizes response items and tool events", async () => 
       ["future_top_level", "future_payload"]
     ]
   );
+});
+
+test("parseCodexLogFile extracts visual review comments instead of generated image captions", async () => {
+  const parsed = await parseCodexLogFile(visualCommentWrapperFixturePath);
+  const userMessage = parsed.messages.find((message) => message.sourceEvent === "event_msg.user_message");
+
+  assert.equal(userMessage?.content, "Move the fixture button to the right side");
+  assert.equal(userMessage?.content.includes("The next image shows"), false);
+  assert.equal(parsed.messages.filter((message) => message.sourceEvent === "event_msg.user_message").length, 1);
 });
