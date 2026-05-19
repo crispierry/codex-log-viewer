@@ -9,6 +9,8 @@ const requiredIdentifiers = [
   "export-json-button",
   "export-csv-button",
   "status-pill",
+  "activity-range-label",
+  "cache-status-label",
   "source-paths-editor",
   "source-picker-button",
   "source-apply-button",

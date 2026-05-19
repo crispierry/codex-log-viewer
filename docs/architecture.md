@@ -100,14 +100,16 @@ Supported commands:
 
 ## Storage
 
-MVP can parse on demand from local files. Later versions can add a local cache or index for speed.
+The macOS app uses a persistent local parsed cache for speed. The local engine receives the cache directory from the native app and stores cache files under Application Support, outside the repository.
 
-Any cache should:
+The cache must:
 
 - live on the user's machine
 - be invalidated by file path, size, and modification time
 - store derived data separately from raw sensitive content where practical
 - be documented clearly
+
+The cache stores parsed records, including message text needed for search and session details, but does not store raw JSONL lines. Search remains in-memory over the loaded parsed corpus; a SQLite FTS index can be added later if search latency becomes the bottleneck.
 
 ## Privacy Boundary
 

@@ -28,6 +28,11 @@ struct CodexLogViewerApp: App {
         }
         .keyboardShortcut("r", modifiers: .command)
 
+        Button("Rebuild Local Cache") {
+          model.rebuildLocalCache()
+        }
+        .keyboardShortcut("r", modifiers: [.command, .shift])
+
         Button("Find in Messages") {
           model.focusMessageSearch()
         }

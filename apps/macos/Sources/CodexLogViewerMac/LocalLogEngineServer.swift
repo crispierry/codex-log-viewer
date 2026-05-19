@@ -135,6 +135,7 @@ final class LocalLogEngineServer {
     process.standardError = stderrHandle
     var environment = ProcessInfo.processInfo.environment
     environment["CODEX_LOG_VIEWER_AUTH_TOKEN"] = authToken
+    environment["CODEX_LOG_VIEWER_CACHE_DIR"] = try cacheDirectoryURL().path
     process.environment = environment
 
     do {
@@ -214,6 +215,27 @@ final class LocalLogEngineServer {
     }
 
     throw LocalLogEngineServerError.missingRepository
+  }
+
+  private func cacheDirectoryURL() throws -> URL {
+    if let cacheDir = ProcessInfo.processInfo.environment["CODEX_LOG_VIEWER_CACHE_DIR"], !cacheDir.isEmpty {
+      let url = URL(fileURLWithPath: cacheDir, isDirectory: true)
+      try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+      return url
+    }
+
+    let appSupportURL = try FileManager.default.url(
+      for: .applicationSupportDirectory,
+      in: .userDomainMask,
+      appropriateFor: nil,
+      create: true
+    )
+    let cacheURL = appSupportURL
+      .appending(path: "Codex Log Viewer", directoryHint: .isDirectory)
+      .appending(path: "Cache", directoryHint: .isDirectory)
+      .appending(path: "v1", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: cacheURL, withIntermediateDirectories: true)
+    return cacheURL
   }
 
   private func readServerURL() -> URL? {

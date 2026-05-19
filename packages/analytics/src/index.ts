@@ -16,6 +16,7 @@ export type {
   MessageSearchResult,
   MessageSearchSummary,
   ModelBucket,
+  ParseCacheMetadata,
   ProjectAlias,
   ProjectListItem,
   ProjectSummary,

@@ -263,6 +263,18 @@ struct HeaderView: View {
         .fontWeight(.semibold)
       Text("Local Codex usage, sessions, tokens, and message search.")
         .foregroundStyle(.secondary)
+      if let activityRangeText = model.activityRangeText {
+        Text(activityRangeText)
+          .font(.subheadline)
+          .foregroundStyle(.secondary)
+          .accessibilityIdentifier("activity-range-label")
+      }
+      if let cacheStatusText = model.cacheStatusText {
+        Text(cacheStatusText)
+          .font(.caption)
+          .foregroundStyle(.tertiary)
+          .accessibilityIdentifier("cache-status-label")
+      }
     }
   }
 }

@@ -45,18 +45,120 @@ struct LogFilters: Equatable {
   var since: String?
   var until: String?
   var refreshToken = 0
+  var rebuildCache = false
 }
 
 struct ProjectsResponse: Decodable {
   let projects: [ProjectListItem]
+  let cacheStatus: String?
+  let reusedFiles: Int?
+  let parsedFiles: Int?
+  let removedFiles: Int?
+  let totalFiles: Int?
+  let updatedAt: String?
+
+  var cacheMetadata: CacheMetadata? {
+    CacheMetadata(
+      cacheStatus: cacheStatus,
+      reusedFiles: reusedFiles,
+      parsedFiles: parsedFiles,
+      removedFiles: removedFiles,
+      totalFiles: totalFiles,
+      updatedAt: updatedAt
+    )
+  }
 }
 
 struct SummaryResponse: Decodable {
   let summary: ProjectSummary
+  let cacheStatus: String?
+  let reusedFiles: Int?
+  let parsedFiles: Int?
+  let removedFiles: Int?
+  let totalFiles: Int?
+  let updatedAt: String?
+
+  var cacheMetadata: CacheMetadata? {
+    CacheMetadata(
+      cacheStatus: cacheStatus,
+      reusedFiles: reusedFiles,
+      parsedFiles: parsedFiles,
+      removedFiles: removedFiles,
+      totalFiles: totalFiles,
+      updatedAt: updatedAt
+    )
+  }
 }
 
 struct MessageSearchResponse: Decodable {
   let search: MessageSearchSummary
+  let cacheStatus: String?
+  let reusedFiles: Int?
+  let parsedFiles: Int?
+  let removedFiles: Int?
+  let totalFiles: Int?
+  let updatedAt: String?
+
+  var cacheMetadata: CacheMetadata? {
+    CacheMetadata(
+      cacheStatus: cacheStatus,
+      reusedFiles: reusedFiles,
+      parsedFiles: parsedFiles,
+      removedFiles: removedFiles,
+      totalFiles: totalFiles,
+      updatedAt: updatedAt
+    )
+  }
+}
+
+struct CacheMetadata: Decodable, Equatable {
+  let cacheStatus: String
+  let reusedFiles: Int
+  let parsedFiles: Int
+  let removedFiles: Int
+  let totalFiles: Int
+  let updatedAt: String
+
+  init(
+    cacheStatus: String,
+    reusedFiles: Int,
+    parsedFiles: Int,
+    removedFiles: Int,
+    totalFiles: Int,
+    updatedAt: String
+  ) {
+    self.cacheStatus = cacheStatus
+    self.reusedFiles = reusedFiles
+    self.parsedFiles = parsedFiles
+    self.removedFiles = removedFiles
+    self.totalFiles = totalFiles
+    self.updatedAt = updatedAt
+  }
+
+  init?(
+    cacheStatus: String?,
+    reusedFiles: Int?,
+    parsedFiles: Int?,
+    removedFiles: Int?,
+    totalFiles: Int?,
+    updatedAt: String?
+  ) {
+    guard let cacheStatus,
+      let reusedFiles,
+      let parsedFiles,
+      let removedFiles,
+      let totalFiles,
+      let updatedAt
+    else {
+      return nil
+    }
+    self.cacheStatus = cacheStatus
+    self.reusedFiles = reusedFiles
+    self.parsedFiles = parsedFiles
+    self.removedFiles = removedFiles
+    self.totalFiles = totalFiles
+    self.updatedAt = updatedAt
+  }
 }
 
 struct ProjectListItem: Decodable, Identifiable, Hashable {
@@ -73,6 +175,7 @@ struct ProjectListItem: Decodable, Identifiable, Hashable {
 struct ProjectSummary: Decodable {
   let project: String
   let generatedAt: String
+  let activity: SummaryActivity?
   let totals: SummaryTotals
   let tokens: TokenUsage
   let messagesByDay: [DateBucket]
@@ -81,6 +184,11 @@ struct ProjectSummary: Decodable {
   let models: [ModelBucket]
   let sessions: [SessionSummary]
   let repeatedUserMessages: [RepeatedUserMessage]
+}
+
+struct SummaryActivity: Decodable, Hashable {
+  let firstSeen: String?
+  let lastSeen: String?
 }
 
 struct SummaryTotals: Decodable {

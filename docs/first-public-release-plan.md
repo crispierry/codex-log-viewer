@@ -310,15 +310,16 @@ These should not block a small source preview, but they should happen before act
 Gap:
 
 - Search scans the parsed in-memory corpus.
-- Large histories may be slow and memory-heavy.
+- Parsed sessions now use a persistent local cache, so relaunch and navigation no longer require full reprocessing of unchanged logs.
+- Very large histories may still make text search itself slow or memory-heavy.
 
 Plan:
 
 - Add performance fixtures or synthetic large-history generators.
 - Define startup, refresh, and search latency budgets.
-- Add a local SQLite cache with FTS5 when scan-based search no longer meets the budget.
-- Incrementally update the index based on path, size, and modification time.
-- Keep the index under Application Support and out of git.
+- Keep the parsed cache under Application Support and incrementally update it based on path, size, and modification time.
+- Add a local SQLite FTS5 index when scan-based search no longer meets the budget.
+- Keep any future index under Application Support and out of git.
 
 Acceptance:
 

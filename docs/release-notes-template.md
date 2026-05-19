@@ -26,7 +26,7 @@ Codex Log Viewer is a local-first native macOS app for inspecting OpenAI Codex s
 ## Known Limitations
 
 - Raw session inspection is a private local view and may show message content from local logs.
-- Search is scan-based in v0.1; a local SQLite FTS index is planned when larger histories need it.
+- Parsed sessions are cached locally between launches. Search is still scan-based over the loaded parsed corpus; a local SQLite FTS index is planned when larger histories need it.
 - There is no auto-update framework yet; users install updates manually from GitHub Releases.
 - Official notarized artifacts require the release to be built with Developer ID and notary credentials.
 

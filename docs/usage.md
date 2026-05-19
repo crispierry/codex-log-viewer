@@ -58,12 +58,19 @@ Selecting a search result opens its session context in the inspector. The inspec
 
 Keyboard shortcuts:
 
-- `Command-R`: refresh local logs
+- `Command-R`: refresh local logs incrementally
+- `Command-Shift-R`: rebuild the local parsed cache
 - `Command-F`: focus message search
 - `Command-Return`: run message search
 - `Command-O`: choose sources
 - `Command-E`: export redacted JSON
 - `Command-Shift-E`: export CSV
+
+## Local Cache
+
+The macOS app stores a private parsed-session cache in `~/Library/Application Support/Codex Log Viewer/Cache/v1` so it does not need to reprocess unchanged logs every time you navigate or relaunch the app.
+
+Refresh checks for added, changed, or deleted session files and updates only what changed. Use `Logs > Rebuild Local Cache` if the cache ever looks stale or you want to force a full local reparse.
 
 ## Exports
 

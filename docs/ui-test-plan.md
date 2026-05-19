@@ -137,4 +137,4 @@ If the app cannot load data:
 - Check whether multiple heavy scans are running.
 - Re-run `npm test` and `npm run build:mac` to isolate parser or native build failures.
 
-The private local engine caches parsed corpora briefly and shares in-flight scans, so project selection and session detail requests should not trigger repeated full reparses during normal use.
+The private local engine keeps a persistent parsed-session cache and shares the warm in-memory corpus during a run, so project selection and session detail requests should not trigger repeated full reparses during normal use.

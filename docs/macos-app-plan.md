@@ -35,7 +35,7 @@ Phase 1 uses the parser output directly:
 - return timestamp, role, project, session, source event, and snippet
 - never send search data outside the machine
 
-Phase 2 should add a local persistent index:
+Phase 2 should add a local persistent search index:
 
 - store an app-local SQLite database under the user's application-support directory
 - use SQLite FTS5 for message search
@@ -82,8 +82,8 @@ Status: `.app` bundle generation, zip/checksum artifacts, app icon, signing/nota
 
 Phase 3 improves scale:
 
-- persistent local cache
-- incremental scans
+- persistent local parsed cache (implemented)
+- incremental parsed-session refresh (implemented)
 - FTS-backed search
 - large-history performance tests
 - memory and startup-time budgets

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { parseCodexCorpus } from "@codex-log-viewer/parser";
+import { parseCodexCorpus, parseCodexCorpusWithCache } from "@codex-log-viewer/parser";
 import type {
   MessageRecord,
   ParsedCodexCorpus,
@@ -26,6 +26,20 @@ import type {
 import { addUsage, emptyUsage } from "./usage.js";
 
 export async function loadCorpus(options: SummaryOptions = {}): Promise<LoadedCorpus> {
+  if (options.cacheDir) {
+    const loaded = await parseCodexCorpusWithCache({
+      paths: options.paths,
+      cacheDir: options.cacheDir,
+      refreshCache: options.refreshCache,
+      rebuildCache: options.rebuildCache
+    });
+    return {
+      corpus: loaded.corpus,
+      cache: loaded.cache,
+      projects: listProjects(loaded.corpus, options.aliases)
+    };
+  }
+
   const corpus = await parseCodexCorpus({ paths: options.paths });
   return {
     corpus,
@@ -34,8 +48,8 @@ export async function loadCorpus(options: SummaryOptions = {}): Promise<LoadedCo
 }
 
 export async function summarizeProject(options: SummaryOptions = {}): Promise<ProjectSummary> {
-  const corpus = await parseCodexCorpus({ paths: options.paths });
-  return summarizeParsedCorpus(corpus, options);
+  const loaded = await loadCorpus(options);
+  return summarizeParsedCorpus(loaded.corpus, options);
 }
 
 export function summarizeParsedCorpus(corpus: ParsedCodexCorpus, options: SummaryOptions = {}): ProjectSummary {
@@ -71,6 +85,7 @@ export function summarizeParsedCorpus(corpus: ParsedCodexCorpus, options: Summar
   const tokensByDay = bucketTokens(tokenUsage, "day");
   const models = modelBuckets(turns, tokenUsage, turnModels);
   const sessions = sessionSummaries(corpus, visibleFiles, aliases, range);
+  const activity = activityRange(sessions);
   const repeatedUserMessages = repeatedUserMessageGroups(submittedUserMessages, corpus, aliases);
   const visibleSessionFilePaths = new Set(sessions.map((session) => session.filePath));
   const parseWarnings = corpus.warnings.filter((warning) => visibleSessionFilePaths.has(warning.filePath));
@@ -78,6 +93,7 @@ export function summarizeParsedCorpus(corpus: ParsedCodexCorpus, options: Summar
   return {
     project,
     generatedAt: new Date().toISOString(),
+    activity,
     filters: {
       since: options.since,
       until: options.until,
@@ -101,6 +117,22 @@ export function summarizeParsedCorpus(corpus: ParsedCodexCorpus, options: Summar
     models,
     sessions,
     repeatedUserMessages
+  };
+}
+
+function activityRange(sessions: SessionSummary[]): ProjectSummary["activity"] {
+  const firstSeen = sessions
+    .map((session) => session.firstSeen)
+    .filter(Boolean)
+    .sort()[0];
+  const lastSeen = sessions
+    .map((session) => session.lastSeen)
+    .filter(Boolean)
+    .sort()
+    .at(-1);
+  return {
+    firstSeen,
+    lastSeen
   };
 }
 

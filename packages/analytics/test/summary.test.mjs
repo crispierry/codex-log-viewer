@@ -22,6 +22,8 @@ test("summarizeParsedCorpus aggregates messages, unique messages, tokens, models
   assert.equal(summary.totals.unknownEvents, 1);
   assert.equal(summary.totals.parseWarnings, 1);
   assert.equal(summary.messagesByDay[0]?.count, 1);
+  assert.equal(summary.activity.firstSeen, "2026-04-27T19:01:00.745Z");
+  assert.equal(summary.activity.lastSeen, "2026-04-27T19:01:12.000Z");
 });
 
 test("summarizeParsedCorpus groups repeated user prompts without exposing them in redacted exports", () => {

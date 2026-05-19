@@ -19,14 +19,22 @@ struct LogEngineAPI {
   let authToken: String
 
   func projects(filters: LogFilters) async throws -> [ProjectListItem] {
+    try await projectsWithMetadata(filters: filters).projects
+  }
+
+  func projectsWithMetadata(filters: LogFilters) async throws -> CachedProjects {
     let response: ProjectsResponse = try await get("api/projects", query: queryItems(filters: filters, includeDateRange: false))
-    return response.projects
+    return CachedProjects(projects: response.projects, cache: response.cacheMetadata)
   }
 
   func summary(project: String, filters: LogFilters) async throws -> ProjectSummary {
+    try await summaryWithMetadata(project: project, filters: filters).summary
+  }
+
+  func summaryWithMetadata(project: String, filters: LogFilters) async throws -> CachedSummary {
     let query = queryItems(project: project, filters: filters)
     let response: SummaryResponse = try await get("api/summary", query: query)
-    return response.summary
+    return CachedSummary(summary: response.summary, cache: response.cacheMetadata)
   }
 
   func sessionDetail(sessionID: String, filePath: String? = nil, project: String, filters: LogFilters) async throws -> SessionDetail {
@@ -48,6 +56,28 @@ struct LogEngineAPI {
     filters: LogFilters,
     submittedOnly: Bool = false
   ) async throws -> MessageSearchSummary {
+    try await searchMessagesWithMetadata(
+      query: query,
+      role: role,
+      model: model,
+      sessionID: sessionID,
+      filePath: filePath,
+      project: project,
+      filters: filters,
+      submittedOnly: submittedOnly
+    ).search
+  }
+
+  func searchMessagesWithMetadata(
+    query: String,
+    role: MessageRoleFilter,
+    model: String,
+    sessionID: String?,
+    filePath: String? = nil,
+    project: String,
+    filters: LogFilters,
+    submittedOnly: Bool = false
+  ) async throws -> CachedSearch {
     var queryItems = [
       URLQueryItem(name: "q", value: query),
       URLQueryItem(name: "role", value: role.rawValue),
@@ -67,7 +97,7 @@ struct LogEngineAPI {
     }
     queryItems.append(contentsOf: self.queryItems(project: project, filters: filters))
     let response: MessageSearchResponse = try await get("api/messages/search", query: queryItems)
-    return response.search
+    return CachedSearch(search: response.search, cache: response.cacheMetadata)
   }
 
   func exportSummary(format: ExportFormat, project: String, filters: LogFilters) async throws -> Data {
@@ -117,6 +147,24 @@ struct LogEngineAPI {
     if filters.refreshToken > 0 {
       items.append(URLQueryItem(name: "refresh", value: String(filters.refreshToken)))
     }
+    if filters.rebuildCache {
+      items.append(URLQueryItem(name: "rebuild", value: "1"))
+    }
     return items
   }
+}
+
+struct CachedProjects {
+  let projects: [ProjectListItem]
+  let cache: CacheMetadata?
+}
+
+struct CachedSummary {
+  let summary: ProjectSummary
+  let cache: CacheMetadata?
+}
+
+struct CachedSearch {
+  let search: MessageSearchSummary
+  let cache: CacheMetadata?
 }

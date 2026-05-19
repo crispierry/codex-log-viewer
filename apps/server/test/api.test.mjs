@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, unlink, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import test from "node:test";
@@ -355,3 +355,120 @@ test("server reports fixed-port conflicts and dynamic ports avoid them", async (
     await first.close();
   }
 });
+
+test("local API incrementally refreshes the persistent parsed cache", async () => {
+  const tempDir = await mkdtemp(`${tmpdir()}/codex-log-viewer-api-cache-`);
+  const sourceDir = resolve(tempDir, "logs");
+  const cacheDir = resolve(tempDir, "cache");
+  const sessionA = resolve(sourceDir, "session-a.jsonl");
+  const sessionB = resolve(sourceDir, "session-b.jsonl");
+
+  await writeApiSession(sessionA, {
+    sessionId: "session-a",
+    cwd: "/tmp/cache-api-app",
+    timestamp: "2026-01-01T00:00:00.000Z",
+    message: "First API cache message"
+  });
+
+  const server = await startServer({
+    port: 0,
+    authToken: "test-token",
+    paths: [sourceDir],
+    cacheDir
+  });
+  const headers = { authorization: "Bearer test-token" };
+
+  try {
+    const cold = await fetch(`${server.url}/api/summary`, { headers });
+    assert.equal(cold.status, 200);
+    const coldBody = await cold.json();
+    assert.equal(coldBody.cacheStatus, "updated");
+    assert.equal(coldBody.parsedFiles, 1);
+    assert.equal(coldBody.summary.totals.sessions, 1);
+    assert.equal(coldBody.summary.activity.firstSeen, "2026-01-01T00:00:00.000Z");
+    assert.equal(coldBody.summary.activity.lastSeen, "2026-01-01T00:00:00.000Z");
+
+    const warm = await fetch(`${server.url}/api/projects`, { headers });
+    assert.equal(warm.status, 200);
+    const warmBody = await warm.json();
+    assert.equal(warmBody.cacheStatus, "ready");
+    assert.equal(warmBody.parsedFiles, 0);
+    assert.equal(warmBody.reusedFiles, 1);
+
+    await writeApiSession(sessionB, {
+      sessionId: "session-b",
+      cwd: "/tmp/cache-api-app",
+      timestamp: "2026-01-02T00:00:00.000Z",
+      message: "Second API cache message"
+    });
+
+    const stale = await fetch(`${server.url}/api/summary`, { headers });
+    assert.equal(stale.status, 200);
+    const staleBody = await stale.json();
+    assert.equal(staleBody.cacheStatus, "ready");
+    assert.equal(staleBody.summary.totals.sessions, 1);
+
+    const refreshed = await fetch(`${server.url}/api/summary?refresh=1`, { headers });
+    assert.equal(refreshed.status, 200);
+    const refreshedBody = await refreshed.json();
+    assert.equal(refreshedBody.cacheStatus, "updated");
+    assert.equal(refreshedBody.reusedFiles, 1);
+    assert.equal(refreshedBody.parsedFiles, 1);
+    assert.equal(refreshedBody.summary.totals.sessions, 2);
+    assert.equal(refreshedBody.summary.activity.lastSeen, "2026-01-02T00:00:00.000Z");
+
+    const search = await fetch(`${server.url}/api/messages/search?q=Second`, { headers });
+    assert.equal(search.status, 200);
+    const searchBody = await search.json();
+    assert.equal(searchBody.cacheStatus, "ready");
+    assert.equal(searchBody.search.totalMatches, 1);
+    assert.equal(searchBody.search.results[0]?.sessionId, "session-b");
+
+    await unlink(sessionA);
+    const removed = await fetch(`${server.url}/api/summary?refresh=2`, { headers });
+    assert.equal(removed.status, 200);
+    const removedBody = await removed.json();
+    assert.equal(removedBody.cacheStatus, "updated");
+    assert.equal(removedBody.removedFiles, 1);
+    assert.equal(removedBody.summary.totals.sessions, 1);
+    assert.equal(removedBody.summary.sessions[0]?.sessionId, "session-b");
+
+    const rebuilt = await fetch(`${server.url}/api/summary?rebuild=1`, { headers });
+    assert.equal(rebuilt.status, 200);
+    const rebuiltBody = await rebuilt.json();
+    assert.equal(rebuiltBody.cacheStatus, "rebuilt");
+    assert.equal(rebuiltBody.parsedFiles, 1);
+    assert.equal(rebuiltBody.reusedFiles, 0);
+    assert.equal(rebuiltBody.summary.totals.sessions, 1);
+  } finally {
+    await server.close();
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+async function writeApiSession(filePath, { sessionId, cwd, timestamp, message }) {
+  await mkdir(dirname(filePath), { recursive: true });
+  await writeFile(
+    filePath,
+    [
+      JSON.stringify({
+        timestamp,
+        type: "session_meta",
+        payload: {
+          id: sessionId,
+          timestamp,
+          cwd
+        }
+      }),
+      JSON.stringify({
+        timestamp,
+        type: "event_msg",
+        payload: {
+          type: "user_message",
+          message
+        }
+      })
+    ].join("\n") + "\n",
+    "utf8"
+  );
+}

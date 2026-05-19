@@ -126,7 +126,26 @@ export interface ParsedCodexCorpus {
   warnings: ParseWarning[];
 }
 
+export type ParseCacheStatus = "ready" | "checking" | "updated" | "rebuilt";
+
+export interface ParseCacheMetadata {
+  cacheStatus: ParseCacheStatus;
+  reusedFiles: number;
+  parsedFiles: number;
+  removedFiles: number;
+  totalFiles: number;
+  updatedAt: string;
+}
+
+export interface CachedParsedCodexCorpus {
+  corpus: ParsedCodexCorpus;
+  cache: ParseCacheMetadata;
+}
+
 export interface ParseOptions {
   paths?: string[];
   homeDir?: string;
+  cacheDir?: string;
+  refreshCache?: boolean;
+  rebuildCache?: boolean;
 }

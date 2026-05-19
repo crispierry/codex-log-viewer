@@ -17,7 +17,7 @@ final class AppModel: ObservableObject {
       case .ready:
         return "Ready"
       case .loading:
-        return "Scanning"
+        return "Loading"
       case .failed:
         return "Needs Attention"
       }
@@ -49,6 +49,7 @@ final class AppModel: ObservableObject {
   @Published var sinceDate = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
   @Published var untilDate = Date()
   @Published var messageSearchFocusRequest = 0
+  @Published var cacheMetadata: CacheMetadata?
 
   private var api: LogEngineAPI?
   private var hasStarted = false
@@ -113,27 +114,78 @@ final class AppModel: ObservableObject {
     }
   }
 
-  func refresh(force: Bool = false) {
+  var cacheStatusText: String? {
+    guard let cacheMetadata else { return nil }
+    switch cacheMetadata.cacheStatus {
+    case "rebuilt":
+      let unit = cacheMetadata.totalFiles == 1 ? "session" : "sessions"
+      return "Cache rebuilt with \(cacheMetadata.totalFiles.formatted()) \(unit)."
+    case "updated":
+      let changes = cacheMetadata.parsedFiles + cacheMetadata.removedFiles
+      let unit = changes == 1 ? "session" : "sessions"
+      return changes > 0
+        ? "Updated \(changes.formatted()) \(unit)."
+        : "Up to date."
+    case "ready":
+      return "Up to date."
+    case "checking":
+      return "Checking local logs."
+    default:
+      return nil
+    }
+  }
+
+  var activityRangeText: String? {
+    guard let activity = summary?.activity else { return nil }
+    let first = Self.displayDateTime(activity.firstSeen)
+    let last = Self.displayDateTime(activity.lastSeen)
+    switch (first, last) {
+    case (.some(let first), .some(let last)):
+      return "First session \(first) - Last session \(last)"
+    case (.some(let first), .none):
+      return "First session \(first)"
+    case (.none, .some(let last)):
+      return "Last session \(last)"
+    case (.none, .none):
+      return nil
+    }
+  }
+
+  func refresh(force: Bool = false, rebuildCache: Bool = false) {
     guard let api else { return }
-    if force {
+    let shouldRefreshCache = force || rebuildCache
+    if shouldRefreshCache {
       refreshToken += 1
+      cacheMetadata = CacheMetadata(
+        cacheStatus: "checking",
+        reusedFiles: 0,
+        parsedFiles: 0,
+        removedFiles: 0,
+        totalFiles: cacheMetadata?.totalFiles ?? 0,
+        updatedAt: Self.isoDateFormatter.string(from: Date())
+      )
     }
 
     reloadTask?.cancel()
     reloadRequestID += 1
     let requestID = reloadRequestID
-    let filters = currentFilters()
+    let filters = currentFilters(
+      refreshToken: shouldRefreshCache ? refreshToken : 0,
+      rebuildCache: rebuildCache
+    )
     let project = selectedProject
 
     reloadTask = Task {
       do {
         status = .loading
-        async let projectList = api.projects(filters: filters)
-        async let projectSummary = api.summary(project: project, filters: filters)
-        let (projects, summary) = try await (projectList, projectSummary)
+        async let projectList = api.projectsWithMetadata(filters: filters)
+        async let projectSummary = api.summaryWithMetadata(project: project, filters: filters)
+        let (projectsResult, summaryResult) = try await (projectList, projectSummary)
         guard !Task.isCancelled, requestID == reloadRequestID else { return }
-        self.projects = projects
-        self.summary = summary
+        self.projects = projectsResult.projects
+        self.summary = summaryResult.summary
+        self.cacheMetadata = summaryResult.cache ?? projectsResult.cache
+        let summary = summaryResult.summary
         if messageModelFilter != AppConstants.allModelsName,
           !summary.models.contains(where: { $0.model == messageModelFilter }) {
           messageModelFilter = AppConstants.allModelsName
@@ -163,6 +215,10 @@ final class AppModel: ObservableObject {
       return
     }
     refresh(force: true)
+  }
+
+  func rebuildLocalCache() {
+    refresh(rebuildCache: true)
   }
 
   func selectProject(_ project: String) {
@@ -279,7 +335,7 @@ final class AppModel: ObservableObject {
     searchTask = Task {
       do {
         status = .loading
-        let search = try await api.searchMessages(
+        let searchResult = try await api.searchMessagesWithMetadata(
           query: trimmedQuery,
           role: role,
           model: model,
@@ -290,7 +346,8 @@ final class AppModel: ObservableObject {
           submittedOnly: submittedOnly
         )
         guard !Task.isCancelled, requestID == searchRequestID else { return }
-        searchSummary = search
+        searchSummary = searchResult.search
+        cacheMetadata = searchResult.cache ?? cacheMetadata
         status = .ready
       } catch is CancellationError {
         return
@@ -683,12 +740,13 @@ final class AppModel: ObservableObject {
     }
   }
 
-  private func currentFilters() -> LogFilters {
+  private func currentFilters(refreshToken: Int = 0, rebuildCache: Bool = false) -> LogFilters {
     LogFilters(
       paths: sourcePaths,
       since: hasSinceFilter ? Self.dateFormatter.string(from: sinceDate) : nil,
       until: hasUntilFilter ? Self.dateFormatter.string(from: untilDate) : nil,
-      refreshToken: refreshToken
+      refreshToken: refreshToken,
+      rebuildCache: rebuildCache
     )
   }
 
@@ -716,6 +774,34 @@ final class AppModel: ObservableObject {
     formatter.calendar = Calendar(identifier: .gregorian)
     formatter.locale = Locale(identifier: "en_US_POSIX")
     formatter.dateFormat = "yyyy-MM-dd"
+    return formatter
+  }()
+
+  private static let displayDateTimeFormatter: DateFormatter = {
+    let formatter = DateFormatter()
+    formatter.dateStyle = .medium
+    formatter.timeStyle = .short
+    return formatter
+  }()
+
+  private static func displayDateTime(_ value: String?) -> String? {
+    guard let value,
+      let date = Self.isoDateFormatter.date(from: value) ?? Self.isoDateFormatterWithoutFractionalSeconds.date(from: value)
+    else {
+      return nil
+    }
+    return Self.displayDateTimeFormatter.string(from: date)
+  }
+
+  private static let isoDateFormatter: ISO8601DateFormatter = {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return formatter
+  }()
+
+  private static let isoDateFormatterWithoutFractionalSeconds: ISO8601DateFormatter = {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime]
     return formatter
   }()
 

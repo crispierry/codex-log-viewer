@@ -38,6 +38,8 @@ Do not replace field names or remove nesting just to sanitize content. The parse
 
 The app makes session details separate from aggregate metrics. It currently shows parsed message content and parser diagnostics when a user selects a session, so users should treat the app as a local private view.
 
+The macOS app keeps a persistent parsed-session cache under Application Support. The cache does not store raw JSONL lines, but it does store derived parsed records, including message text needed for search and session details. Treat this cache as private local app data.
+
 The local API is bound to loopback and protected with an ephemeral app-generated token. The token is passed only to the app-owned parser engine and is not written to logs or the UI.
 
 Future UI work should consider:

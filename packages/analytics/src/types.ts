@@ -1,9 +1,12 @@
 import type {
   MessageRole,
+  ParseCacheMetadata,
   ParsedCodexCorpus,
   SessionRecord,
   TokenUsage
 } from "@codex-log-viewer/parser";
+
+export type { ParseCacheMetadata };
 
 export interface ProjectAlias {
   name: string;
@@ -16,6 +19,9 @@ export interface SummaryOptions {
   since?: string;
   until?: string;
   aliases?: ProjectAlias[];
+  cacheDir?: string;
+  refreshCache?: boolean;
+  rebuildCache?: boolean;
 }
 
 export interface DateBucket {
@@ -67,6 +73,10 @@ export interface RepeatedUserMessageVariant {
 export interface ProjectSummary {
   project: string;
   generatedAt: string;
+  activity: {
+    firstSeen?: string;
+    lastSeen?: string;
+  };
   filters: {
     since?: string;
     until?: string;
@@ -137,6 +147,7 @@ export interface ProjectListItem {
 export interface LoadedCorpus {
   corpus: ParsedCodexCorpus;
   projects: ProjectListItem[];
+  cache?: ParseCacheMetadata;
 }
 
 export interface ProjectContext {

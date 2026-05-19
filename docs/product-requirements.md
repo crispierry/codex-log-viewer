@@ -55,7 +55,7 @@ The product should answer:
 - Redacted detailed export mode
 - Persistent local search index with SQLite FTS5
 - API-equivalent cost estimates
-- Persistent local cache for very large histories
+- Additional large-history memory and startup-time budgets
 
 ## Non-Goals For MVP
 

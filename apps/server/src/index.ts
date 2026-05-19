@@ -10,6 +10,7 @@ import {
   summaryToJson,
   summarizeParsedCorpus,
   type LoadedCorpus,
+  type ParseCacheMetadata,
   type SummaryOptions
 } from "@codex-log-viewer/analytics";
 
@@ -18,24 +19,23 @@ export interface ServerOptions {
   port?: number;
   paths?: string[];
   authToken?: string;
+  cacheDir?: string;
 }
 
 interface CorpusCacheEntry {
-  expiresAt: number;
   promise: Promise<LoadedCorpus>;
+  loaded?: LoadedCorpus;
 }
-
-const corpusCache = new Map<string, CorpusCacheEntry>();
-const CACHE_TTL_MS = 30_000;
 
 export async function startServer(options: ServerOptions = {}): Promise<{ url: string; close: () => Promise<void> }> {
   const host = options.host ?? "127.0.0.1";
   const port = options.port ?? 3210;
   const keepAlive = setInterval(() => undefined, 60_000);
+  const corpusCache = new Map<string, CorpusCacheEntry>();
 
   const server = createServer(async (request, response) => {
     try {
-      await handleRequest(request, response, options);
+      await handleRequest(request, response, options, corpusCache);
     } catch (error) {
       sendJson(response, 500, {
         error: error instanceof Error ? error.message : "Unexpected server error"
@@ -63,7 +63,12 @@ export async function startServer(options: ServerOptions = {}): Promise<{ url: s
   };
 }
 
-async function handleRequest(request: IncomingMessage, response: ServerResponse, options: ServerOptions): Promise<void> {
+async function handleRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  options: ServerOptions,
+  corpusCache: Map<string, CorpusCacheEntry>
+): Promise<void> {
   const url = new URL(request.url ?? "/", "http://localhost");
   if (!isAuthorized(request, options.authToken)) {
     sendJson(response, 401, { error: "Unauthorized" });
@@ -76,20 +81,20 @@ async function handleRequest(request: IncomingMessage, response: ServerResponse,
   }
 
   if (url.pathname === "/api/projects") {
-    const corpus = await loadCachedCorpus(url, options.paths);
-    sendJson(response, 200, { projects: corpus.projects });
+    const corpus = await loadCachedCorpus(url, options, corpusCache);
+    sendJson(response, 200, withCacheMetadata({ projects: corpus.projects }, corpus.cache));
     return;
   }
 
   if (url.pathname === "/api/summary") {
-    const loaded = await loadCachedCorpus(url, options.paths);
+    const loaded = await loadCachedCorpus(url, options, corpusCache);
     const summary = summarizeParsedCorpus(loaded.corpus, summaryOptionsFromQuery(url, options.paths));
-    sendJson(response, 200, { summary });
+    sendJson(response, 200, withCacheMetadata({ summary }, loaded.cache));
     return;
   }
 
   if (url.pathname === "/api/sessions") {
-    const loaded = await loadCachedCorpus(url, options.paths);
+    const loaded = await loadCachedCorpus(url, options, corpusCache);
     const summary = summarizeParsedCorpus(loaded.corpus, summaryOptionsFromQuery(url, options.paths));
     sendJson(response, 200, { sessions: summary.sessions });
     return;
@@ -102,7 +107,7 @@ async function handleRequest(request: IncomingMessage, response: ServerResponse,
       return;
     }
     const filePath = url.searchParams.get("filePath") ?? undefined;
-    const loaded = await loadCachedCorpus(url, options.paths);
+    const loaded = await loadCachedCorpus(url, options, corpusCache);
     const summaryOptions = summaryOptionsFromQuery(url, options.paths);
     const summary = summarizeParsedCorpus(loaded.corpus, summaryOptions);
     const visibleSession = summary.sessions.find(
@@ -141,9 +146,9 @@ async function handleRequest(request: IncomingMessage, response: ServerResponse,
   }
 
   if (url.pathname === "/api/messages/search") {
-    const loaded = await loadCachedCorpus(url, options.paths);
+    const loaded = await loadCachedCorpus(url, options, corpusCache);
     const limit = Number(url.searchParams.get("limit") ?? 100);
-    sendJson(response, 200, {
+    sendJson(response, 200, withCacheMetadata({
       search: searchMessages(loaded.corpus, {
         ...summaryOptionsFromQuery(url, options.paths),
         query: url.searchParams.get("q") ?? "",
@@ -154,12 +159,12 @@ async function handleRequest(request: IncomingMessage, response: ServerResponse,
         submittedOnly: url.searchParams.get("submittedOnly") === "true",
         limit
       })
-    });
+    }, loaded.cache));
     return;
   }
 
   if (url.pathname === "/api/export") {
-    const loaded = await loadCachedCorpus(url, options.paths);
+    const loaded = await loadCachedCorpus(url, options, corpusCache);
     const summaryOptions = summaryOptionsFromQuery(url, options.paths);
     const summary = summarizeParsedCorpus(loaded.corpus, summaryOptions);
     const format = url.searchParams.get("format") === "csv" ? "csv" : "json";
@@ -176,26 +181,46 @@ async function handleRequest(request: IncomingMessage, response: ServerResponse,
   sendJson(response, 404, { error: "Not found" });
 }
 
-function loadCachedCorpus(url: URL, fallbackPaths?: string[]): Promise<LoadedCorpus> {
-  const paths = pathsFromQuery(url, fallbackPaths);
-  const forceRefresh = url.searchParams.has("refresh");
-  const key = cacheKey(paths);
-  const now = Date.now();
+function loadCachedCorpus(
+  url: URL,
+  options: ServerOptions,
+  corpusCache: Map<string, CorpusCacheEntry>
+): Promise<LoadedCorpus> {
+  const paths = pathsFromQuery(url, options.paths);
+  const refreshCache = url.searchParams.has("refresh");
+  const rebuildCache = url.searchParams.get("rebuild") === "1";
+  const cacheDir = options.cacheDir ?? serverCacheDir();
+  const key = cacheKey(paths, cacheDir);
   const cached = corpusCache.get(key);
 
-  if (!forceRefresh && cached && cached.expiresAt > now) {
+  if (cached && !cached.loaded) {
     return cached.promise;
   }
 
-  const promise = loadCorpus({ paths }).catch((error) => {
+  if (!refreshCache && !rebuildCache && cached) {
+    if (cached.loaded) {
+      return Promise.resolve(withReadyCache(cached.loaded));
+    }
+    return cached.promise;
+  }
+
+  const entry: CorpusCacheEntry = {
+    promise: loadCorpus({
+      paths,
+      cacheDir,
+      refreshCache,
+      rebuildCache
+    })
+  };
+  entry.promise = entry.promise.then((loaded) => {
+    entry.loaded = loaded;
+    return loaded;
+  }).catch((error) => {
     corpusCache.delete(key);
     throw error;
   });
-  corpusCache.set(key, {
-    expiresAt: now + CACHE_TTL_MS,
-    promise
-  });
-  return promise;
+  corpusCache.set(key, entry);
+  return entry.promise;
 }
 
 function summaryOptionsFromQuery(url: URL, fallbackPaths?: string[]): SummaryOptions {
@@ -217,9 +242,10 @@ function pathsFromQuery(url: URL, fallbackPaths?: string[]): string[] | undefine
   return queryPaths.length > 0 ? queryPaths : fallbackPaths;
 }
 
-function roleFromQuery(value: string | null): "all" | "user" | "assistant" | "system" | "developer" | "unknown" {
+function roleFromQuery(value: string | null): "all" | "user" | "automation" | "assistant" | "system" | "developer" | "unknown" {
   switch (value) {
     case "user":
+    case "automation":
     case "assistant":
     case "system":
     case "developer":
@@ -230,8 +256,34 @@ function roleFromQuery(value: string | null): "all" | "user" | "assistant" | "sy
   }
 }
 
-function cacheKey(paths: string[] | undefined): string {
-  return paths && paths.length > 0 ? [...paths].sort().join("\n") : "__default__";
+function cacheKey(paths: string[] | undefined, cacheDir: string | undefined): string {
+  const sourceKey = paths && paths.length > 0 ? [...paths].sort().join("\n") : "__default__";
+  return `${cacheDir ?? "__no_cache__"}\n${sourceKey}`;
+}
+
+function serverCacheDir(): string | undefined {
+  return process.env.CODEX_LOG_VIEWER_CACHE_DIR;
+}
+
+function withReadyCache(loaded: LoadedCorpus): LoadedCorpus {
+  if (!loaded.cache) {
+    return loaded;
+  }
+  return {
+    ...loaded,
+    cache: {
+      ...loaded.cache,
+      cacheStatus: "ready",
+      reusedFiles: loaded.cache.totalFiles,
+      parsedFiles: 0,
+      removedFiles: 0,
+      updatedAt: new Date().toISOString()
+    }
+  };
+}
+
+function withCacheMetadata<T extends Record<string, unknown>>(body: T, cache: ParseCacheMetadata | undefined): T & Partial<ParseCacheMetadata> {
+  return cache ? { ...body, ...cache } : body;
 }
 
 function sendJson(response: ServerResponse, statusCode: number, value: unknown): void {
@@ -296,9 +348,11 @@ if (isMainModule()) {
   const portArg = process.argv.find((arg) => arg.startsWith("--port="));
   const urlFileArg = process.argv.find((arg) => arg.startsWith("--url-file="));
   const authTokenArg = process.argv.find((arg) => arg.startsWith("--auth-token="));
+  const cacheDirArg = process.argv.find((arg) => arg.startsWith("--cache-dir="));
   const port = portArg ? Number(portArg.split("=")[1]) : Number(process.env.PORT ?? 3210);
   const authToken = authTokenArg?.slice("--auth-token=".length) ?? process.env.CODEX_LOG_VIEWER_AUTH_TOKEN;
-  const server = await startServer({ port, authToken });
+  const cacheDir = cacheDirArg?.slice("--cache-dir=".length) ?? process.env.CODEX_LOG_VIEWER_CACHE_DIR;
+  const server = await startServer({ port, authToken, cacheDir });
   if (urlFileArg) {
     await writeFile(urlFileArg.slice("--url-file=".length), `${server.url}\n`);
   }
