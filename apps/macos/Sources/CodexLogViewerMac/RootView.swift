@@ -360,6 +360,29 @@ struct ChartsSection: View {
             .accessibilityIdentifier("tokens-by-hour-chart")
           }
         }
+
+        ChartPanel(title: "Output Tokens by Hour") {
+          if hourlyOutputTokenPoints.isEmpty {
+            ChartEmptyState(title: "No Hourly Output Tokens", systemImage: "arrow.up.forward")
+          } else {
+            Chart(hourlyOutputTokenPoints) { point in
+              BarMark(
+                x: .value("Hour", point.hour),
+                y: .value("Output Tokens", point.count)
+              )
+              .foregroundStyle(Color.green.gradient)
+            }
+            .chartXAxis {
+              hourlyAxisMarks()
+            }
+            .chartXScale(domain: 0...23)
+            .chartYAxis {
+              AxisMarks(position: .leading)
+            }
+            .frame(height: 160)
+            .accessibilityIdentifier("output-tokens-by-hour-chart")
+          }
+        }
       }
       .frame(maxWidth: .infinity, alignment: .leading)
       .padding(.top, 4)
@@ -407,6 +430,15 @@ struct ChartsSection: View {
       }
     }
     return points
+  }
+
+  private var hourlyOutputTokenPoints: [HourlyCountPoint] {
+    let counts = summary.messagesByHour.reduce(into: Array(repeating: 0, count: 24)) { result, bucket in
+      guard let hour = bucketHour(bucket.key) else { return }
+      result[hour] += bucket.tokens.outputTokens
+    }
+    guard counts.contains(where: { $0 > 0 }) else { return [] }
+    return counts.enumerated().map { HourlyCountPoint(hour: $0.offset, count: $0.element) }
   }
 }
 
