@@ -134,10 +134,11 @@ struct LogEngineAPI {
     return response.audit
   }
 
-  func writeAudit(targetPath: String, markdown: String) async throws -> AuditWriteResult {
+  func writeAudit(repoPath: String, targetPath: String, markdown: String) async throws -> AuditWriteResult {
     let response: AuditWriteResponse = try await postJson(
       "api/audit",
       body: [
+        "repoPath": repoPath,
         "targetPath": targetPath,
         "markdown": markdown
       ]

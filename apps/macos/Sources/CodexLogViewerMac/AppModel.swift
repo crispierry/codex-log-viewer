@@ -664,10 +664,12 @@ final class AppModel: ObservableObject {
   func approveAuditMarkdown() {
     guard let api,
       let auditPreview,
+      !auditRepoPathDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
       confirmAuditWrite(targetPath: auditPreview.targetPath)
     else {
       return
     }
+    let repoPath = auditRepoPathDraft.trimmingCharacters(in: .whitespacesAndNewlines)
     let markdown = auditReviewMarkdown
 
     auditTask?.cancel()
@@ -677,7 +679,7 @@ final class AppModel: ObservableObject {
       do {
         isAuditLoading = true
         auditStatusMessage = "Saving audit worklog."
-        let result = try await api.writeAudit(targetPath: auditPreview.targetPath, markdown: markdown)
+        let result = try await api.writeAudit(repoPath: repoPath, targetPath: auditPreview.targetPath, markdown: markdown)
         guard !Task.isCancelled, requestID == auditRequestID else { return }
         auditStatusMessage = "Saved \(result.bytesWritten.formatted()) bytes to \(URL(fileURLWithPath: result.targetPath).lastPathComponent)."
         isAuditLoading = false
@@ -1040,6 +1042,7 @@ final class AppModel: ObservableObject {
       saveSettings()
     }
     if reload {
+      clearAuditPreview()
       clearSelectionState()
       refresh()
     }

@@ -268,7 +268,7 @@ function repoPathMatches(
   const isInsideRepo = relativePath === "" || (!!relativePath && !relativePath.startsWith("..") && !isAbsolute(relativePath));
   const isCodexWorktree = normalizedCwd.includes(`${normalize("/.codex/worktrees/")}`) &&
     projectNameForCwd(cwd, aliases) === repoName;
-  return isInsideRepo || isCodexWorktree || project === repoName;
+  return isInsideRepo || isCodexWorktree;
 }
 
 function assistantResponsesForUserMessage(

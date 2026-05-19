@@ -193,7 +193,7 @@ async function handleRequest(
     }
     const loaded = await loadCachedCorpus(url, options, corpusCache);
     const summaryOptions = summaryOptionsFromQuery(url, options.paths);
-    const targetPath = auditTargetPath(url, repoPath);
+    const targetPath = auditTargetPath(repoPath);
     const generatedMarkdown = generateAuditMarkdown(loaded.corpus, {
       ...summaryOptions,
       repoPath: resolve(repoPath),
@@ -219,10 +219,16 @@ async function handleRequest(
 
   if (url.pathname === "/api/audit" && request.method === "POST") {
     const body = await readJsonBody(request);
-    const targetPath = typeof body.targetPath === "string" ? body.targetPath : undefined;
+    const repoPath = typeof body.repoPath === "string" ? body.repoPath : undefined;
+    const requestedTargetPath = typeof body.targetPath === "string" ? body.targetPath : undefined;
     const markdown = typeof body.markdown === "string" ? body.markdown : undefined;
-    if (!targetPath || markdown === undefined) {
-      sendJson(response, 400, { error: "targetPath and markdown are required" });
+    if (!repoPath || markdown === undefined) {
+      sendJson(response, 400, { error: "repoPath and markdown are required" });
+      return;
+    }
+    const targetPath = auditTargetPath(repoPath);
+    if (requestedTargetPath && resolve(requestedTargetPath) !== targetPath) {
+      sendJson(response, 400, { error: "targetPath must match the selected repository audit worklog path" });
       return;
     }
     await mkdir(dirname(targetPath), { recursive: true });
@@ -300,9 +306,8 @@ function pathsFromQuery(url: URL, fallbackPaths?: string[]): string[] | undefine
   return queryPaths.length > 0 ? queryPaths : fallbackPaths;
 }
 
-function auditTargetPath(url: URL, repoPath: string): string {
-  const targetPath = url.searchParams.get("targetPath")?.trim();
-  return targetPath ? resolve(targetPath) : join(resolve(repoPath), "docs", "ai-worklog.md");
+function auditTargetPath(repoPath: string): string {
+  return join(resolve(repoPath), "docs", "ai-worklog.md");
 }
 
 async function readOptionalTextFile(path: string): Promise<string | undefined> {

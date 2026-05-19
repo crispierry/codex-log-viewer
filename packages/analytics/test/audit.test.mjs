@@ -92,6 +92,34 @@ test("generateAuditMarkdown filters by repository path", () => {
   assert.doesNotMatch(markdown, /Do not include this other project/);
 });
 
+test("generateAuditMarkdown does not include unrelated repositories with the same basename", () => {
+  const firstCorpus = auditCorpus({
+    cwd: "/Users/example/client-a/app",
+    firstUserMessage: "Include client A work."
+  });
+  const secondCorpus = auditCorpus({
+    sessionId: "same-name-other-repo",
+    cwd: "/Users/example/client-b/app",
+    firstUserMessage: "Do not include client B work."
+  });
+  const corpus = {
+    ...firstCorpus,
+    files: [...firstCorpus.files, ...secondCorpus.files],
+    sessions: [...firstCorpus.sessions, ...secondCorpus.sessions],
+    turns: [...firstCorpus.turns, ...secondCorpus.turns],
+    messages: [...firstCorpus.messages, ...secondCorpus.messages]
+  };
+
+  const markdown = generateAuditMarkdown(corpus, {
+    repoPath: "/Users/example/client-a/app",
+    generatedAt: "2026-05-19T12:00:00.000Z",
+    privacy: "raw"
+  });
+
+  assert.match(markdown, /Include client A work/);
+  assert.doesNotMatch(markdown, /Do not include client B work/);
+});
+
 test("mergeAuditMarkdown appends only new generated sections", () => {
   const firstCorpus = auditCorpus();
   const generated = generateAuditMarkdown(firstCorpus, {
@@ -165,7 +193,7 @@ function auditCorpus(overrides = {}) {
   const session = {
     filePath: file.filePath,
     sessionId: file.sessionId,
-    cwd: "/Users/example/projects/sample-app",
+    cwd: overrides.cwd ?? "/Users/example/projects/sample-app",
     timestamp: "2026-05-19T12:00:00.000Z"
   };
   const turns = [

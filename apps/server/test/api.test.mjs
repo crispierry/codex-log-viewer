@@ -519,6 +519,14 @@ test("audit endpoints preview smart merges and write approved Markdown", async (
     assert.match(previewBody.audit.mergedMarkdown, /Generate the repo audit trail/);
     assert.match(previewBody.audit.mergedMarkdown, /Prepared the audit preview/);
 
+    const targetOverride = await fetch(
+      `${server.url}/api/audit?repoPath=${encodeURIComponent(repoPath)}&targetPath=${encodeURIComponent(resolve(tempDir, "elsewhere.md"))}`,
+      { headers }
+    );
+    assert.equal(targetOverride.status, 200);
+    const targetOverrideBody = await targetOverride.json();
+    assert.equal(targetOverrideBody.audit.targetPath, resolve(repoPath, "docs/ai-worklog.md"));
+
     const approvedMarkdown = `${previewBody.audit.mergedMarkdown}\nReviewed: yes\n`;
     const write = await fetch(`${server.url}/api/audit`, {
       method: "POST",
@@ -527,6 +535,7 @@ test("audit endpoints preview smart merges and write approved Markdown", async (
         "content-type": "application/json"
       },
       body: JSON.stringify({
+        repoPath,
         targetPath: previewBody.audit.targetPath,
         markdown: approvedMarkdown
       })
@@ -540,6 +549,20 @@ test("audit endpoints preview smart merges and write approved Markdown", async (
     assert.equal(duplicateBody.audit.appendedSections, 0);
     assert.equal(duplicateBody.audit.skippedSections, 1);
     assert.match(duplicateBody.audit.mergedMarkdown, /Reviewed: yes/);
+
+    const outsideWrite = await fetch(`${server.url}/api/audit`, {
+      method: "POST",
+      headers: {
+        ...headers,
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        repoPath,
+        targetPath: resolve(tempDir, "outside.md"),
+        markdown: "outside"
+      })
+    });
+    assert.equal(outsideWrite.status, 400);
   } finally {
     await server.close();
     await rm(tempDir, { recursive: true, force: true });

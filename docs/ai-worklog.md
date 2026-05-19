@@ -4,7 +4,7 @@ Sanitized audit trail of AI-assisted work on this project.
 
 ## 2026-05-19 - Add AI audit trail generation
 
-Status: Completed  
+Status: Completed
 Related commit/PR: TBD
 
 ### User Messages
@@ -46,6 +46,44 @@ The committed worklog is intentionally sanitized. Raw Codex session JSONL files 
 - Ran `npm run lint`.
 - Ran `npm run privacy:scan`.
 - Ran a CLI audit smoke check against the interaction-detail fixture.
+- Ran `npm run build:mac`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`.
+- Ran `npm run smoke:mac-ui`.
+- Relaunched the packaged macOS app.
+
+## 2026-05-19 - Fix audit review findings
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> code review
+
+> Fix all these issues
+
+### Interpreted Intent
+
+The user wanted the audit feature reviewed for bugs and then wanted all identified review issues fixed.
+
+### Response / Work Done
+
+- Removed basename-only repository matching so audit generation no longer includes unrelated repositories with the same folder name.
+- Constrained audit API writes to the selected repository's computed `docs/ai-worklog.md` path.
+- Made the native app send the selected repository path when approving an audit write.
+- Cleared stale audit previews when the date range changes.
+- Added regression tests for same-basename repository filtering and rejected audit target overrides.
+
+### Privacy Notes
+
+The fixes reduce the chance of user intent being written into the wrong repository and reduce the audit API's local file write surface.
+
+### Verification
+
+- Ran `npm test`.
+- Ran `npm run lint`.
+- Ran `npm run privacy:scan`.
 - Ran `npm run build:mac`.
 - Ran `npm run package:mac`.
 - Ran `npm run smoke:mac-package`.
