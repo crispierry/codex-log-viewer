@@ -33,7 +33,10 @@ final class AppModel: ObservableObject {
   @Published var selectedSessionDetail: SessionDetail?
   @Published var selectedUserMessageIndex: Int?
   @Published var isDetailLoading = false
-  @Published var sessionQuery = ""
+  @Published var showSessionBrowser = false
+  @Published var browseMessagesSummary: MessageSearchSummary?
+  @Published var selectedBrowseMessageID: MessageSearchResult.ID?
+  @Published var isBrowseMessagesLoading = false
   @Published var messageQuery = ""
   @Published var messageRoleFilter: MessageRoleFilter = .user
   @Published var messageModelFilter = AppConstants.allModelsName
@@ -66,10 +69,12 @@ final class AppModel: ObservableObject {
   private var refreshToken = 0
   private var reloadTask: Task<Void, Never>?
   private var detailTask: Task<Void, Never>?
+  private var browseMessagesTask: Task<Void, Never>?
   private var searchTask: Task<Void, Never>?
   private var auditTask: Task<Void, Never>?
   private var reloadRequestID = 0
   private var detailRequestID = 0
+  private var browseMessagesRequestID = 0
   private var searchRequestID = 0
   private var auditRequestID = 0
   private var pendingSearchResultTarget: SearchResultSelectionTarget?
@@ -81,25 +86,8 @@ final class AppModel: ObservableObject {
     loadSettings()
   }
 
-  var filteredSessions: [SessionSummary] {
-    let sessions = summary?.sessions ?? []
-    let query = sessionQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    guard !query.isEmpty else { return sessions }
-
-    return sessions.filter { session in
-      [
-        session.sessionId,
-        session.project,
-        session.cwd,
-        session.filePath,
-        session.dateKey,
-        session.models.joined(separator: " ")
-      ]
-      .compactMap { $0 }
-      .joined(separator: " ")
-      .lowercased()
-      .contains(query)
-    }
+  var browseMessages: [MessageSearchResult] {
+    browseMessagesSummary?.results ?? []
   }
 
   var sortedProjects: [ProjectListItem] {
@@ -308,7 +296,10 @@ final class AppModel: ObservableObject {
         if let selectedSessionID, !summary.sessions.contains(where: { $0.id == selectedSessionID }) {
           clearSelectedSession()
         }
-        selectLatestSessionIfNeeded(in: summary)
+        if showSessionBrowser {
+          selectLatestSessionIfNeeded(in: summary)
+        }
+        loadBrowseMessages(selectFirstIfNeeded: !showSessionBrowser)
         status = .ready
         scheduleUITestWorkflowIfNeeded(api: api, filters: filters)
       } catch is CancellationError {
@@ -426,9 +417,25 @@ final class AppModel: ObservableObject {
     applyDateRangeMode()
   }
 
+  func setSessionBrowserVisible(_ isVisible: Bool) {
+    guard showSessionBrowser != isVisible else { return }
+    showSessionBrowser = isVisible
+    saveSettings()
+    if isVisible {
+      if let summary {
+        selectLatestSessionIfNeeded(in: summary)
+      }
+    } else if selectedBrowseMessageID == nil {
+      loadBrowseMessages(selectFirstIfNeeded: true)
+    }
+  }
+
   func selectSession(_ sessionID: SessionSummary.ID?) {
     selectedSessionID = sessionID
     selectedUserMessageIndex = nil
+    if !selectedBrowseMessageBelongsToSession(sessionID) {
+      selectedBrowseMessageID = nil
+    }
     pendingSearchResultTarget = nil
     if !selectedSearchResultBelongsToSession(sessionID) {
       selectedSearchResultID = nil
@@ -473,6 +480,84 @@ final class AppModel: ObservableObject {
         status = .failed(error.localizedDescription)
       }
     }
+  }
+
+  func loadBrowseMessages(selectFirstIfNeeded: Bool = false) {
+    guard let api else {
+      browseMessagesSummary = nil
+      selectedBrowseMessageID = nil
+      isBrowseMessagesLoading = false
+      return
+    }
+
+    browseMessagesTask?.cancel()
+    browseMessagesRequestID += 1
+    let requestID = browseMessagesRequestID
+    let filters = currentFilters()
+    let project = selectedProject
+    let limit = max(summary?.totals.userMessages ?? 100, 100)
+
+    browseMessagesTask = Task {
+      do {
+        isBrowseMessagesLoading = true
+        let searchResult = try await api.searchMessagesWithMetadata(
+          query: "",
+          role: .user,
+          model: AppConstants.allModelsName,
+          sessionID: nil,
+          project: project,
+          filters: filters,
+          submittedOnly: true,
+          limit: limit
+        )
+        guard !Task.isCancelled, requestID == browseMessagesRequestID else { return }
+        browseMessagesSummary = searchResult.search
+        cacheMetadata = searchResult.cache ?? cacheMetadata
+        isBrowseMessagesLoading = false
+
+        let currentSelectionIsVisible = selectedBrowseMessageID.map { selectedID in
+          searchResult.search.results.contains { $0.id == selectedID }
+        } ?? false
+
+        if !currentSelectionIsVisible {
+          selectedBrowseMessageID = nil
+          if !showSessionBrowser {
+            clearSelectedSession()
+          }
+        }
+
+        if selectFirstIfNeeded, selectedBrowseMessageID == nil, let firstMessage = searchResult.search.results.first {
+          selectBrowseMessage(firstMessage.id)
+        }
+      } catch is CancellationError {
+        return
+      } catch {
+        guard requestID == browseMessagesRequestID else { return }
+        isBrowseMessagesLoading = false
+        status = .failed(error.localizedDescription)
+      }
+    }
+  }
+
+  func selectBrowseMessage(_ messageID: MessageSearchResult.ID?) {
+    selectedBrowseMessageID = messageID
+    guard let messageID,
+      let result = browseMessagesSummary?.results.first(where: { $0.id == messageID })
+    else {
+      selectedUserMessageIndex = nil
+      return
+    }
+
+    selectedSearchResultID = nil
+    pendingSearchResultTarget = SearchResultSelectionTarget(result)
+    selectedUserMessageIndex = nil
+    selectedSessionID = sessionSelectionID(
+      sessionID: result.sessionId,
+      filePath: result.filePath,
+      dateKey: result.dateKey
+    ) ?? result.sessionId
+    selectedSessionDetail = nil
+    loadSelectedSession()
   }
 
   func searchMessages() {
@@ -758,6 +843,7 @@ final class AppModel: ObservableObject {
 
   private func clearSelectionState() {
     clearSelectedSession()
+    clearBrowseMessages()
     clearSearchResults()
   }
 
@@ -767,9 +853,17 @@ final class AppModel: ObservableObject {
     selectedSessionID = nil
     selectedSessionDetail = nil
     selectedUserMessageIndex = nil
+    selectedBrowseMessageID = nil
     pendingSearchResultTarget = nil
     isDetailLoading = false
-    sessionQuery = ""
+  }
+
+  private func clearBrowseMessages() {
+    browseMessagesTask?.cancel()
+    browseMessagesRequestID += 1
+    browseMessagesSummary = nil
+    selectedBrowseMessageID = nil
+    isBrowseMessagesLoading = false
   }
 
   private func clearSearchResults() {
@@ -810,12 +904,32 @@ final class AppModel: ObservableObject {
     return result.sessionId == sessionID
   }
 
+  private func selectedBrowseMessageBelongsToSession(_ sessionID: SessionSummary.ID?) -> Bool {
+    guard let sessionID,
+      let selectedBrowseMessageID,
+      let result = browseMessagesSummary?.results.first(where: { $0.id == selectedBrowseMessageID })
+    else {
+      return false
+    }
+    if let session = sessionForSelectionID(sessionID) {
+      return result.sessionId == session.sessionId &&
+        result.filePath == session.filePath &&
+        (result.dateKey == nil || result.dateKey == session.dateKey)
+    }
+    return result.sessionId == sessionID
+  }
+
   private func detailTarget(for selectionID: SessionSummary.ID) -> (sessionID: String, filePath: String?, dateKey: String?) {
     if let session = sessionForSelectionID(selectionID) {
       return (session.sessionId, session.filePath, session.dateKey)
     }
     if let selectedSearchResultID,
       let result = searchSummary?.results.first(where: { $0.id == selectedSearchResultID && $0.sessionId == selectionID })
+    {
+      return (result.sessionId, result.filePath, result.dateKey)
+    }
+    if let selectedBrowseMessageID,
+      let result = browseMessagesSummary?.results.first(where: { $0.id == selectedBrowseMessageID && $0.sessionId == selectionID })
     {
       return (result.sessionId, result.filePath, result.dateKey)
     }
@@ -991,6 +1105,7 @@ final class AppModel: ObservableObject {
       let sortOption = ProjectSortOption(rawValue: savedProjectSort) {
       projectSortOption = sortOption
     }
+    showSessionBrowser = UserDefaults.standard.bool(forKey: DefaultsKeys.showSessionBrowser)
   }
 
   private func saveSettings() {
@@ -1006,6 +1121,7 @@ final class AppModel: ObservableObject {
     UserDefaults.standard.set(dateRangeMode.rawValue, forKey: DefaultsKeys.dateRangeMode)
     UserDefaults.standard.set(Self.dateFormatter.string(from: dateAnchorDate), forKey: DefaultsKeys.dateAnchorDate)
     UserDefaults.standard.set(projectSortOption.rawValue, forKey: DefaultsKeys.projectSortOption)
+    UserDefaults.standard.set(showSessionBrowser, forKey: DefaultsKeys.showSessionBrowser)
   }
 
   private func applyDateRangeMode(save: Bool = true, reload: Bool = true) {
@@ -1435,4 +1551,5 @@ private enum DefaultsKeys {
   static let dateRangeMode = "dateRangeMode"
   static let dateAnchorDate = "dateAnchorDate"
   static let projectSortOption = "projectSortOption"
+  static let showSessionBrowser = "showSessionBrowser"
 }

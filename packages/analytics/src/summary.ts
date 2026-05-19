@@ -253,7 +253,7 @@ function clampLimit(limit: number | undefined): number {
   if (!limit || Number.isNaN(limit)) {
     return 100;
   }
-  return Math.max(1, Math.min(500, Math.trunc(limit)));
+  return Math.max(1, Math.min(10_000, Math.trunc(limit)));
 }
 
 function snippetFor(content: string, query: string): string {

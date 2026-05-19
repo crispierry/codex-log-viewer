@@ -64,7 +64,8 @@ struct LogEngineAPI {
     dateKey: String? = nil,
     project: String,
     filters: LogFilters,
-    submittedOnly: Bool = false
+    submittedOnly: Bool = false,
+    limit: Int = 100
   ) async throws -> MessageSearchSummary {
     try await searchMessagesWithMetadata(
       query: query,
@@ -75,7 +76,8 @@ struct LogEngineAPI {
       dateKey: dateKey,
       project: project,
       filters: filters,
-      submittedOnly: submittedOnly
+      submittedOnly: submittedOnly,
+      limit: limit
     ).search
   }
 
@@ -88,12 +90,13 @@ struct LogEngineAPI {
     dateKey: String? = nil,
     project: String,
     filters: LogFilters,
-    submittedOnly: Bool = false
+    submittedOnly: Bool = false,
+    limit: Int = 100
   ) async throws -> CachedSearch {
     var queryItems = [
       URLQueryItem(name: "q", value: query),
       URLQueryItem(name: "role", value: role.rawValue),
-      URLQueryItem(name: "limit", value: "100")
+      URLQueryItem(name: "limit", value: String(limit))
     ]
     if model != AppConstants.allModelsName {
       queryItems.append(URLQueryItem(name: "model", value: model))

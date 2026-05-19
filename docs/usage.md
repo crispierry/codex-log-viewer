@@ -21,7 +21,7 @@ From the app you can:
 - use the default Codex log locations
 - add custom files or directories from the native `Logs` menu
 - select a project from the sidebar
-- use Browse to move from project to session to sent message to Codex interaction
+- use Browse to move from project to submitted message to Codex interaction, with sessions available as an optional view
 - use Overview for metrics, charts, and repeated prompts for the selected project
 - use Search for cross-project or project-filtered message search
 - use Audit to generate, review, smart-merge, and approve `docs/ai-worklog.md`
@@ -30,7 +30,6 @@ From the app you can:
 - filter message search by role, model, and selected session
 - review repeated user prompts for the current filters
 - export redacted JSON or aggregate CSV
-- search sessions
 - inspect session messages, token events, warnings, and unknown events
 
 To build a packaged app from source:
@@ -50,11 +49,11 @@ The date filter lives in the workspace header. Use the calendar control to switc
 
 Use the Search section to search across parsed messages. Search respects the current source, project, date, role, model, and session filters. Choose `All Projects` to search across every discovered project.
 
-Click `Messages I Sent` to list prompts you typed and submitted for the selected project without typing a search phrase. Generated context wrappers, such as browser state, file attachments, review metadata, and goal-resume prompts, are excluded from that view.
+Browse lists prompts you typed and submitted for the selected project without requiring a session first. Generated context wrappers, such as browser state, file attachments, review metadata, and goal-resume prompts, are excluded from that view.
 
-In Browse, the first column lists projects, the second lists sessions, the third lists sent messages for the selected session, and the fourth shows the selected message's Codex interaction split into user message, Codex response, tool activity, system/developer context, and token/timing sections.
+In Browse, the sidebar selects the project, the main Messages column lists submitted prompts for the current project and date filters, and the Codex Interaction column shows the selected message split into user message, Codex response, tool activity, system/developer context, and token/timing sections. Turn on `Show Sessions` when you want an extra session column before the message list.
 
-Select a search result to copy its session id, project, or a whitespace-normalized snippet with local home paths shortened. Use `Open in Browse` to jump from the result into the four-column session and interaction view.
+Select a search result to copy its session id, project, or a whitespace-normalized snippet with local home paths shortened. Use `Show Conversation` to jump from the result into Browse.
 
 Keyboard shortcuts:
 

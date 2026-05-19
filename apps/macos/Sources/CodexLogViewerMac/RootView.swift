@@ -346,11 +346,31 @@ struct BrowseWorkspaceView: View {
         .padding(12)
       }
 
+      HStack {
+        Spacer()
+        Toggle(
+          isOn: Binding(
+            get: { model.showSessionBrowser },
+            set: { model.setSessionBrowserVisible($0) }
+          )
+        ) {
+          Label("Show Sessions", systemImage: "rectangle.split.3x1")
+        }
+        .toggleStyle(.button)
+        .help("Show the optional session browser before messages.")
+        .accessibilityIdentifier("browse-session-toggle")
+      }
+      .padding(.horizontal, 14)
+      .padding(.vertical, 8)
+      Divider()
+
       HSplitView {
-        SessionBrowserColumn()
-          .frame(minWidth: 300, idealWidth: 340, maxWidth: 440)
+        if model.showSessionBrowser {
+          SessionBrowserColumn()
+            .frame(minWidth: 280, idealWidth: 320, maxWidth: 400)
+        }
         SentMessagesBrowserColumn()
-          .frame(minWidth: 320, idealWidth: 380, maxWidth: 520)
+          .frame(minWidth: 340, idealWidth: model.showSessionBrowser ? 380 : 440, maxWidth: 560)
         InteractionBrowserColumn()
           .frame(minWidth: 420, idealWidth: 580)
       }
@@ -395,29 +415,21 @@ struct SessionBrowserColumn: View {
     if model.summary?.totals.sessions == 0 {
       return "Choose another source or return to the default Codex log locations."
     }
-    return "Clear the session search or adjust the current filters."
+    return "Adjust the current filters."
   }
 
   var body: some View {
+    let sessions = model.summary?.sessions ?? []
+
     VStack(spacing: 0) {
       BrowserColumnHeader(
-        "Daily Sessions",
-        subtitle: "\(model.filteredSessions.count.formatted()) visible"
+        "Sessions",
+        subtitle: "\(sessions.count.formatted()) visible"
       )
       Divider()
-      HStack {
-        Image(systemName: "line.3.horizontal.decrease.circle")
-          .foregroundStyle(.secondary)
-        TextField("Search sessions", text: $model.sessionQuery)
-          .textFieldStyle(.plain)
-          .accessibilityIdentifier("session-search-field")
-      }
-      .padding(8)
-      .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
-      .padding(10)
 
       if model.summary != nil {
-        if model.filteredSessions.isEmpty {
+        if sessions.isEmpty {
           ContentUnavailableView(
             emptySessionsTitle,
             systemImage: "tray",
@@ -426,7 +438,7 @@ struct SessionBrowserColumn: View {
           .frame(maxWidth: .infinity, maxHeight: .infinity)
           .accessibilityIdentifier("sessions-empty-state")
         } else {
-          List(model.filteredSessions) { session in
+          List(sessions) { session in
             Button {
               model.selectSession(session.id)
             } label: {
@@ -491,55 +503,117 @@ struct SessionBrowserRow: View {
 struct SentMessagesBrowserColumn: View {
   @EnvironmentObject private var model: AppModel
 
-  private var userMessages: [(offset: Int, element: MessageDetail)] {
+  private var sessionUserMessages: [(offset: Int, element: MessageDetail)] {
     guard let detail = model.selectedSessionDetail else { return [] }
     return SessionInteractionBuilder.userMessageOffsets(in: detail, dateKey: model.selectedSessionDateKey)
+  }
+
+  private var browseMessages: [MessageSearchResult] {
+    model.browseMessages
   }
 
   var body: some View {
     VStack(spacing: 0) {
       BrowserColumnHeader(
         "Messages",
-        subtitle: model.selectedSessionID == nil ? "Select a session" : "\(userMessages.count.formatted()) sent"
+        subtitle: headerSubtitle
       )
       Divider()
 
-      if model.isDetailLoading {
-        ProgressView("Loading messages")
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
-      } else if model.selectedSessionID == nil {
-        ContentUnavailableView(
-          "Select a Session",
-          systemImage: "list.bullet.rectangle",
-          description: Text("Choose a session to see sent messages.")
-        )
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-      } else if userMessages.isEmpty {
-        ContentUnavailableView(
-          "No Sent Messages",
-          systemImage: "paperplane",
-          description: Text("This session has no submitted user messages.")
-        )
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+      if model.showSessionBrowser {
+        sessionMessagesView
       } else {
-        List(userMessages, id: \.offset) { item in
-          Button {
-            model.selectedUserMessageIndex = item.offset
-          } label: {
-            SentMessageBrowserRow(
-              message: item.element,
-              isSelected: model.selectedUserMessageIndex == item.offset
-            )
-          }
-          .frame(maxWidth: .infinity, alignment: .leading)
-          .contentShape(Rectangle())
-          .buttonStyle(.plain)
-          .listRowInsets(EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8))
-        }
-        .listStyle(.plain)
+        projectMessagesView
       }
     }
     .background(.background)
+  }
+
+  @ViewBuilder
+  private var sessionMessagesView: some View {
+    if model.isDetailLoading {
+      ProgressView("Loading messages")
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    } else if model.selectedSessionID == nil {
+      ContentUnavailableView(
+        "Select a Session",
+        systemImage: "list.bullet.rectangle",
+        description: Text("Choose a session to see sent messages.")
+      )
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+    } else if sessionUserMessages.isEmpty {
+      ContentUnavailableView(
+        "No Sent Messages",
+        systemImage: "paperplane",
+        description: Text("This session has no submitted user messages.")
+      )
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+    } else {
+      List(sessionUserMessages, id: \.offset) { item in
+        Button {
+          model.selectedUserMessageIndex = item.offset
+        } label: {
+          SentMessageBrowserRow(
+            message: item.element,
+            isSelected: model.selectedUserMessageIndex == item.offset
+          )
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .buttonStyle(.plain)
+        .listRowInsets(EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8))
+      }
+      .listStyle(.plain)
+      .accessibilityIdentifier("browse-messages-list")
+    }
+  }
+
+  @ViewBuilder
+  private var projectMessagesView: some View {
+    if model.isBrowseMessagesLoading && browseMessages.isEmpty {
+      ProgressView("Loading messages")
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    } else if browseMessages.isEmpty {
+      ContentUnavailableView(
+        "No Sent Messages",
+        systemImage: "paperplane",
+        description: Text("No submitted messages match the selected project and date filters.")
+      )
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+    } else {
+      List(browseMessages) { message in
+        Button {
+          model.selectBrowseMessage(message.id)
+        } label: {
+          SentMessageResultBrowserRow(
+            message: message,
+            isSelected: model.selectedBrowseMessageID == message.id
+          )
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .buttonStyle(.plain)
+        .listRowInsets(EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8))
+      }
+      .listStyle(.plain)
+      .accessibilityIdentifier("browse-messages-list")
+    }
+  }
+
+  private var headerSubtitle: String? {
+    if model.showSessionBrowser {
+      return model.selectedSessionID == nil ? "Select a session" : "\(sessionUserMessages.count.formatted()) sent"
+    }
+    if model.isBrowseMessagesLoading && browseMessages.isEmpty {
+      return "Loading"
+    }
+    guard let summary = model.browseMessagesSummary else {
+      return nil
+    }
+    if summary.totalMatches > summary.results.count {
+      return "\(summary.results.count.formatted()) of \(summary.totalMatches.formatted()) sent"
+    }
+    return "\(summary.totalMatches.formatted()) sent"
   }
 }
 
@@ -556,6 +630,47 @@ struct SentMessageBrowserRow: View {
         .font(.body)
         .lineLimit(4)
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+    .padding(10)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(
+      isSelected ? Color.accentColor.opacity(0.16) : Color.primary.opacity(0.04),
+      in: RoundedRectangle(cornerRadius: 8)
+    )
+    .contentShape(Rectangle())
+  }
+}
+
+struct SentMessageResultBrowserRow: View {
+  let message: MessageSearchResult
+  let isSelected: Bool
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 6) {
+      HStack(alignment: .firstTextBaseline, spacing: 8) {
+        Text(formattedDate(message.timestamp))
+          .font(.caption.monospacedDigit())
+          .foregroundStyle(.secondary)
+        Spacer()
+        if let model = message.model, !model.isEmpty {
+          Text(model)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+        }
+      }
+      Text(message.content.trimmingCharacters(in: .whitespacesAndNewlines))
+        .font(.body)
+        .lineLimit(4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+      HStack(spacing: 8) {
+        Label(message.project, systemImage: "folder")
+        Text(String(message.sessionId.prefix(8)))
+          .font(.caption.monospacedDigit())
+      }
+      .font(.caption)
+      .foregroundStyle(.secondary)
+      .lineLimit(1)
     }
     .padding(10)
     .frame(maxWidth: .infinity, alignment: .leading)
@@ -589,9 +704,13 @@ struct InteractionBrowserColumn: View {
           .frame(maxWidth: .infinity, maxHeight: .infinity)
       } else if model.selectedSessionID == nil {
         ContentUnavailableView(
-          "Select a Session",
+          model.showSessionBrowser ? "Select a Session" : "Select a Message",
           systemImage: "sidebar.right",
-          description: Text("Choose a session and sent message to inspect Codex's response.")
+          description: Text(
+            model.showSessionBrowser
+              ? "Choose a session and sent message to inspect Codex's response."
+              : "Choose a sent message to inspect Codex's response."
+          )
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
       } else if model.selectedUserMessageIndex == nil {
@@ -871,7 +990,7 @@ struct MetricsGrid: View {
   var body: some View {
     Grid(horizontalSpacing: 12, verticalSpacing: 12) {
       GridRow {
-        MetricTile(label: "Daily Sessions", value: summary?.totals.sessions)
+        MetricTile(label: "Sessions", value: summary?.totals.sessions)
         MetricTile(label: "Sent Messages", value: summary?.totals.userMessages)
         MetricTile(label: "Automations", value: summary?.totals.automationMessages)
       }
@@ -1301,7 +1420,7 @@ struct MessageSearchView: View {
           Spacer(minLength: 8)
 
           if let sessionLabel = model.messageSessionFilterLabel {
-            Label("Daily session \(sessionLabel)", systemImage: "scope")
+            Label("Session \(sessionLabel)", systemImage: "scope")
               .font(.caption)
               .foregroundStyle(.secondary)
             Button {
@@ -1423,7 +1542,7 @@ struct SearchResultDetailView: View {
               SearchResultMetadataItem(label: "Date/Time", value: formattedDate(result.timestamp))
               SearchResultMetadataItem(label: "Project", value: result.project)
               SearchResultMetadataItem(label: "Role", value: result.role.capitalized)
-              SearchResultMetadataItem(label: "Daily Session", value: result.dateKey ?? "")
+              SearchResultMetadataItem(label: "Session Day", value: result.dateKey ?? "")
               SearchResultMetadataItem(label: "Session ID", value: String(result.sessionId.prefix(8)))
             }
           }
@@ -1678,27 +1797,20 @@ struct SessionsTableView: View {
     if model.summary?.totals.sessions == 0 {
       return "Choose another source or return to the default Codex log locations."
     }
-    return "Clear the session search or adjust the current filters."
+    return "Adjust the current filters."
   }
 
   var body: some View {
-    GroupBox("Daily Sessions") {
+    let sessions = model.summary?.sessions ?? []
+
+    GroupBox("Sessions") {
       VStack(alignment: .leading, spacing: 10) {
-        HStack {
-          Image(systemName: "line.3.horizontal.decrease.circle")
-            .foregroundStyle(.secondary)
-          TextField("Search sessions", text: $model.sessionQuery)
-            .textFieldStyle(.plain)
-            .accessibilityIdentifier("session-search-field")
-          Text("\(model.filteredSessions.count.formatted())")
-            .font(.caption.monospacedDigit())
-            .foregroundStyle(.secondary)
-        }
-        .padding(8)
-        .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+        Text("\(sessions.count.formatted()) visible")
+          .font(.caption)
+          .foregroundStyle(.secondary)
 
         if model.summary != nil {
-          if model.filteredSessions.isEmpty {
+          if sessions.isEmpty {
             ContentUnavailableView(
               emptySessionsTitle,
               systemImage: "tray",
@@ -1707,7 +1819,7 @@ struct SessionsTableView: View {
             .frame(maxWidth: .infinity, minHeight: 280)
             .accessibilityIdentifier("sessions-empty-state")
           } else {
-            Table(model.filteredSessions, selection: $model.selectedSessionID) {
+            Table(sessions, selection: $model.selectedSessionID) {
               TableColumn("Date/Time") { session in
                 Text(formattedDate(session.lastSeen))
                   .lineLimit(1)

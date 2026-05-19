@@ -9,10 +9,10 @@ Codex Log Viewer is a local-first native macOS app for inspecting OpenAI Codex s
 ## Highlights
 
 - Native SwiftUI macOS app for local Codex log analytics.
-- Four-column Browse flow for projects, sessions, sent messages, and Codex interactions.
+- Focused Browse flow for projects, sent messages, and Codex interactions, with sessions available as an optional view.
 - Cleaner project sidebar with source selection in the Logs menu and date filtering in the workspace header.
 - Cross-project message search with project, source, date, role, model, and session filters.
-- Messages I Sent browsing with structured Codex interaction detail for each selected prompt.
+- Message-first browsing with structured Codex interaction detail for each selected prompt.
 - Repeated-prompt grouping and native copy actions for search results.
 - Packaged `.app` artifact with bundled local parser engine and bundled Node runtime.
 - Redacted JSON exports by default and aggregate CSV exports.

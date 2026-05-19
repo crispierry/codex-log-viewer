@@ -89,3 +89,47 @@ The fixes reduce the chance of user intent being written into the wrong reposito
 - Ran `npm run smoke:mac-package`.
 - Ran `npm run smoke:mac-ui`.
 - Relaunched the packaged macOS app.
+
+## 2026-05-19 - Declutter Browse around messages
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> I'm wondering if I need a daily sessions column. I'm not sure what value it's adding considering that I can filter by date and time above. What is your honest opinion? Do we need the daily sessions? I'm trying to declutter the app a little bit.
+> - Project is important.
+> - Message is important.
+> - The codex information is important.
+> I'm not so sure that I need to view the daily sessions. Maybe it should be a setting that we enable and disable and if it's disabled messages should include all messages in the project
+
+> Okay let's do this but one more thing. Right now we have search sessions but we don't have that for any of the other columns so I think search sessions can go away but otherwise execute the plan above
+
+### Interpreted Intent
+
+The user wanted Browse to prioritize the core hierarchy of project, submitted message, and Codex interaction. Session browsing should remain available only when explicitly enabled, and the session-specific search field should be removed.
+
+### Response / Work Done
+
+- Changed Browse so the default layout lists submitted project messages directly and opens the selected message's Codex interaction.
+- Added a persistent `Show Sessions` toggle for users who still want the session browser before the message list.
+- Removed the session search field from the session browser and related session table surface.
+- Kept session/file/date scoping behind message selection so duplicate session ids and copied logs still resolve to the right conversation.
+- Updated native accessibility checks and documentation to describe the message-first Browse flow.
+
+### Privacy Notes
+
+No raw Codex session content was added. The Browse changes continue to use existing local-only parsed data and submitted-message filtering.
+
+### Verification
+
+- Ran `wt bootstrap`.
+- Ran `npm test`.
+- Ran `npm run check:mac-accessibility`.
+- Ran `npm run privacy:scan`.
+- Ran `npm run lint`.
+- Ran `npm run build:mac`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`.
+- Ran `npm run smoke:mac-ui`.
+- Relaunched the packaged macOS app.
