@@ -240,14 +240,16 @@ function classifyEvent(context: ClassifyContext): void {
   }
 
   if (payloadType === "user_message") {
+    const content = submittedUserMessageContent(payload.message);
+    const isAutomation = isAutomationMessageContent(content);
     context.messages.push({
       filePath,
       sessionId: state.sessionId,
       turnId: state.currentTurnId,
       timestamp,
-      role: "user",
-      sourceEvent: "event_msg.user_message",
-      content: submittedUserMessageContent(payload.message),
+      role: isAutomation ? "automation" : "user",
+      sourceEvent: isAutomation ? "event_msg.automation_message" : "event_msg.user_message",
+      content,
       imagesCount: arrayValue(payload.images).length,
       localImagesCount: arrayValue(payload.local_images).length
     });
@@ -417,8 +419,14 @@ function submittedUserMessageContent(value: unknown): string {
   return raw.slice(markerIndex + USER_REQUEST_MARKER.length).trim();
 }
 
+function isAutomationMessageContent(value: string): boolean {
+  const normalized = value.trim().replace(/\s+/g, " ");
+  return /^automation\s*:/i.test(normalized) ||
+    /^continue working toward the active thread goal\.?$/i.test(normalized);
+}
+
 function messageRole(value?: string): MessageRecord["role"] {
-  if (value === "user" || value === "assistant" || value === "system" || value === "developer") {
+  if (value === "user" || value === "assistant" || value === "system" || value === "developer" || value === "automation") {
     return value;
   }
   return "unknown";

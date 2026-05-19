@@ -97,11 +97,12 @@ async function sessionsCommand(parsed: ParsedArgs): Promise<void> {
   }
 
   printTable(
-    ["Session", "Project", "User Msgs", "Tokens", "Last Seen"],
+    ["Session", "Project", "User Msgs", "Automations", "Tokens", "Last Seen"],
     summary.sessions.map((session) => [
       session.sessionId,
       session.project,
       session.userMessages,
+      session.automationMessages,
       formatNumber(session.totalTokens),
       session.lastSeen ?? ""
     ])
@@ -152,6 +153,7 @@ function printSummary(summary: ProjectSummary): void {
       ["Sessions", summary.totals.sessions],
       ["Turns", summary.totals.turns],
       ["User messages", summary.totals.userMessages],
+      ["Automation messages", summary.totals.automationMessages],
       ["Assistant messages", summary.totals.assistantMessages],
       ["Unique user messages", summary.totals.uniqueUserMessages],
       ["Repeated user prompts", summary.repeatedUserMessages.length],

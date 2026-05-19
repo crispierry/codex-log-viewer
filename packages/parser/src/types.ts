@@ -33,7 +33,7 @@ export interface TurnRecord {
   collaborationMode?: string;
 }
 
-export type MessageRole = "user" | "assistant" | "system" | "developer" | "unknown";
+export type MessageRole = "user" | "assistant" | "system" | "developer" | "automation" | "unknown";
 
 export interface MessageRecord {
   filePath: string;
@@ -130,4 +130,3 @@ export interface ParseOptions {
   paths?: string[];
   homeDir?: string;
 }
-

@@ -14,6 +14,7 @@ test("summarizeParsedCorpus aggregates messages, unique messages, tokens, models
 
   assert.equal(summary.totals.sessions, 1);
   assert.equal(summary.totals.userMessages, 1);
+  assert.equal(summary.totals.automationMessages, 0);
   assert.equal(summary.totals.uniqueUserMessages, 1);
   assert.equal(summary.tokens.totalTokens, 17277);
   assert.equal(summary.tokens.freshInputTokens, 10280);
@@ -256,6 +257,70 @@ test("summarizeParsedCorpus groups short plan approval prompt families", () => {
     approvalGroup?.variants.map((variant) => variant.sample),
     ["sounds good", "go ahead", "yeah", "Yes please.", "yes"]
   );
+});
+
+test("summarizeParsedCorpus counts automation prompts separately from sent user messages", () => {
+  const corpus = {
+    files: [
+      {
+        filePath: "automation-session.jsonl",
+        sessionId: "automation-session",
+        lineCount: 1,
+        sessions: [],
+        turns: [],
+        messages: [],
+        tokenUsage: [],
+        taskTimings: [],
+        toolEvents: [],
+        unknownEvents: [],
+        warnings: []
+      }
+    ],
+    sessions: [
+      {
+        filePath: "automation-session.jsonl",
+        sessionId: "automation-session",
+        cwd: "/tmp/sample-app",
+        timestamp: "2026-01-01T00:00:00.000Z"
+      }
+    ],
+    turns: [],
+    messages: [
+      {
+        filePath: "automation-session.jsonl",
+        sessionId: "automation-session",
+        timestamp: "2026-01-01T00:00:00.000Z",
+        role: "automation",
+        sourceEvent: "event_msg.automation_message",
+        content: "Automation: Daily fixture sync",
+        imagesCount: 0,
+        localImagesCount: 0
+      },
+      {
+        filePath: "automation-session.jsonl",
+        sessionId: "automation-session",
+        timestamp: "2026-01-01T00:01:00.000Z",
+        role: "user",
+        sourceEvent: "event_msg.user_message",
+        content: "Real user prompt",
+        imagesCount: 0,
+        localImagesCount: 0
+      }
+    ],
+    tokenUsage: [],
+    taskTimings: [],
+    toolEvents: [],
+    unknownEvents: [],
+    warnings: []
+  };
+
+  const summary = summarizeParsedCorpus(corpus, { project: "sample-app" });
+  assert.equal(summary.totals.userMessages, 1);
+  assert.equal(summary.totals.automationMessages, 1);
+  assert.equal(summary.totals.uniqueUserMessages, 1);
+  assert.equal(summary.sessions[0]?.userMessages, 1);
+  assert.equal(summary.sessions[0]?.automationMessages, 1);
+  assert.equal(summary.messagesByDay[0]?.count, 1);
 });
 
 test("summarizeParsedCorpus attributes token usage to models by session and turn", () => {
@@ -580,6 +645,16 @@ test("searchMessages can browse only submitted user messages", () => {
         content: "<goal_context>\nContinue working toward the active thread goal.",
         imagesCount: 0,
         localImagesCount: 0
+      },
+      {
+        filePath: "fixture.jsonl",
+        sessionId: "session-1",
+        timestamp: "2026-01-01T00:00:02.000Z",
+        role: "automation",
+        sourceEvent: "event_msg.automation_message",
+        content: "Automation: Daily fixture sync",
+        imagesCount: 0,
+        localImagesCount: 0
       }
     ],
     tokenUsage: [],
@@ -591,6 +666,10 @@ test("searchMessages can browse only submitted user messages", () => {
 
   const allUserMessages = searchMessages(corpus, { query: "", role: "user" });
   assert.equal(allUserMessages.totalMatches, 2);
+
+  const automationMessages = searchMessages(corpus, { query: "", role: "automation" });
+  assert.equal(automationMessages.totalMatches, 1);
+  assert.equal(automationMessages.results[0]?.sourceEvent, "event_msg.automation_message");
 
   const submittedMessages = searchMessages(corpus, { query: "", role: "user", submittedOnly: true });
   assert.equal(submittedMessages.totalMatches, 1);

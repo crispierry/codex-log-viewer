@@ -274,13 +274,18 @@ struct MetricsGrid: View {
     Grid(horizontalSpacing: 12, verticalSpacing: 12) {
       GridRow {
         MetricTile(label: "Sessions", value: summary?.totals.sessions)
-        MetricTile(label: "User Messages", value: summary?.totals.userMessages)
-        MetricTile(label: "Unique Messages", value: summary?.totals.uniqueUserMessages)
+        MetricTile(label: "Sent Messages", value: summary?.totals.userMessages)
+        MetricTile(label: "Automations", value: summary?.totals.automationMessages)
       }
       GridRow {
+        MetricTile(label: "Unique Messages", value: summary?.totals.uniqueUserMessages)
         MetricTile(label: "Total Tokens", value: summary?.tokens.totalTokens)
         MetricTile(label: "Fresh Input", value: summary?.tokens.freshInputTokens)
+      }
+      GridRow {
         MetricTile(label: "Cached Input", value: summary?.tokens.cachedInputTokens)
+        MetricTile(label: "Output Tokens", value: summary?.tokens.outputTokens)
+        MetricTile(label: "Reasoning Tokens", value: summary?.tokens.reasoningOutputTokens)
       }
     }
   }
@@ -868,6 +873,11 @@ struct SessionsTableView: View {
               }
               .width(92)
 
+              TableColumn("Automations") { session in
+                Text(session.automationMessages.formatted())
+              }
+              .width(112)
+
               TableColumn("Project") { session in
                 Text(session.project)
               }
@@ -1038,6 +1048,11 @@ struct SessionUserMessagesInspector: View {
       .filter { $0.element.sourceEvent == "event_msg.user_message" }
   }
 
+  private var automationMessages: [(offset: Int, element: MessageDetail)] {
+    Array(detail.messages.enumerated())
+      .filter { $0.element.sourceEvent == "event_msg.automation_message" }
+  }
+
   private var selectedResponseMessages: [MessageDetail] {
     guard let selectedUserMessageIndex else { return [] }
     return responseMessages(after: selectedUserMessageIndex)
@@ -1049,15 +1064,19 @@ struct SessionUserMessagesInspector: View {
         Label("User Messages", systemImage: "person.text.rectangle")
           .font(.title3)
           .fontWeight(.semibold)
-        Text("\(userMessages.count.formatted()) messages in this session")
+        Text(sessionMessageCountLabel)
           .font(.caption)
           .foregroundStyle(.secondary)
 
         if userMessages.isEmpty {
           ContentUnavailableView(
-            "No User Messages",
+            automationMessages.isEmpty ? "No User Messages" : "No Sent Messages",
             systemImage: "text.bubble",
-            description: Text("This session has no submitted user messages.")
+            description: Text(
+              automationMessages.isEmpty
+                ? "This session has no submitted user messages."
+                : "This session was started by automation."
+            )
           )
           .frame(maxWidth: .infinity, minHeight: 220)
         } else {
@@ -1071,6 +1090,17 @@ struct SessionUserMessagesInspector: View {
               .buttonStyle(.plain)
               .accessibilityIdentifier("session-user-message-row")
             }
+          }
+        }
+
+        if !automationMessages.isEmpty {
+          DisclosureGroup("Automation Messages") {
+            VStack(alignment: .leading, spacing: 8) {
+              ForEach(automationMessages, id: \.offset) { item in
+                automationMessageRow(message: item.element)
+              }
+            }
+            .padding(.top, 6)
           }
         }
 
@@ -1102,6 +1132,15 @@ struct SessionUserMessagesInspector: View {
     }
   }
 
+  private var sessionMessageCountLabel: String {
+    let sent = "\(userMessages.count.formatted()) sent"
+    guard !automationMessages.isEmpty else {
+      return "\(sent) in this session"
+    }
+    let automationLabel = automationMessages.count == 1 ? "automation" : "automations"
+    return "\(sent), \(automationMessages.count.formatted()) \(automationLabel) in this session"
+  }
+
   private func userMessageRow(message: MessageDetail, isSelected: Bool) -> some View {
     VStack(alignment: .leading, spacing: 6) {
       Text(formattedDate(message.timestamp))
@@ -1129,6 +1168,22 @@ struct SessionUserMessagesInspector: View {
     )
   }
 
+  private func automationMessageRow(message: MessageDetail) -> some View {
+    VStack(alignment: .leading, spacing: 6) {
+      Text(formattedDate(message.timestamp))
+        .font(.caption.monospacedDigit())
+        .foregroundStyle(.secondary)
+      Text(displayText(message))
+        .font(.body)
+        .lineLimit(4)
+        .textSelection(.enabled)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+    .padding(10)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(Color.green.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+  }
+
   private func responseCard(_ message: MessageDetail) -> some View {
     VStack(alignment: .leading, spacing: 6) {
       Text(formattedDate(message.timestamp))
@@ -1150,7 +1205,7 @@ struct SessionUserMessagesInspector: View {
   private func responseMessages(after messageIndex: Int) -> [MessageDetail] {
     let followingMessages = detail.messages.dropFirst(messageIndex + 1)
     let sameTurnMessages = followingMessages.prefix { message in
-      message.sourceEvent != "event_msg.user_message"
+      message.sourceEvent != "event_msg.user_message" && message.sourceEvent != "event_msg.automation_message"
     }
     return uniqueMessages(
       sameTurnMessages.filter { message in

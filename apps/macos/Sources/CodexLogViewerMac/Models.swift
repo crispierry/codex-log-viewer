@@ -15,6 +15,7 @@ enum ExportFormat: String {
 enum MessageRoleFilter: String, CaseIterable, Identifiable {
   case all
   case user
+  case automation
   case assistant
   case system
   case developer
@@ -27,6 +28,8 @@ enum MessageRoleFilter: String, CaseIterable, Identifiable {
       return "All"
     case .user:
       return "User"
+    case .automation:
+      return "Automation"
     case .assistant:
       return "Assistant"
     case .system:
@@ -84,6 +87,7 @@ struct SummaryTotals: Decodable {
   let sessions: Int
   let turns: Int
   let userMessages: Int
+  let automationMessages: Int
   let assistantMessages: Int
   let uniqueUserMessages: Int
   let toolEvents: Int
@@ -121,6 +125,7 @@ struct SessionSummary: Decodable, Identifiable, Hashable {
   let firstSeen: String?
   let lastSeen: String?
   let userMessages: Int
+  let automationMessages: Int
   let assistantMessages: Int
   let totalTokens: Int
   let models: [String]

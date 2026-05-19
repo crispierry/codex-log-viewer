@@ -36,6 +36,7 @@ export function summaryToCsv(summary: ProjectSummary): string {
     ["sessions", summary.totals.sessions],
     ["turns", summary.totals.turns],
     ["user_messages", summary.totals.userMessages],
+    ["automation_messages", summary.totals.automationMessages],
     ["assistant_messages", summary.totals.assistantMessages],
     ["unique_user_messages", summary.totals.uniqueUserMessages],
     ["repeated_user_messages", summary.repeatedUserMessages.length],

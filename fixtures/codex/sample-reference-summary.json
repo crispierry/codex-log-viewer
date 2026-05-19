@@ -9,6 +9,7 @@
     "sessions": 1,
     "turns": 1,
     "userMessages": 1,
+    "automationMessages": 0,
     "assistantMessages": 1,
     "uniqueUserMessages": 1,
     "toolEvents": 0,

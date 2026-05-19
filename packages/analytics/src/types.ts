@@ -39,6 +39,7 @@ export interface SessionSummary {
   firstSeen?: string;
   lastSeen?: string;
   userMessages: number;
+  automationMessages: number;
   assistantMessages: number;
   totalTokens: number;
   models: string[];
@@ -75,6 +76,7 @@ export interface ProjectSummary {
     sessions: number;
     turns: number;
     userMessages: number;
+    automationMessages: number;
     assistantMessages: number;
     uniqueUserMessages: number;
     toolEvents: number;

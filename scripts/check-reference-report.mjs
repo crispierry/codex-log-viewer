@@ -21,6 +21,7 @@ compareNumberGroup("totals", actual.totals, reference.totals, [
   "sessions",
   "turns",
   "userMessages",
+  "automationMessages",
   "assistantMessages",
   "uniqueUserMessages",
   "toolEvents",

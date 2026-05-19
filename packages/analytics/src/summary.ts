@@ -54,6 +54,7 @@ export function summarizeParsedCorpus(corpus: ParsedCodexCorpus, options: Summar
   );
   const messages = corpus.messages.filter((message) => recordInScope(message, visibleFilePaths, range));
   const submittedUserMessages = messages.filter((message) => message.sourceEvent === "event_msg.user_message");
+  const automationMessages = messages.filter((message) => message.sourceEvent === "event_msg.automation_message");
   const assistantMessages = messages.filter((message) => message.role === "assistant");
   const tokenUsage = corpus.tokenUsage.filter((token) => recordInScope(token, visibleFilePaths, range));
   const toolEvents = corpus.toolEvents.filter((event) => recordInScope(event, visibleFilePaths, range));
@@ -86,6 +87,7 @@ export function summarizeParsedCorpus(corpus: ParsedCodexCorpus, options: Summar
       sessions: sessions.length,
       turns: turns.length,
       userMessages: submittedUserMessages.length,
+      automationMessages: automationMessages.length,
       assistantMessages: assistantMessages.length,
       uniqueUserMessages: uniqueMessages.size,
       toolEvents: toolEvents.length,
@@ -667,6 +669,7 @@ function sessionSummaries(
       firstSeen: sortedTimestamps[0],
       lastSeen: sortedTimestamps.at(-1),
       userMessages: messages.filter((message) => message.sourceEvent === "event_msg.user_message").length,
+      automationMessages: messages.filter((message) => message.sourceEvent === "event_msg.automation_message").length,
       assistantMessages: messages.filter((message) => message.role === "assistant").length,
       totalTokens: tokens.reduce((sum, token) => sum + token.usage.totalTokens, 0),
       models: [...new Set(turns.map((turn) => turn.model).filter(Boolean) as string[])]

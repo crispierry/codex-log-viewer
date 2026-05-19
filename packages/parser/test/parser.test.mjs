@@ -32,15 +32,18 @@ test("parseCodexLogFile normalizes response items and tool events", async () => 
   assert.equal(parsed.turns[0]?.turnId, "shape-turn-1");
   assert.equal(parsed.turns[0]?.effort, "high");
 
-  assert.equal(parsed.messages.length, 3);
+  assert.equal(parsed.messages.length, 4);
 
   const userMessages = parsed.messages.filter((message) => message.sourceEvent === "event_msg.user_message");
   const userMessage = userMessages[0];
+  const automationMessage = parsed.messages.find((message) => message.sourceEvent === "event_msg.automation_message");
   assert.equal(userMessage?.role, "user");
   assert.equal(userMessage?.imagesCount, 1);
   assert.equal(userMessage?.localImagesCount, 1);
   assert.equal(userMessages[1]?.content, "Use the real request only.");
   assert.equal(userMessages[1]?.content.includes("# In app browser:"), false);
+  assert.equal(automationMessage?.role, "automation");
+  assert.match(automationMessage?.content ?? "", /^Automation: Daily fixture sync/);
 
   const assistantMessage = parsed.messages.find((message) => message.sourceEvent === "response_item.message");
   assert.equal(assistantMessage?.role, "assistant");
