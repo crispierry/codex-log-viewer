@@ -64,7 +64,7 @@ final class AppModel: ObservableObject {
   private var reloadRequestID = 0
   private var detailRequestID = 0
   private var searchRequestID = 0
-  private var pendingSelectedMessageLineNumber: Int?
+  private var pendingSearchResultTarget: SearchResultSelectionTarget?
   private let isEphemeralSettingsRun = ProcessInfo.processInfo.environment["CODEX_LOG_VIEWER_EPHEMERAL_SETTINGS"] == "1" ||
     ProcessInfo.processInfo.environment["CODEX_LOG_VIEWER_UI_TEST"] == "1"
   private var hasScheduledUITestQuit = false
@@ -353,7 +353,7 @@ final class AppModel: ObservableObject {
   func selectSession(_ sessionID: SessionSummary.ID?) {
     selectedSessionID = sessionID
     selectedUserMessageIndex = nil
-    pendingSelectedMessageLineNumber = nil
+    pendingSearchResultTarget = nil
     if !selectedSearchResultBelongsToSession(sessionID) {
       selectedSearchResultID = nil
     }
@@ -473,7 +473,7 @@ final class AppModel: ObservableObject {
       return
     }
     selectedSection = .browse
-    pendingSelectedMessageLineNumber = result.sourceEvent == "event_msg.user_message" ? result.lineNumber : nil
+    pendingSearchResultTarget = SearchResultSelectionTarget(result)
     selectedUserMessageIndex = nil
     selectedSessionID = sessionSelectionID(sessionID: result.sessionId, filePath: result.filePath) ?? result.sessionId
     selectedSessionDetail = nil
@@ -545,7 +545,7 @@ final class AppModel: ObservableObject {
     selectedSessionID = nil
     selectedSessionDetail = nil
     selectedUserMessageIndex = nil
-    pendingSelectedMessageLineNumber = nil
+    pendingSearchResultTarget = nil
     isDetailLoading = false
     sessionQuery = ""
   }
@@ -554,7 +554,7 @@ final class AppModel: ObservableObject {
     searchTask?.cancel()
     searchRequestID += 1
     selectedSearchResultID = nil
-    pendingSelectedMessageLineNumber = nil
+    pendingSearchResultTarget = nil
     messageSessionFilter = nil
     messageSessionFilePathFilter = nil
     isMessageBrowseMode = false
@@ -596,18 +596,77 @@ final class AppModel: ObservableObject {
   }
 
   private func applyPendingMessageSelection(to detail: SessionDetail) {
-    guard let pendingSelectedMessageLineNumber else {
+    guard let pendingSearchResultTarget else {
       if let selectedUserMessageIndex,
         !SessionInteractionBuilder.userMessageOffsets(in: detail).contains(where: { $0.offset == selectedUserMessageIndex }) {
         self.selectedUserMessageIndex = nil
       }
       return
     }
-    selectedUserMessageIndex = detail.messages.firstIndex { message in
-      message.lineNumber == pendingSelectedMessageLineNumber &&
-        message.sourceEvent == "event_msg.user_message"
+    selectedUserMessageIndex = userMessageIndex(for: pendingSearchResultTarget, in: detail)
+    self.pendingSearchResultTarget = nil
+  }
+
+  private func userMessageIndex(for target: SearchResultSelectionTarget, in detail: SessionDetail) -> Int? {
+    let userMessageOffsets = SessionInteractionBuilder.userMessageOffsets(in: detail)
+    guard !userMessageOffsets.isEmpty else { return nil }
+
+    if target.sourceEvent == "event_msg.user_message" {
+      if let lineNumber = target.lineNumber,
+        let exactMatch = userMessageOffsets.first(where: { $0.element.lineNumber == lineNumber }) {
+        return exactMatch.offset
+      }
+      if let turnId = target.turnId,
+        let turnMatch = userMessageOffsets.first(where: { $0.element.turnId == turnId }) {
+        return turnMatch.offset
+      }
     }
-    self.pendingSelectedMessageLineNumber = nil
+
+    if let containingInteraction = userMessageOffsets.first(where: { item in
+      guard let interaction = SessionInteractionBuilder.interaction(in: detail, selectedUserMessageIndex: item.offset) else {
+        return false
+      }
+      return interactionContains(target, interaction: interaction)
+    }) {
+      return containingInteraction.offset
+    }
+
+    if let targetOffset = detail.messages.firstIndex(where: { messageMatchesTarget($0, target: target) }) {
+      return userMessageOffsets.last(where: { $0.offset <= targetOffset })?.offset ?? userMessageOffsets.first?.offset
+    }
+
+    if let targetLineNumber = target.lineNumber {
+      return userMessageOffsets.last(where: { ($0.element.lineNumber ?? Int.min) <= targetLineNumber })?.offset ??
+        userMessageOffsets.first(where: { ($0.element.lineNumber ?? Int.max) > targetLineNumber })?.offset
+    }
+
+    if let turnId = target.turnId {
+      return userMessageOffsets.first(where: { $0.element.turnId == turnId })?.offset
+    }
+
+    return nil
+  }
+
+  private func interactionContains(_ target: SearchResultSelectionTarget, interaction: SessionInteraction) -> Bool {
+    if messageMatchesTarget(interaction.userMessage, target: target) {
+      return true
+    }
+    return interaction.assistantMessages.contains { messageMatchesTarget($0, target: target) } ||
+      interaction.contextMessages.contains { messageMatchesTarget($0, target: target) }
+  }
+
+  private func messageMatchesTarget(_ message: MessageDetail, target: SearchResultSelectionTarget) -> Bool {
+    if let lineNumber = target.lineNumber {
+      return message.lineNumber == lineNumber &&
+        message.sourceEvent == target.sourceEvent &&
+        message.role == target.role
+    }
+    if let turnId = target.turnId {
+      return message.turnId == turnId &&
+        message.sourceEvent == target.sourceEvent &&
+        message.role == target.role
+    }
+    return message.sourceEvent == target.sourceEvent && message.role == target.role
   }
 
   private func hasMessageSessionFilter(in sessions: [SessionSummary], sessionID: String) -> Bool {
@@ -886,6 +945,20 @@ final class AppModel: ObservableObject {
     else {
       throw AppSmokeError.unexpected("The selected user message did not reconstruct its Codex response.")
     }
+    let assistantSearch = try await api.searchMessages(
+      query: "parser test fixture",
+      role: .assistant,
+      model: AppConstants.allModelsName,
+      sessionID: result.sessionId,
+      filePath: result.filePath,
+      project: selectedProject,
+      filters: dateFilters
+    )
+    guard let assistantResult = assistantSearch.results.first,
+      userMessageIndex(for: SearchResultSelectionTarget(assistantResult), in: detail) == firstUserMessage.offset
+    else {
+      throw AppSmokeError.unexpected("Assistant search results did not map back to their user-message interaction.")
+    }
     selectedSessionDetail = detail
 
     messageSessionFilter = result.sessionId
@@ -1074,6 +1147,20 @@ final class AppModel: ObservableObject {
       .credits: credits
     ])
     NSApp.activate(ignoringOtherApps: true)
+  }
+}
+
+private struct SearchResultSelectionTarget {
+  let lineNumber: Int?
+  let turnId: String?
+  let role: String
+  let sourceEvent: String
+
+  init(_ result: MessageSearchResult) {
+    lineNumber = result.lineNumber
+    turnId = result.turnId
+    role = result.role
+    sourceEvent = result.sourceEvent
   }
 }
 
