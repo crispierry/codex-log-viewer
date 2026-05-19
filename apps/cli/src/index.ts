@@ -3,12 +3,12 @@ import { writeFile } from "node:fs/promises";
 import {
   loadCorpus,
   summaryToCsv,
+  summaryToJson,
   summarizeParsedCorpus,
   summarizeProject,
   type ProjectSummary,
   type SummaryOptions
 } from "@codex-log-viewer/analytics";
-import { startServer } from "@codex-log-viewer/server";
 
 interface ParsedArgs {
   command: string;
@@ -29,9 +29,6 @@ async function main(argv: string[]): Promise<void> {
       break;
     case "export":
       await exportCommand(parsed);
-      break;
-    case "serve":
-      await serveCommand(parsed);
       break;
     case "help":
     case "--help":
@@ -100,11 +97,12 @@ async function sessionsCommand(parsed: ParsedArgs): Promise<void> {
   }
 
   printTable(
-    ["Session", "Project", "User Msgs", "Tokens", "Last Seen"],
+    ["Session", "Project", "User Msgs", "Automations", "Tokens", "Last Seen"],
     summary.sessions.map((session) => [
       session.sessionId,
       session.project,
       session.userMessages,
+      session.automationMessages,
       formatNumber(session.totalTokens),
       session.lastSeen ?? ""
     ])
@@ -124,7 +122,7 @@ async function exportCommand(parsed: ParsedArgs): Promise<void> {
   const summary = await summarizeProject(summaryOptions(parsed));
   const format = String(parsed.options.format ?? "json");
   const output = typeof parsed.options.output === "string" ? parsed.options.output : undefined;
-  const body = format === "csv" ? summaryToCsv(summary) : `${JSON.stringify(summary, null, 2)}\n`;
+  const body = format === "csv" ? summaryToCsv(summary) : summaryToJson(summary, { redacted: parsed.options.raw !== true });
 
   if (output) {
     await writeFile(output, body, "utf8");
@@ -132,14 +130,6 @@ async function exportCommand(parsed: ParsedArgs): Promise<void> {
   } else {
     process.stdout.write(body);
   }
-}
-
-async function serveCommand(parsed: ParsedArgs): Promise<void> {
-  const port = Number(parsed.options.port ?? 3210);
-  const paths = arrayOption(parsed.options.path);
-  const server = await startServer({ port, paths: paths.length > 0 ? paths : undefined });
-  process.stdout.write(`Codex Log Viewer running at ${server.url}\n`);
-  process.stdout.write("Press Ctrl+C to stop.\n");
 }
 
 function summaryOptions(parsed: ParsedArgs): SummaryOptions {
@@ -163,8 +153,10 @@ function printSummary(summary: ProjectSummary): void {
       ["Sessions", summary.totals.sessions],
       ["Turns", summary.totals.turns],
       ["User messages", summary.totals.userMessages],
+      ["Automation messages", summary.totals.automationMessages],
       ["Assistant messages", summary.totals.assistantMessages],
       ["Unique user messages", summary.totals.uniqueUserMessages],
+      ["Repeated user prompts", summary.repeatedUserMessages.length],
       ["Input tokens", formatNumber(summary.tokens.inputTokens)],
       ["Cached input tokens", formatNumber(summary.tokens.cachedInputTokens)],
       ["Fresh input tokens", formatNumber(summary.tokens.freshInputTokens)],
@@ -208,7 +200,7 @@ Usage:
   codex-log-viewer summary [--project <name>] [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--path <file-or-dir>] [--json]
   codex-log-viewer sessions [--project <name>] [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--json]
   codex-log-viewer export [--format json|csv] [--output <file>] [summary options]
-  codex-log-viewer serve [--port 3210] [--path <file-or-dir>]
+  codex-log-viewer export --format json --raw [summary options]
 
 Defaults scan ~/.codex/sessions and ~/.codex/archived_sessions.
 `);

@@ -2,7 +2,7 @@
 
 ## Product Thesis
 
-Codex Log Viewer helps developers understand their local Codex usage without uploading session history to a third-party service.
+Codex Log Viewer helps developers understand their local Codex usage from a macOS app without uploading session history to a third-party service.
 
 The product should answer:
 
@@ -28,6 +28,7 @@ The product should answer:
 3. As a developer, I want token usage by model and type so I can understand usage drivers.
 4. As a maintainer, I want sanitized fixtures so parser behavior can improve without leaking private logs.
 5. As a contributor, I want clear schema notes so I can add support for new Codex event shapes.
+6. As a developer, I want to search every message across all projects and filter results by project or date range.
 
 ## MVP Requirements
 
@@ -36,22 +37,27 @@ The product should answer:
 - [x] Normalize session metadata, turns, messages, token usage, task timing, and raw unknown events
 - [x] Group sessions by project path and Codex worktree name
 - [x] Calculate message counts and unique user-message counts
+- [x] Group repeated user messages for the current filters
 - [x] Calculate day and hour buckets
 - [x] Calculate total, input, cached input, fresh input, output, and reasoning tokens
 - [x] Break metrics down by model and session
 - [x] Export JSON and CSV summaries
-- [x] Render a local dashboard from the same analytics layer
-- [x] Select data sources, projects, date ranges, exports, and sessions from the front end
-- [x] Inspect session details from the front end
+- [x] Launch a native SwiftUI macOS app backed by the local parser API
+- [x] Select data sources, projects, date ranges, exports, and sessions from the native app
+- [x] Browse projects, sessions, sent messages, and Codex interactions in a native split-column layout
+- [x] Inspect session details from the native app
+- [x] Select a submitted user message and inspect the related Codex response, tool activity, context, token usage, and timing in organized native sections
+- [x] Search parsed messages across all projects with project and date filters
 
 ## Post-MVP Enhancements
 
 - Git-root based grouping
 - User-defined alias configuration file
-- Full raw event payload explorer in the dashboard
+- Full raw event payload explorer in the native app
 - Redacted detailed export mode
+- Persistent local search index with SQLite FTS5
 - API-equivalent cost estimates
-- Persistent local cache for very large histories
+- Additional large-history memory and startup-time budgets
 
 ## Non-Goals For MVP
 
@@ -64,10 +70,10 @@ The product should answer:
 
 ## Success Criteria
 
-- Reproduce the WBD Celebration seven-day usage report within an agreed tolerance
+- Reproduce a private seven-day reference usage report within an agreed tolerance without committing private source logs
 - Parse known local Codex rollout variants without crashing
 - Surface unknown or incomplete data clearly
-- Provide a usable project/date range dashboard
+- Provide a usable native project/date range app
 - Keep all default workflows local
 
 ## Risks
@@ -80,7 +86,7 @@ The product should answer:
 
 ## Product Decisions
 
-- The dashboard is the primary product workflow.
+- The native macOS app is the primary product workflow and launch surface.
 - The CLI remains as an automation and debugging fallback.
 - Project grouping currently defaults to project path/Codex worktree name.
 - Session details are visible after explicit session selection.

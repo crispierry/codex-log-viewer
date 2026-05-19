@@ -1,5 +1,5 @@
 name: Bug report
-description: Report incorrect parsing, analytics, CLI, or dashboard behavior.
+description: Report incorrect parsing, analytics, macOS app, CLI, or local API behavior.
 title: "[Bug]: "
 labels: ["bug"]
 body:
@@ -35,7 +35,7 @@ body:
     id: fixture
     attributes:
       label: Sanitized fixture or event shape
-      description: Paste only redacted, minimal JSONL snippets.
+      description: Paste only synthetic or heavily redacted minimal JSONL snippets. Do not paste real session logs.
       render: json
   - type: textarea
     id: notes

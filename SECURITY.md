@@ -6,9 +6,13 @@ This project is pre-release. Security fixes will target the default branch until
 
 ## Reporting A Vulnerability
 
-Please do not open a public issue for vulnerabilities involving secret leakage, unsafe log handling, path traversal, export disclosure, or unsafe dashboard behavior.
+Please do not open a public issue for vulnerabilities involving secret leakage, unsafe log handling, path traversal, export disclosure, or unsafe app/API behavior.
 
-Until a dedicated security contact is published, report sensitive concerns privately to the repository owner.
+Use GitHub private vulnerability reporting at:
+
+https://github.com/crispierry/codex-log-viewer/security/advisories/new
+
+If that link is unavailable, contact the repository owner privately before sharing details. Do not include raw Codex logs unless the owner explicitly asks for a minimized, redacted reproduction.
 
 ## Security Principles
 

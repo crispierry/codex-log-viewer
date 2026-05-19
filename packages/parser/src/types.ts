@@ -33,11 +33,12 @@ export interface TurnRecord {
   collaborationMode?: string;
 }
 
-export type MessageRole = "user" | "assistant" | "system" | "developer" | "unknown";
+export type MessageRole = "user" | "assistant" | "system" | "developer" | "automation" | "unknown";
 
 export interface MessageRecord {
   filePath: string;
   sessionId: string;
+  lineNumber?: number;
   turnId?: string;
   timestamp?: string;
   role: MessageRole;
@@ -51,6 +52,7 @@ export interface MessageRecord {
 export interface TokenUsageRecord {
   filePath: string;
   sessionId: string;
+  lineNumber?: number;
   turnId?: string;
   timestamp?: string;
   usage: TokenUsage;
@@ -73,11 +75,13 @@ export interface TaskTimingRecord {
 export interface ToolEventRecord {
   filePath: string;
   sessionId: string;
+  lineNumber?: number;
   turnId?: string;
   timestamp?: string;
   eventType: string;
   name?: string;
   callId?: string;
+  content?: string;
   cwd?: string;
   exitCode?: number;
   durationMs?: number;
@@ -126,8 +130,26 @@ export interface ParsedCodexCorpus {
   warnings: ParseWarning[];
 }
 
+export type ParseCacheStatus = "ready" | "checking" | "updated" | "rebuilt";
+
+export interface ParseCacheMetadata {
+  cacheStatus: ParseCacheStatus;
+  reusedFiles: number;
+  parsedFiles: number;
+  removedFiles: number;
+  totalFiles: number;
+  updatedAt: string;
+}
+
+export interface CachedParsedCodexCorpus {
+  corpus: ParsedCodexCorpus;
+  cache: ParseCacheMetadata;
+}
+
 export interface ParseOptions {
   paths?: string[];
   homeDir?: string;
+  cacheDir?: string;
+  refreshCache?: boolean;
+  rebuildCache?: boolean;
 }
-

@@ -1,12 +1,12 @@
 # Agent Instructions
 
-This repository is intended to become a public, local-first Codex log parser and dashboard. Keep changes privacy-conscious and fixture-driven.
+This repository is intended to become a public, local-first Codex log parser and native macOS app. Keep changes privacy-conscious and fixture-driven.
 
 ## Project Priorities
 
 - Treat real Codex logs as sensitive by default.
 - Do not commit unsanitized local session files.
-- Prefer parser and analytics correctness before dashboard polish.
+- Prefer parser and analytics correctness before app polish.
 - Preserve raw events internally, but expose redacted views by default where practical.
 - Keep documentation aligned with implementation decisions.
 
@@ -20,3 +20,8 @@ Once tooling exists, parser changes should include:
 - aggregation tests for token and message metrics
 
 Documentation-only changes do not need app tests.
+
+## Native App Review Loop
+
+- After any user-visible native macOS app change, rebuild the app and relaunch the current packaged app so the user can immediately review the change.
+- When a change is documentation-only or otherwise cannot affect the running app, say that explicitly instead of relaunching.

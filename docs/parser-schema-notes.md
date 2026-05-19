@@ -140,6 +140,8 @@ Observed tool-related records include:
 
 These are not required for MVP usage metrics, but they are useful for raw event inspection and future workflow analytics.
 
+For native interaction reconstruction, normalized message, token, and tool-event records preserve their source JSONL line number. Tool-event records also preserve short textual content when the event exposes `output`, `content`, or `arguments`.
+
 ## Normalized Records
 
 Initial normalized record types:
@@ -161,6 +163,7 @@ Initial normalized record types:
 - Use cumulative `total_token_usage` for reconciliation, not as the primary sum.
 - Ignore token usage for `token_count` events with `info: null`.
 - Preserve unknown events and include counts in parser summaries.
+- Use normalized line numbers and turn ids to reconstruct the Codex interaction that follows a selected submitted user message.
 
 ## Schema Change Policy
 

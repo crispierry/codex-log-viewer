@@ -8,41 +8,80 @@ cd codex-log-viewer
 npm install
 ```
 
-## Run The Dashboard
+## Run The macOS App
 
-The front end is the primary way to use Codex Log Viewer.
+The macOS app is the primary way to use Codex Log Viewer.
 
 ```sh
-npm run serve
+npm run app:mac
 ```
 
-Then open [http://127.0.0.1:3210](http://127.0.0.1:3210).
-
-From the dashboard you can:
+From the app you can:
 
 - use the default Codex log locations
-- add custom files or directories in the source panel
+- add custom files or directories from the native `Logs` menu
 - select a project from the sidebar
-- filter by date range
-- export JSON or CSV
+- use Browse to move from project to session to sent message to Codex interaction
+- use Overview for metrics, charts, and repeated prompts for the selected project
+- use Search for cross-project or project-filtered message search
+- filter by all time, day, week, month, year, or a custom date range from the workspace header
+- search messages across all selected projects
+- filter message search by role, model, and selected session
+- review repeated user prompts for the current filters
+- export redacted JSON or aggregate CSV
 - search sessions
 - inspect session messages, token events, warnings, and unknown events
 
-## Custom Sources
-
-In the dashboard source panel, add one path per line:
+To build a packaged app from source:
 
 ```sh
-/Users/example/.codex/sessions
-/Users/example/.codex/archived_sessions
-/Users/example/Downloads/sample-session.jsonl
+npm run package:mac
+open "dist/macos/Codex Log Viewer.app"
 ```
 
-Click `Apply` to rescan those paths. Click `Default` to return to `~/.codex/sessions` and `~/.codex/archived_sessions`.
+## Custom Sources
+
+Use `Logs > Choose Codex Log Location...` to pick custom Codex log files or folders. Use `Logs > Use Default Codex Log Locations` to return to `~/.codex/sessions` and `~/.codex/archived_sessions`. Recent custom sources and date filter choices are stored in local app settings.
+
+The date filter lives in the workspace header. Use the calendar control to switch between all time, a specific day, week, month, year, or a custom start/end range.
+
+## Message Search
+
+Use the Search section to search across parsed messages. Search respects the current source, project, date, role, model, and session filters. Choose `All Projects` to search across every discovered project.
+
+Click `Messages I Sent` to list prompts you typed and submitted for the selected project without typing a search phrase. Generated context wrappers, such as browser state, file attachments, review metadata, and goal-resume prompts, are excluded from that view.
+
+In Browse, the first column lists projects, the second lists sessions, the third lists sent messages for the selected session, and the fourth shows the selected message's Codex interaction split into user message, Codex response, tool activity, system/developer context, and token/timing sections.
+
+Select a search result to copy its session id, project, or a whitespace-normalized snippet with local home paths shortened. Use `Open in Browse` to jump from the result into the four-column session and interaction view.
+
+Keyboard shortcuts:
+
+- `Command-R`: refresh local logs incrementally
+- `Command-Shift-R`: rebuild the local parsed cache
+- `Command-F`: focus message search
+- `Command-Return`: run message search
+- `Command-O`: choose sources
+- `Command-E`: export redacted JSON
+- `Command-Shift-E`: export CSV
+
+## Local Cache
+
+The macOS app stores a private parsed-session cache in `~/Library/Application Support/Codex Log Viewer/Cache/v1` so it does not need to reprocess unchanged logs every time you navigate or relaunch the app.
+
+Refresh checks for added, changed, or deleted session files and updates only what changed. Use `Logs > Rebuild Local Cache` if the cache ever looks stale or you want to force a full local reparse.
 
 ## Exports
 
-Use the `JSON` and `CSV` buttons in the dashboard toolbar. Exports respect the current source, project, and date filters.
+Use the `JSON` and `CSV` buttons in the app toolbar. Exports respect the current source, project, and date filters.
+
+JSON exports redact local source paths and working directories by default. Treat them as private until reviewed because project names, timestamps, session IDs, and model metadata may still be sensitive.
+
+The CLI supports explicit raw JSON for private local use:
+
+```sh
+npm run cli -- export --format json --raw --output private-usage.json
+```
 
 ## CLI Fallback
 
@@ -50,8 +89,8 @@ The CLI remains available for automation:
 
 ```sh
 npm run cli -- projects
-npm run cli -- summary --project WBD-Celebration --since 2026-04-22 --until 2026-04-29
-npm run cli -- export --format json --output usage.json --project WBD-Celebration
+npm run cli -- summary --project sample-app --since 2026-04-22 --until 2026-04-29
+npm run cli -- export --format json --output usage.json --project sample-app
 ```
 
 You can still pass `--path` for fixture testing:
@@ -66,6 +105,7 @@ You can pass multiple `--path` values.
 
 - User-message counts come from `event_msg.user_message`.
 - Unique user messages are trimmed, whitespace-collapsed, and lowercased.
+- Repeated prompts are grouped from normalized user messages and shown only for groups with more than one submission.
 - Token totals sum `token_count.info.last_token_usage` records.
 - `token_count` events with `info: null` are ignored for token totals.
 - Unknown event shapes are preserved and counted.

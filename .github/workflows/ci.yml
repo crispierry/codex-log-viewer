@@ -5,18 +5,42 @@ on:
     branches: [main]
   pull_request:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
       - run: npm ci
+      - run: npm run privacy:scan
       - run: npm run lint
       - run: npm test
-      - run: npx playwright install --with-deps chromium
-      - run: npm run test:e2e
       - run: npm run build
+
+  macos-app:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build:native-engine
+      - run: npm run check:mac-accessibility
+      - run: npm run build:mac
+      - run: npm run package:mac
+      - run: npm run smoke:mac-package
+      - run: npm run smoke:mac-ui
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Codex-Log-Viewer-macOS
+          path: |
+            dist/macos/Codex-Log-Viewer-*-macOS.zip
+            dist/macos/Codex-Log-Viewer-*-macOS.zip.sha256

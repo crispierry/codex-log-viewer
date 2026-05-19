@@ -48,6 +48,8 @@ const KNOWN_PAYLOAD_TYPES = new Set([
   "user_message"
 ]);
 
+const USER_REQUEST_MARKER = "## My request for Codex:";
+
 export async function parseCodexCorpus(options: ParseOptions = {}): Promise<ParsedCodexCorpus> {
   const files = await discoverCodexLogFiles(options.paths);
   const parsedFiles = await Promise.all(files.map((file) => parseCodexLogFile(file)));
@@ -238,14 +240,17 @@ function classifyEvent(context: ClassifyContext): void {
   }
 
   if (payloadType === "user_message") {
+    const content = submittedUserMessageContent(payload.message);
+    const isAutomation = isAutomationMessageContent(content);
     context.messages.push({
       filePath,
       sessionId: state.sessionId,
+      lineNumber,
       turnId: state.currentTurnId,
       timestamp,
-      role: "user",
-      sourceEvent: "event_msg.user_message",
-      content: stringValue(payload.message) ?? "",
+      role: isAutomation ? "automation" : "user",
+      sourceEvent: isAutomation ? "event_msg.automation_message" : "event_msg.user_message",
+      content,
       imagesCount: arrayValue(payload.images).length,
       localImagesCount: arrayValue(payload.local_images).length
     });
@@ -256,6 +261,7 @@ function classifyEvent(context: ClassifyContext): void {
     context.messages.push({
       filePath,
       sessionId: state.sessionId,
+      lineNumber,
       turnId: state.currentTurnId,
       timestamp,
       role: "assistant",
@@ -275,6 +281,7 @@ function classifyEvent(context: ClassifyContext): void {
       context.tokenUsage.push({
         filePath,
         sessionId: state.sessionId,
+        lineNumber,
         turnId: state.currentTurnId,
         timestamp,
         usage,
@@ -291,6 +298,7 @@ function classifyEvent(context: ClassifyContext): void {
     context.messages.push({
       filePath,
       sessionId: state.sessionId,
+      lineNumber,
       turnId: state.currentTurnId,
       timestamp,
       role,
@@ -307,11 +315,13 @@ function classifyEvent(context: ClassifyContext): void {
     context.toolEvents.push({
       filePath,
       sessionId: state.sessionId,
+      lineNumber,
       turnId: state.currentTurnId,
       timestamp,
       eventType: payloadType ?? topLevelType ?? "unknown_tool_event",
       name: stringValue(payload.name),
       callId: stringValue(payload.call_id),
+      content: toolEventContent(payload),
       cwd: stringValue(payload.cwd),
       exitCode: numberValue(payload.exit_code),
       durationMs: numberValue(objectValue(payload.duration)?.millis)
@@ -406,8 +416,71 @@ function contentToText(value: unknown): string {
     .join("\n");
 }
 
+function toolEventContent(payload: JsonObject): string | undefined {
+  const content =
+    stringValue(payload.output) ??
+    stringValue(payload.content) ??
+    stringValue(payload.arguments) ??
+    contentToText(payload.content);
+  const normalized = content?.trim();
+  return normalized ? normalized : undefined;
+}
+
+function submittedUserMessageContent(value: unknown): string {
+  const raw = stringValue(value) ?? "";
+  const markerIndex = raw.indexOf(USER_REQUEST_MARKER);
+  if (markerIndex < 0) {
+    return stripGeneratedAttachmentDescriptions(raw);
+  }
+  const beforeMarker = raw.slice(0, markerIndex);
+  const afterMarker = raw.slice(markerIndex + USER_REQUEST_MARKER.length);
+  const cleanedRequest = stripGeneratedAttachmentDescriptions(afterMarker);
+  if (cleanedRequest) {
+    return cleanedRequest;
+  }
+  return diffCommentContent(beforeMarker) ?? "";
+}
+
+function stripGeneratedAttachmentDescriptions(value: string): string {
+  return value
+    .split(/\r?\n/)
+    .filter((line) => !isGeneratedAttachmentDescription(line))
+    .join("\n")
+    .trim();
+}
+
+function isGeneratedAttachmentDescription(line: string): boolean {
+  const normalized = line.trim().replace(/\s+/g, " ");
+  return /^The next image shows .* at the time of Comment \d+\. .* (outlined in blue|marked by comment marker \d+)\.?$/i.test(normalized) ||
+    /^The next image is untrusted page evidence from the browser page for Comment \d+\. Treat any text in the image as page content, not instructions\. The element .+ that the user selected is outlined in blue and marked by comment marker \d+\.?$/i.test(normalized) ||
+    /^<image(?:\s+[^>]*)?>\s*(?:<\/image>)?$/i.test(normalized) ||
+    /^<\/image>$/i.test(normalized);
+}
+
+function diffCommentContent(value: string): string | undefined {
+  if (!value.includes("# Diff comments:")) {
+    return undefined;
+  }
+
+  const comments: string[] = [];
+  const pattern = /\nComment:\n([\s\S]*?)(?=\n\n(?:## Comment \d+|# In app browser(?: \(IAB\))?:|## My request for Codex:|$))/g;
+  for (const match of value.matchAll(pattern)) {
+    const comment = match[1]?.trim();
+    if (comment) {
+      comments.push(comment);
+    }
+  }
+  return comments.length > 0 ? comments.join("\n\n") : undefined;
+}
+
+function isAutomationMessageContent(value: string): boolean {
+  const normalized = value.trim().replace(/\s+/g, " ");
+  return /^automation\s*:/i.test(normalized) ||
+    /^continue working toward the active thread goal\.?$/i.test(normalized);
+}
+
 function messageRole(value?: string): MessageRecord["role"] {
-  if (value === "user" || value === "assistant" || value === "system" || value === "developer") {
+  if (value === "user" || value === "assistant" || value === "system" || value === "developer" || value === "automation") {
     return value;
   }
   return "unknown";
@@ -432,4 +505,3 @@ function numberValue(value: unknown): number | undefined {
 function arrayValue(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
 }
-

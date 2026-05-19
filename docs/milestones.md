@@ -38,9 +38,9 @@ Exit criteria:
 
 Status: complete for the first supported event set.
 
-## Milestone 2: WBD Parity Analytics
+## Milestone 2: Reference-Report Parity Analytics
 
-Goal: reproduce the WBD Celebration metrics from local Codex logs.
+Goal: reproduce a private reference usage report from local Codex logs without committing the source logs or private project names.
 
 - project discovery and alias config
 - message count aggregation
@@ -53,33 +53,50 @@ Goal: reproduce the WBD Celebration metrics from local Codex logs.
 
 Exit criteria:
 
-- The tool reproduces the WBD seven-day report within agreed tolerance.
+- The tool reproduces the reference seven-day report within agreed tolerance.
 
-Status: partially complete. The analytics engine exists; WBD parity still needs a dedicated validation pass against local logs.
+Status: partially complete. The analytics engine exists; private reference-report parity still needs a dedicated validation pass against local logs.
 
-## Milestone 3: Dashboard MVP
+## Milestone 3: Native App MVP
 
-Goal: make analytics explorable visually.
+Goal: make analytics explorable in the native macOS app.
 
-- local Vite/React app
+- SwiftUI macOS app package
+- app launch script
+- private local engine startup from the app
 - source path controls
 - project selector
 - date range selector
 - JSON and CSV export buttons
 - metric cards
-- messages by day/hour charts
-- token usage charts
-- model breakdown
+- message search across all parsed messages
 - sessions table
 - session details
 
 Exit criteria:
 
-- A user can inspect one project and date range without using the CLI.
+- A user can inspect one project and date range without using the CLI or a browser.
 
-Status: complete for aggregate metrics, charts, model breakdown, source selection, project selection, exports, sessions table, and session details. Full raw payload exploration remains a post-MVP enhancement.
+Status: complete for aggregate metrics, source selection, project selection, date filters, exports, message search, sessions table, and session details. Full raw payload exploration remains a post-MVP enhancement.
 
-## Milestone 4: Public Release
+## Milestone 4: Native App Polish
+
+Goal: make the normal product path feel like a polished desktop app.
+
+- native sidebar, toolbar, tables, search, and inspector
+- native file/folder picker
+- app settings
+- scan progress and better empty states
+- project and date facets for search
+- packaged app verification
+
+Exit criteria:
+
+- A user can launch the app and inspect/search local logs with expected macOS controls.
+
+Status: complete for native source picking, local source/date settings, role/model/session search filters, search result session context, repeated-prompt grouping, first-pass empty states, keyboard shortcuts, retry recovery, packaged app verification, and release-critical smoke automation. Deeper VoiceOver QA, selection-navigation shortcuts, and persistent indexed search remain follow-up work.
+
+## Milestone 5: Public Release
 
 Goal: publish a useful open source release.
 
@@ -87,9 +104,12 @@ Goal: publish a useful open source release.
 - install/run instructions
 - fixture contribution workflow
 - CI for lint/test/build
-- release notes
+- macOS packaging and release workflow
+- release notes template
 - first version tag
 
 Exit criteria:
 
 - A new user can install, run against local logs, and understand privacy implications.
+
+Status: source and CI readiness are complete for review. The first version tag and official notarized artifact still depend on human review, maintainer-local private reference parity, and Developer ID/notary credentials.
