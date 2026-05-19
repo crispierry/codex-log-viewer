@@ -22,7 +22,9 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Verify tag matches package version
-        run: test "$GITHUB_REF_NAME" = "v$(node -p "require('./package.json').version")"
+        run: |
+          PACKAGE_VERSION="$(node -p "require('./package.json').version")"
+          test "$GITHUB_REF_NAME" = "v$PACKAGE_VERSION"
       - run: npm run test:all
       - run: npm audit --audit-level=moderate
       - run: npm run benchmark:search
@@ -49,15 +51,18 @@ jobs:
           KEYCHAIN_PATH="$RUNNER_TEMP/codex-log-viewer-signing.keychain-db"
           CERTIFICATE_PATH="$RUNNER_TEMP/codex-log-viewer-certificate.p12"
           KEYCHAIN_PASSWORD="$(uuidgen)"
+          trap 'rm -f "$CERTIFICATE_PATH"' EXIT
 
           echo "$CODEX_LOG_VIEWER_MACOS_CERTIFICATE_BASE64" | base64 --decode > "$CERTIFICATE_PATH"
           security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security import "$CERTIFICATE_PATH" -P "$CODEX_LOG_VIEWER_MACOS_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          rm -f "$CERTIFICATE_PATH"
           security list-keychains -d user -s "$KEYCHAIN_PATH"
           security default-keychain -s "$KEYCHAIN_PATH"
           security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH" | grep -F "$CODEX_LOG_VIEWER_CODESIGN_IDENTITY"
           xcrun notarytool store-credentials "$CODEX_LOG_VIEWER_NOTARY_PROFILE" \
             --apple-id "$CODEX_LOG_VIEWER_APPLE_ID" \
             --team-id "$CODEX_LOG_VIEWER_APPLE_TEAM_ID" \

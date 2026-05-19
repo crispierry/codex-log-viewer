@@ -68,6 +68,14 @@ The tag-based GitHub Release workflow sets `CODEX_LOG_VIEWER_REQUIRE_NOTARIZATIO
 
 `CODEX_LOG_VIEWER_MACOS_CERTIFICATE_BASE64` should be a base64-encoded `.p12` export containing the matching Developer ID Application certificate and private key. The workflow imports it into a temporary keychain, creates the notarytool keychain profile from the Apple ID/team/app-specific password secrets, signs, notarizes, staples, verifies the checksum, and only then creates the GitHub Release.
 
+On macOS, encode the exported `.p12` without committing it:
+
+```sh
+base64 -i DeveloperIDApplication.p12 | pbcopy
+```
+
+Paste the copied value into the `CODEX_LOG_VIEWER_MACOS_CERTIFICATE_BASE64` repository secret, then delete the local export when it is no longer needed.
+
 ## Artifact Review
 
 - Confirm `dist/macos/Codex-Log-Viewer-vX.Y.Z-macOS.zip` exists.

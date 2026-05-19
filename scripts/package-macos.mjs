@@ -194,6 +194,7 @@ async function signBundle() {
       run("codesign", codeSignArgs(target), { quiet: true });
     }
     run("codesign", codeSignArgs(appDir, ["--deep"]), { quiet: true });
+    run("codesign", ["--verify", "--strict", "--deep", "--verbose=2", appDir], { quiet: true });
     didSignBundle = true;
   } catch (error) {
     if (codeSignIdentity !== "-") {
@@ -223,14 +224,19 @@ async function notarizeBundle() {
 
   const notaryArchivePath = join(buildDir, "Codex-Log-Viewer-notary-submit.zip");
   await rm(notaryArchivePath, { force: true });
-  run("ditto", ["-c", "-k", "--sequesterRsrc", "--keepParent", appDir, notaryArchivePath], { quiet: true });
-  const submitArgs = ["notarytool", "submit", notaryArchivePath, "--keychain-profile", notaryProfile, "--wait"];
-  if (notaryKeychain) {
-    submitArgs.push("--keychain", notaryKeychain);
+  try {
+    run("ditto", ["-c", "-k", "--sequesterRsrc", "--keepParent", appDir, notaryArchivePath], { quiet: true });
+    const submitArgs = ["notarytool", "submit", notaryArchivePath, "--keychain-profile", notaryProfile, "--wait"];
+    if (notaryKeychain) {
+      submitArgs.push("--keychain", notaryKeychain);
+    }
+    run("xcrun", submitArgs);
+    run("xcrun", ["stapler", "staple", appDir]);
+    run("xcrun", ["stapler", "validate", appDir]);
+    run("spctl", ["--assess", "--type", "execute", "--verbose=2", appDir]);
+  } finally {
+    await rm(notaryArchivePath, { force: true });
   }
-  run("xcrun", submitArgs);
-  run("xcrun", ["stapler", "staple", appDir]);
-  await rm(notaryArchivePath, { force: true });
 }
 
 async function createReleaseArchive() {
