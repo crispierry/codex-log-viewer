@@ -3,11 +3,12 @@ import { parseCodexCorpus } from "@codex-log-viewer/parser";
 import type {
   MessageRecord,
   ParsedCodexCorpus,
+  ParsedCodexFile,
   TokenUsageRecord,
   TurnRecord
 } from "@codex-log-viewer/parser";
 import { defaultCodexLogRoots } from "@codex-log-viewer/parser";
-import { listProjects, projectContextForSession, projectNameForCwd } from "./project.js";
+import { listProjects, projectContextForFile, projectNameForCwd } from "./project.js";
 import type {
   DateBucket,
   LoadedCorpus,
@@ -41,36 +42,22 @@ export function summarizeParsedCorpus(corpus: ParsedCodexCorpus, options: Summar
   const aliases = options.aliases ?? [];
   const project = options.project ?? "All Projects";
   const range = dateRange(options);
-  const sessionProjects = new Map<string, string>();
+  const visibleFiles = corpus.files.filter((file) => {
+    const context = projectContextForFile(file, corpus, aliases);
+    return project === "All Projects" || context.project === project;
+  });
+  const visibleFilePaths = new Set(visibleFiles.map((file) => file.filePath));
 
-  for (const file of corpus.files) {
-    const context = projectContextForSession(file.sessionId, corpus, aliases);
-    sessionProjects.set(file.sessionId, context.project);
-  }
-
-  const sessionIds = new Set(
-    corpus.files
-      .filter((file) => project === "All Projects" || sessionProjects.get(file.sessionId) === project)
-      .map((file) => file.sessionId)
+  const turns = corpus.turns.filter((turn) => recordInScope(turn, visibleFilePaths, range));
+  const turnModels = new Map(
+    turns.map((turn) => [turnModelKey(turn.filePath, turn.sessionId, turn.turnId), turn.model ?? "unknown"])
   );
-
-  const turns = corpus.turns.filter((turn) => sessionIds.has(turn.sessionId) && timestampInRange(turn.timestamp, range));
-  const turnModels = new Map(turns.map((turn) => [turnModelKey(turn.sessionId, turn.turnId), turn.model ?? "unknown"]));
-  const messages = corpus.messages.filter(
-    (message) => sessionIds.has(message.sessionId) && timestampInRange(message.timestamp, range)
-  );
+  const messages = corpus.messages.filter((message) => recordInScope(message, visibleFilePaths, range));
   const submittedUserMessages = messages.filter((message) => message.sourceEvent === "event_msg.user_message");
   const assistantMessages = messages.filter((message) => message.role === "assistant");
-  const tokenUsage = corpus.tokenUsage.filter(
-    (token) => sessionIds.has(token.sessionId) && timestampInRange(token.timestamp, range)
-  );
-  const toolEvents = corpus.toolEvents.filter(
-    (event) => sessionIds.has(event.sessionId) && timestampInRange(event.timestamp, range)
-  );
-  const unknownEvents = corpus.unknownEvents.filter(
-    (event) => sessionIds.has(event.sessionId) && timestampInRange(event.timestamp, range)
-  );
-  const sessionIdByFilePath = new Map(corpus.files.map((file) => [file.filePath, file.sessionId]));
+  const tokenUsage = corpus.tokenUsage.filter((token) => recordInScope(token, visibleFilePaths, range));
+  const toolEvents = corpus.toolEvents.filter((event) => recordInScope(event, visibleFilePaths, range));
+  const unknownEvents = corpus.unknownEvents.filter((event) => recordInScope(event, visibleFilePaths, range));
 
   const tokens = emptyUsage();
   for (const token of dedupeTokenEvents(tokenUsage)) {
@@ -82,13 +69,10 @@ export function summarizeParsedCorpus(corpus: ParsedCodexCorpus, options: Summar
   const messagesByHour = bucketMessages(submittedUserMessages, "hour", tokenUsage);
   const tokensByDay = bucketTokens(tokenUsage, "day");
   const models = modelBuckets(turns, tokenUsage, turnModels);
-  const sessions = sessionSummaries(corpus, [...sessionIds], aliases, range);
+  const sessions = sessionSummaries(corpus, visibleFiles, aliases, range);
   const repeatedUserMessages = repeatedUserMessageGroups(submittedUserMessages, corpus, aliases);
-  const visibleSessionIds = new Set(sessions.map((session) => session.sessionId));
-  const parseWarnings = corpus.warnings.filter((warning) => {
-    const sessionId = sessionIdByFilePath.get(warning.filePath);
-    return sessionId ? visibleSessionIds.has(sessionId) : project === "All Projects";
-  });
+  const visibleSessionFilePaths = new Set(sessions.map((session) => session.filePath));
+  const parseWarnings = corpus.warnings.filter((warning) => visibleSessionFilePaths.has(warning.filePath));
 
   return {
     project,
@@ -130,6 +114,7 @@ export function searchMessages(corpus: ParsedCodexCorpus, options: MessageSearch
   const limit = clampLimit(options.limit);
   const modelFilter = options.model?.trim();
   const sessionFilter = options.sessionId?.trim();
+  const filePathFilter = options.filePath?.trim();
 
   if (!normalizedQuery) {
     return {
@@ -143,9 +128,9 @@ export function searchMessages(corpus: ParsedCodexCorpus, options: MessageSearch
   }
 
   const range = dateRange(options);
-  const sessionContexts = new Map<string, ReturnType<typeof projectContextForSession>>();
+  const sessionContexts = new Map<string, ReturnType<typeof projectContextForFile>>();
   const turnModels = new Map(
-    corpus.turns.map((turn) => [`${turn.sessionId}:${turn.turnId}`, turn.model ?? "unknown"])
+    corpus.turns.map((turn) => [turnModelKey(turn.filePath, turn.sessionId, turn.turnId), turn.model ?? "unknown"])
   );
   const matches: MessageSearchResult[] = [];
 
@@ -153,10 +138,13 @@ export function searchMessages(corpus: ParsedCodexCorpus, options: MessageSearch
     if (sessionFilter && message.sessionId !== sessionFilter) {
       continue;
     }
+    if (filePathFilter && message.filePath !== filePathFilter) {
+      continue;
+    }
 
-    const context =
-      sessionContexts.get(message.sessionId) ?? projectContextForSession(message.sessionId, corpus, aliases);
-    sessionContexts.set(message.sessionId, context);
+    const contextKey = sessionRecordKey(message.filePath, message.sessionId);
+    const context = sessionContexts.get(contextKey) ?? projectContextForFile(message, corpus, aliases);
+    sessionContexts.set(contextKey, context);
 
     if (project !== "All Projects" && context.project !== project) {
       continue;
@@ -166,7 +154,9 @@ export function searchMessages(corpus: ParsedCodexCorpus, options: MessageSearch
       continue;
     }
 
-    const model = message.turnId ? turnModels.get(`${message.sessionId}:${message.turnId}`) : undefined;
+    const model = message.turnId
+      ? turnModels.get(turnModelKey(message.filePath, message.sessionId, message.turnId))
+      : undefined;
     if (modelFilter && modelFilter !== "all" && (model ?? "unknown") !== modelFilter) {
       continue;
     }
@@ -383,9 +373,9 @@ function repeatedUserMessageGroups(
       firstSeen: message.timestamp,
       lastSeen: message.timestamp
     };
-    const project = projectContextForSession(message.sessionId, corpus, aliases).project;
+    const project = projectContextForFile(message, corpus, aliases).project;
     group.count += 1;
-    group.sessionIds.add(message.sessionId);
+    group.sessionIds.add(sessionRecordKey(message.filePath, message.sessionId));
     group.projects.add(project);
     group.firstSeen = earlierTimestamp(group.firstSeen, message.timestamp);
     group.lastSeen = laterTimestamp(group.lastSeen, message.timestamp);
@@ -497,7 +487,9 @@ function modelBuckets(
   }
 
   for (const token of dedupeTokenEvents(tokenUsage)) {
-    const model = token.turnId ? turnModels.get(turnModelKey(token.sessionId, token.turnId)) ?? "unknown" : "unknown";
+    const model = token.turnId
+      ? turnModels.get(turnModelKey(token.filePath, token.sessionId, token.turnId)) ?? "unknown"
+      : "unknown";
     const bucket = buckets.get(model) ?? { model, turns: 0, tokens: emptyUsage() };
     addUsage(bucket.tokens, token.usage);
     buckets.set(model, bucket);
@@ -506,29 +498,29 @@ function modelBuckets(
   return [...buckets.values()].sort((a, b) => b.tokens.totalTokens - a.tokens.totalTokens || a.model.localeCompare(b.model));
 }
 
-function turnModelKey(sessionId: string, turnId: string): string {
-  return `${sessionId}:${turnId}`;
+function turnModelKey(filePath: string, sessionId: string, turnId: string): string {
+  return sessionRecordKey(filePath, sessionId, turnId);
 }
 
 function sessionSummaries(
   corpus: ParsedCodexCorpus,
-  sessionIds: string[],
+  files: ParsedCodexFile[],
   aliases: ProjectAlias[],
   range: { since?: number; until?: number }
 ): SessionSummary[] {
   const hasDateFilter = range.since !== undefined || range.until !== undefined;
 
-  return sessionIds.flatMap((sessionId) => {
-    const file = corpus.files.find((candidate) => candidate.sessionId === sessionId);
-    const session = corpus.sessions.find((candidate) => candidate.sessionId === sessionId);
-    const cwd = session?.cwd ?? corpus.turns.find((turn) => turn.sessionId === sessionId)?.cwd;
+  return files.flatMap((file) => {
+    const sessionId = file.sessionId;
+    const session = corpus.sessions.find((candidate) => sameSessionFile(candidate, file));
+    const cwd = session?.cwd ?? corpus.turns.find((turn) => sameSessionFile(turn, file))?.cwd;
     const messages = corpus.messages.filter(
-      (message) => message.sessionId === sessionId && timestampInRange(message.timestamp, range)
+      (message) => sameSessionFile(message, file) && timestampInRange(message.timestamp, range)
     );
     const tokens = dedupeTokenEvents(
-      corpus.tokenUsage.filter((token) => token.sessionId === sessionId && timestampInRange(token.timestamp, range))
+      corpus.tokenUsage.filter((token) => sameSessionFile(token, file) && timestampInRange(token.timestamp, range))
     );
-    const turns = corpus.turns.filter((turn) => turn.sessionId === sessionId && timestampInRange(turn.timestamp, range));
+    const turns = corpus.turns.filter((turn) => sameSessionFile(turn, file) && timestampInRange(turn.timestamp, range));
     const sessionTimestampInRange = session?.timestamp ? timestampInRange(session.timestamp, range) : false;
     const hasActivityInRange = sessionTimestampInRange || messages.length > 0 || tokens.length > 0 || turns.length > 0;
 
@@ -546,7 +538,7 @@ function sessionSummaries(
 
     return [{
       sessionId,
-      filePath: file?.filePath ?? "",
+      filePath: file.filePath,
       project: projectNameForCwd(cwd, aliases),
       cwd,
       firstSeen: sortedTimestamps[0],
@@ -557,4 +549,20 @@ function sessionSummaries(
       models: [...new Set(turns.map((turn) => turn.model).filter(Boolean) as string[])]
     }];
   }).sort((a, b) => (b.lastSeen ?? "").localeCompare(a.lastSeen ?? ""));
+}
+
+function recordInScope(
+  record: { filePath: string; timestamp?: string },
+  visibleFilePaths: Set<string>,
+  range: { since?: number; until?: number }
+): boolean {
+  return visibleFilePaths.has(record.filePath) && timestampInRange(record.timestamp, range);
+}
+
+function sameSessionFile(record: { filePath: string; sessionId: string }, file: { filePath: string; sessionId: string }): boolean {
+  return record.sessionId === file.sessionId && record.filePath === file.filePath;
+}
+
+function sessionRecordKey(filePath: string, sessionId: string, suffix?: string): string {
+  return suffix === undefined ? `${filePath}\n${sessionId}` : `${filePath}\n${sessionId}\n${suffix}`;
 }

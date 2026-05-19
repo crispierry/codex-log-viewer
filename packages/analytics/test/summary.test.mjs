@@ -225,6 +225,161 @@ test("summarizeParsedCorpus attributes token usage to models by session and turn
   assert.equal(modelB?.tokens.totalTokens, 27);
 });
 
+test("summarizeParsedCorpus and searchMessages scope duplicate session ids by file path", () => {
+  const corpus = {
+    files: [
+      {
+        filePath: "alpha.jsonl",
+        sessionId: "duplicate-session",
+        lineCount: 3,
+        sessions: [],
+        turns: [],
+        messages: [],
+        tokenUsage: [],
+        taskTimings: [],
+        toolEvents: [],
+        unknownEvents: [],
+        warnings: []
+      },
+      {
+        filePath: "beta.jsonl",
+        sessionId: "duplicate-session",
+        lineCount: 3,
+        sessions: [],
+        turns: [],
+        messages: [],
+        tokenUsage: [],
+        taskTimings: [],
+        toolEvents: [],
+        unknownEvents: [],
+        warnings: []
+      }
+    ],
+    sessions: [
+      {
+        filePath: "alpha.jsonl",
+        sessionId: "duplicate-session",
+        cwd: "/tmp/alpha-app",
+        timestamp: "2026-01-01T00:00:00.000Z"
+      },
+      {
+        filePath: "beta.jsonl",
+        sessionId: "duplicate-session",
+        cwd: "/tmp/beta-app",
+        timestamp: "2026-01-02T00:00:00.000Z"
+      }
+    ],
+    turns: [
+      {
+        filePath: "alpha.jsonl",
+        sessionId: "duplicate-session",
+        turnId: "shared-turn",
+        timestamp: "2026-01-01T00:00:00.000Z",
+        model: "alpha-model"
+      },
+      {
+        filePath: "beta.jsonl",
+        sessionId: "duplicate-session",
+        turnId: "shared-turn",
+        timestamp: "2026-01-02T00:00:00.000Z",
+        model: "beta-model"
+      }
+    ],
+    messages: [
+      {
+        filePath: "alpha.jsonl",
+        sessionId: "duplicate-session",
+        turnId: "shared-turn",
+        timestamp: "2026-01-01T00:00:01.000Z",
+        role: "user",
+        sourceEvent: "event_msg.user_message",
+        content: "repeated duplicate prompt",
+        imagesCount: 0,
+        localImagesCount: 0
+      },
+      {
+        filePath: "beta.jsonl",
+        sessionId: "duplicate-session",
+        turnId: "shared-turn",
+        timestamp: "2026-01-02T00:00:01.000Z",
+        role: "user",
+        sourceEvent: "event_msg.user_message",
+        content: "repeated duplicate prompt",
+        imagesCount: 0,
+        localImagesCount: 0
+      }
+    ],
+    tokenUsage: [
+      {
+        filePath: "alpha.jsonl",
+        sessionId: "duplicate-session",
+        turnId: "shared-turn",
+        timestamp: "2026-01-01T00:00:02.000Z",
+        usage: {
+          inputTokens: 10,
+          cachedInputTokens: 0,
+          freshInputTokens: 10,
+          outputTokens: 1,
+          reasoningOutputTokens: 0,
+          totalTokens: 11
+        }
+      },
+      {
+        filePath: "beta.jsonl",
+        sessionId: "duplicate-session",
+        turnId: "shared-turn",
+        timestamp: "2026-01-02T00:00:02.000Z",
+        usage: {
+          inputTokens: 20,
+          cachedInputTokens: 0,
+          freshInputTokens: 20,
+          outputTokens: 2,
+          reasoningOutputTokens: 0,
+          totalTokens: 22
+        }
+      }
+    ],
+    taskTimings: [],
+    toolEvents: [],
+    unknownEvents: [],
+    warnings: []
+  };
+
+  const betaSummary = summarizeParsedCorpus(corpus, { project: "beta-app" });
+  const betaSearch = searchMessages(corpus, {
+    query: "duplicate prompt",
+    project: "beta-app",
+    model: "beta-model"
+  });
+  const wrongModelSearch = searchMessages(corpus, {
+    query: "duplicate prompt",
+    project: "beta-app",
+    model: "alpha-model"
+  });
+  const fileScopedSessionSearch = searchMessages(corpus, {
+    query: "duplicate prompt",
+    sessionId: "duplicate-session",
+    filePath: "beta.jsonl"
+  });
+  const allSummary = summarizeParsedCorpus(corpus);
+
+  assert.equal(betaSummary.totals.sessions, 1);
+  assert.equal(betaSummary.totals.turns, 1);
+  assert.equal(betaSummary.totals.userMessages, 1);
+  assert.equal(betaSummary.tokens.totalTokens, 22);
+  assert.equal(betaSummary.models[0]?.model, "beta-model");
+  assert.equal(betaSummary.sessions[0]?.filePath, "beta.jsonl");
+  assert.equal(betaSummary.sessions[0]?.project, "beta-app");
+  assert.equal(betaSearch.totalMatches, 1);
+  assert.equal(betaSearch.results[0]?.filePath, "beta.jsonl");
+  assert.equal(wrongModelSearch.totalMatches, 0);
+  assert.equal(fileScopedSessionSearch.totalMatches, 1);
+  assert.equal(fileScopedSessionSearch.results[0]?.filePath, "beta.jsonl");
+  assert.equal(allSummary.totals.sessions, 2);
+  assert.deepEqual(allSummary.repeatedUserMessages[0]?.projects, ["alpha-app", "beta-app"]);
+  assert.equal(allSummary.repeatedUserMessages[0]?.sessionCount, 2);
+});
+
 test("searchMessages searches messages across all projects and supports project filtering", async () => {
   const corpus = await parseCodexCorpus({ paths: [fixturePath] });
 

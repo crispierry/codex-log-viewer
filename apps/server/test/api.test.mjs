@@ -136,6 +136,125 @@ test("project-scoped endpoints respect the requested project filter", async () =
   }
 });
 
+test("session detail and message search isolate duplicate session ids by file path", async () => {
+  const tempDir = await mkdtemp(`${tmpdir()}/codex-log-viewer-duplicate-session-`);
+  const alphaFixture = resolve(tempDir, "alpha-duplicate.jsonl");
+  const betaFixture = resolve(tempDir, "beta-duplicate.jsonl");
+
+  const fixtureBody = ({ cwd, message, model, timestamp }) =>
+    [
+      JSON.stringify({
+        timestamp,
+        type: "session_meta",
+        payload: {
+          id: "duplicate-session",
+          timestamp,
+          cwd
+        }
+      }),
+      JSON.stringify({
+        timestamp,
+        type: "turn_context",
+        payload: {
+          turn_id: "shared-turn",
+          cwd,
+          model
+        }
+      }),
+      JSON.stringify({
+        timestamp,
+        type: "event_msg",
+        payload: {
+          type: "user_message",
+          message
+        }
+      })
+    ].join("\n") + "\n";
+
+  await writeFile(
+    alphaFixture,
+    fixtureBody({
+      cwd: "/Users/example/projects/alpha-app",
+      message: "Alpha duplicate message",
+      model: "alpha-model",
+      timestamp: "2026-04-27T20:00:00.000Z"
+    }),
+    "utf8"
+  );
+  await writeFile(
+    betaFixture,
+    fixtureBody({
+      cwd: "/Users/example/projects/beta-app",
+      message: "Beta duplicate message",
+      model: "beta-model",
+      timestamp: "2026-04-27T20:01:00.000Z"
+    }),
+    "utf8"
+  );
+
+  const server = await startServer({
+    port: 0,
+    authToken: "test-token",
+    paths: [alphaFixture, betaFixture]
+  });
+  const headers = { authorization: "Bearer test-token" };
+
+  try {
+    const summary = await fetch(`${server.url}/api/summary?project=beta-app`, { headers });
+    assert.equal(summary.status, 200);
+    const summaryBody = await summary.json();
+    assert.equal(summaryBody.summary.totals.sessions, 1);
+    assert.equal(summaryBody.summary.sessions[0]?.filePath, betaFixture);
+
+    const visibleParams = new URLSearchParams({
+      sessionId: "duplicate-session",
+      project: "beta-app",
+      filePath: betaFixture
+    });
+    const detail = await fetch(`${server.url}/api/session?${visibleParams}`, { headers });
+    assert.equal(detail.status, 200);
+    const detailBody = await detail.json();
+    assert.equal(detailBody.file.filePath, betaFixture);
+    assert.equal(detailBody.messages.some((message) => message.content === "Beta duplicate message"), true);
+    assert.equal(detailBody.messages.some((message) => message.content === "Alpha duplicate message"), false);
+
+    const hiddenParams = new URLSearchParams({
+      sessionId: "duplicate-session",
+      project: "beta-app",
+      filePath: alphaFixture
+    });
+    const hiddenDetail = await fetch(`${server.url}/api/session?${hiddenParams}`, { headers });
+    assert.equal(hiddenDetail.status, 404);
+
+    const searchParams = new URLSearchParams({
+      q: "duplicate message",
+      project: "beta-app",
+      model: "beta-model",
+      sessionId: "duplicate-session",
+      filePath: betaFixture
+    });
+    const search = await fetch(`${server.url}/api/messages/search?${searchParams}`, { headers });
+    assert.equal(search.status, 200);
+    const searchBody = await search.json();
+    assert.equal(searchBody.search.totalMatches, 1);
+    assert.equal(searchBody.search.results[0]?.filePath, betaFixture);
+
+    const hiddenSearchParams = new URLSearchParams({
+      q: "duplicate message",
+      project: "beta-app",
+      sessionId: "duplicate-session",
+      filePath: alphaFixture
+    });
+    const hiddenSearch = await fetch(`${server.url}/api/messages/search?${hiddenSearchParams}`, { headers });
+    assert.equal(hiddenSearch.status, 200);
+    const hiddenSearchBody = await hiddenSearch.json();
+    assert.equal(hiddenSearchBody.search.totalMatches, 0);
+  } finally {
+    await server.close();
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("server reports fixed-port conflicts and dynamic ports avoid them", async () => {
   const first = await startServer({ port: 0 });
   const occupiedPort = Number(new URL(first.url).port);

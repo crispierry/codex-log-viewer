@@ -29,9 +29,12 @@ struct LogEngineAPI {
     return response.summary
   }
 
-  func sessionDetail(sessionID: String, project: String, filters: LogFilters) async throws -> SessionDetail {
+  func sessionDetail(sessionID: String, filePath: String? = nil, project: String, filters: LogFilters) async throws -> SessionDetail {
     var queryItems = queryItems(project: project, filters: filters)
     queryItems.append(URLQueryItem(name: "sessionId", value: sessionID))
+    if let filePath {
+      queryItems.append(URLQueryItem(name: "filePath", value: filePath))
+    }
     return try await get("api/session", query: queryItems)
   }
 
@@ -40,6 +43,7 @@ struct LogEngineAPI {
     role: MessageRoleFilter,
     model: String,
     sessionID: String?,
+    filePath: String? = nil,
     project: String,
     filters: LogFilters
   ) async throws -> MessageSearchSummary {
@@ -53,6 +57,9 @@ struct LogEngineAPI {
     }
     if let sessionID {
       queryItems.append(URLQueryItem(name: "sessionId", value: sessionID))
+    }
+    if let filePath {
+      queryItems.append(URLQueryItem(name: "filePath", value: filePath))
     }
     queryItems.append(contentsOf: self.queryItems(project: project, filters: filters))
     let response: MessageSearchResponse = try await get("api/messages/search", query: queryItems)

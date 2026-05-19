@@ -115,7 +115,7 @@ struct SessionSummary: Decodable, Identifiable, Hashable {
   let totalTokens: Int
   let models: [String]
 
-  var id: String { sessionId }
+  var id: String { "\(filePath)#\(sessionId)" }
   var shortSessionId: String { String(sessionId.prefix(8)) }
 }
 

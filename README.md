@@ -61,7 +61,7 @@ The app is the primary product experience. From the desktop UI you can:
 - review repeated prompts for the current filters
 - refresh the scan
 - export redacted JSON or aggregate CSV
-- inspect session messages, turns, tokens, warnings, and unknown events
+- inspect session messages, turns, tokens, warnings, and unknown events, with file-scoped handling for copied logs that reuse a session id
 
 Run it with:
 

@@ -107,6 +107,7 @@ enum AppSmokeRunner {
       }
       _ = try await api.sessionDetail(
         sessionID: firstSession.sessionId,
+        filePath: firstSession.filePath,
         project: AppConstants.allProjectsName,
         filters: filters
       )

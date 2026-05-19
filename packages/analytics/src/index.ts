@@ -1,5 +1,5 @@
 export { redactedProjectSummary, summaryToCsv, summaryToJson } from "./export.js";
-export { listProjects, projectContextForSession, projectNameForCwd, sessionsById } from "./project.js";
+export { listProjects, projectContextForFile, projectContextForSession, projectNameForCwd, sessionsById } from "./project.js";
 export {
   loadCorpus,
   normalizeMessage,

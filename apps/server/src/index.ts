@@ -101,15 +101,23 @@ async function handleRequest(request: IncomingMessage, response: ServerResponse,
       sendJson(response, 400, { error: "sessionId is required" });
       return;
     }
+    const filePath = url.searchParams.get("filePath") ?? undefined;
     const loaded = await loadCachedCorpus(url, options.paths);
     const summaryOptions = summaryOptionsFromQuery(url, options.paths);
     const summary = summarizeParsedCorpus(loaded.corpus, summaryOptions);
-    if (!summary.sessions.some((session) => session.sessionId === sessionId)) {
+    const visibleSession = summary.sessions.find(
+      (session) => session.sessionId === sessionId && (!filePath || session.filePath === filePath)
+    );
+    if (!visibleSession) {
       sendJson(response, 404, { error: "Session not found" });
       return;
     }
-    const file = loaded.corpus.files.find((candidate) => candidate.sessionId === sessionId);
-    const session = loaded.corpus.sessions.find((candidate) => candidate.sessionId === sessionId);
+    const file = loaded.corpus.files.find(
+      (candidate) => candidate.sessionId === sessionId && candidate.filePath === visibleSession.filePath
+    );
+    const session = loaded.corpus.sessions.find(
+      (candidate) => candidate.sessionId === sessionId && candidate.filePath === visibleSession.filePath
+    );
     if (!file) {
       sendJson(response, 404, { error: "Session not found" });
       return;
@@ -134,16 +142,15 @@ async function handleRequest(request: IncomingMessage, response: ServerResponse,
 
   if (url.pathname === "/api/messages/search") {
     const loaded = await loadCachedCorpus(url, options.paths);
-    const project = url.searchParams.get("project");
     const limit = Number(url.searchParams.get("limit") ?? 100);
     sendJson(response, 200, {
       search: searchMessages(loaded.corpus, {
         ...summaryOptionsFromQuery(url, options.paths),
-        project: project && project !== "All Projects" ? project : undefined,
         query: url.searchParams.get("q") ?? "",
         role: roleFromQuery(url.searchParams.get("role")),
         model: url.searchParams.get("model") ?? undefined,
         sessionId: url.searchParams.get("sessionId") ?? undefined,
+        filePath: url.searchParams.get("filePath") ?? undefined,
         limit
       })
     });

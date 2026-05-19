@@ -36,6 +36,7 @@ final class AppModel: ObservableObject {
   @Published var messageRoleFilter: MessageRoleFilter = .all
   @Published var messageModelFilter = AppConstants.allModelsName
   @Published var messageSessionFilter: String?
+  @Published private var messageSessionFilePathFilter: String?
   @Published var searchSummary: MessageSearchSummary?
   @Published var selectedSearchResultID: MessageSearchResult.ID?
   @Published var pathDraft = ""
@@ -135,8 +136,9 @@ final class AppModel: ObservableObject {
           !summary.models.contains(where: { $0.model == messageModelFilter }) {
           messageModelFilter = AppConstants.allModelsName
         }
-        if let messageSessionFilter, !summary.sessions.contains(where: { $0.id == messageSessionFilter }) {
+        if let messageSessionFilter, !hasMessageSessionFilter(in: summary.sessions, sessionID: messageSessionFilter) {
           self.messageSessionFilter = nil
+          self.messageSessionFilePathFilter = nil
         }
         if let selectedSessionID, !summary.sessions.contains(where: { $0.id == selectedSessionID }) {
           clearSelectedSession()
@@ -216,11 +218,12 @@ final class AppModel: ObservableObject {
   }
 
   func loadSelectedSession() {
-    guard let sessionID = selectedSessionID, let api else {
+    guard let selectionID = selectedSessionID, let api else {
       selectedSessionDetail = nil
       isDetailLoading = false
       return
     }
+    let target = detailTarget(for: selectionID)
 
     detailTask?.cancel()
     detailRequestID += 1
@@ -231,7 +234,12 @@ final class AppModel: ObservableObject {
     detailTask = Task {
       do {
         isDetailLoading = true
-        let detail = try await api.sessionDetail(sessionID: sessionID, project: project, filters: filters)
+        let detail = try await api.sessionDetail(
+          sessionID: target.sessionID,
+          filePath: target.filePath,
+          project: project,
+          filters: filters
+        )
         guard !Task.isCancelled, requestID == detailRequestID else { return }
         selectedSessionDetail = detail
         isDetailLoading = false
@@ -260,6 +268,7 @@ final class AppModel: ObservableObject {
     let role = messageRoleFilter
     let model = messageModelFilter
     let sessionID = messageSessionFilter
+    let filePath = messageSessionFilePathFilter
 
     searchTask = Task {
       do {
@@ -269,6 +278,7 @@ final class AppModel: ObservableObject {
           role: role,
           model: model,
           sessionID: sessionID,
+          filePath: filePath,
           project: project,
           filters: filters
         )
@@ -295,14 +305,16 @@ final class AppModel: ObservableObject {
     else {
       return
     }
-    selectedSessionID = result.sessionId
+    selectedSessionID = sessionSelectionID(sessionID: result.sessionId, filePath: result.filePath) ?? result.sessionId
     selectedSessionDetail = nil
     loadSelectedSession()
   }
 
   func limitMessageSearchToSelectedSession() {
     guard let selectedSessionID else { return }
-    messageSessionFilter = selectedSessionID
+    let target = detailTarget(for: selectedSessionID)
+    messageSessionFilter = target.sessionID
+    messageSessionFilePathFilter = target.filePath
     if searchSummary != nil {
       searchMessages()
     }
@@ -310,6 +322,7 @@ final class AppModel: ObservableObject {
 
   func clearMessageSessionFilter() {
     messageSessionFilter = nil
+    messageSessionFilePathFilter = nil
     if searchSummary != nil {
       searchMessages()
     }
@@ -370,6 +383,7 @@ final class AppModel: ObservableObject {
     searchRequestID += 1
     selectedSearchResultID = nil
     messageSessionFilter = nil
+    messageSessionFilePathFilter = nil
     searchSummary = nil
   }
 
@@ -380,7 +394,39 @@ final class AppModel: ObservableObject {
     else {
       return false
     }
+    if let session = sessionForSelectionID(sessionID) {
+      return result.sessionId == session.sessionId && result.filePath == session.filePath
+    }
     return result.sessionId == sessionID
+  }
+
+  private func detailTarget(for selectionID: SessionSummary.ID) -> (sessionID: String, filePath: String?) {
+    if let session = sessionForSelectionID(selectionID) {
+      return (session.sessionId, session.filePath)
+    }
+    if let selectedSearchResultID,
+      let result = searchSummary?.results.first(where: { $0.id == selectedSearchResultID && $0.sessionId == selectionID })
+    {
+      return (result.sessionId, result.filePath)
+    }
+    return (selectionID, nil)
+  }
+
+  private func sessionForSelectionID(_ selectionID: SessionSummary.ID) -> SessionSummary? {
+    summary?.sessions.first { $0.id == selectionID }
+  }
+
+  private func sessionSelectionID(sessionID: String, filePath: String) -> SessionSummary.ID? {
+    summary?.sessions.first { $0.sessionId == sessionID && $0.filePath == filePath }?.id
+  }
+
+  private func hasMessageSessionFilter(in sessions: [SessionSummary], sessionID: String) -> Bool {
+    sessions.contains { session in
+      guard let messageSessionFilePathFilter else {
+        return session.sessionId == sessionID
+      }
+      return session.sessionId == sessionID && session.filePath == messageSessionFilePathFilter
+    }
   }
 
   private func setSourcePaths(_ paths: [String]) {
@@ -519,6 +565,7 @@ final class AppModel: ObservableObject {
     messageRoleFilter = .all
     messageModelFilter = AppConstants.allModelsName
     messageSessionFilter = nil
+    messageSessionFilePathFilter = nil
     let search = try await api.searchMessages(
       query: messageQuery,
       role: messageRoleFilter,
@@ -532,7 +579,7 @@ final class AppModel: ObservableObject {
     }
     searchSummary = search
     selectedSearchResultID = result.id
-    selectedSessionID = result.sessionId
+    selectedSessionID = sessionSelectionID(sessionID: result.sessionId, filePath: result.filePath) ?? result.sessionId
 
     copySearchResultSessionID(result)
     guard Self.pasteboardText() == result.sessionId else {
@@ -552,6 +599,7 @@ final class AppModel: ObservableObject {
 
     let detail = try await api.sessionDetail(
       sessionID: result.sessionId,
+      filePath: result.filePath,
       project: selectedProject,
       filters: dateFilters
     )
@@ -561,11 +609,13 @@ final class AppModel: ObservableObject {
     selectedSessionDetail = detail
 
     messageSessionFilter = result.sessionId
+    messageSessionFilePathFilter = result.filePath
     let sessionSearch = try await api.searchMessages(
       query: messageQuery,
       role: .all,
       model: AppConstants.allModelsName,
       sessionID: result.sessionId,
+      filePath: result.filePath,
       project: AppConstants.allProjectsName,
       filters: dateFilters
     )

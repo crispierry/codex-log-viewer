@@ -86,6 +86,7 @@ export interface MessageSearchOptions extends SummaryOptions {
   role?: MessageRole | "all";
   model?: string;
   sessionId?: string;
+  filePath?: string;
   limit?: number;
 }
 
