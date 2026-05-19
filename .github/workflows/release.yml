@@ -21,7 +21,12 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - name: Verify tag matches package version
+        run: test "$GITHUB_REF_NAME" = "v$(node -p "require('./package.json').version")"
       - run: npm run test:all
+      - run: npm audit --audit-level=moderate
+      - run: npm run benchmark:search
+      - run: npm run check:reference -- --reference fixtures/codex/sample-reference-summary.json --path fixtures/codex/sample-session.jsonl --project sample-app
       - run: npm run package:mac
       - run: npm run smoke:mac-package
       - run: npm run smoke:mac-ui

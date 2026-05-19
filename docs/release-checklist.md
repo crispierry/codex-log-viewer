@@ -7,6 +7,7 @@ Use this checklist before publishing a public Codex Log Viewer version.
 - Use semantic versions beginning with `0.1.0`.
 - Keep `package.json`, `CHANGELOG.md`, and Git tags aligned.
 - Tag releases as `vX.Y.Z`; the GitHub Release workflow runs from tags that start with `v`.
+- The release workflow fails if the tag does not match `package.json` as `v<version>`.
 
 ## Required Verification
 
@@ -23,6 +24,8 @@ git diff --check
 ```
 
 On macOS, `npm run release:mac` builds `Codex Log Viewer.app`, launches the packaged smoke workflow twice, verifies Finder-style and relocated `.app` launches, verifies missing-engine failure diagnostics, checks that the local engine exits, and runs a native UI smoke check against sanitized fixtures.
+
+The tag-based GitHub Release workflow repeats the required source checks, audit, benchmark, sanitized reference parity harness, package build, packaged app smoke, and native UI smoke before creating a release.
 
 ## Private Reference Parity
 
