@@ -245,6 +245,7 @@ function classifyEvent(context: ClassifyContext): void {
     context.messages.push({
       filePath,
       sessionId: state.sessionId,
+      lineNumber,
       turnId: state.currentTurnId,
       timestamp,
       role: isAutomation ? "automation" : "user",
@@ -260,6 +261,7 @@ function classifyEvent(context: ClassifyContext): void {
     context.messages.push({
       filePath,
       sessionId: state.sessionId,
+      lineNumber,
       turnId: state.currentTurnId,
       timestamp,
       role: "assistant",
@@ -279,6 +281,7 @@ function classifyEvent(context: ClassifyContext): void {
       context.tokenUsage.push({
         filePath,
         sessionId: state.sessionId,
+        lineNumber,
         turnId: state.currentTurnId,
         timestamp,
         usage,
@@ -295,6 +298,7 @@ function classifyEvent(context: ClassifyContext): void {
     context.messages.push({
       filePath,
       sessionId: state.sessionId,
+      lineNumber,
       turnId: state.currentTurnId,
       timestamp,
       role,
@@ -311,11 +315,13 @@ function classifyEvent(context: ClassifyContext): void {
     context.toolEvents.push({
       filePath,
       sessionId: state.sessionId,
+      lineNumber,
       turnId: state.currentTurnId,
       timestamp,
       eventType: payloadType ?? topLevelType ?? "unknown_tool_event",
       name: stringValue(payload.name),
       callId: stringValue(payload.call_id),
+      content: toolEventContent(payload),
       cwd: stringValue(payload.cwd),
       exitCode: numberValue(payload.exit_code),
       durationMs: numberValue(objectValue(payload.duration)?.millis)
@@ -408,6 +414,16 @@ function contentToText(value: unknown): string {
     })
     .filter(Boolean)
     .join("\n");
+}
+
+function toolEventContent(payload: JsonObject): string | undefined {
+  const content =
+    stringValue(payload.output) ??
+    stringValue(payload.content) ??
+    stringValue(payload.arguments) ??
+    contentToText(payload.content);
+  const normalized = content?.trim();
+  return normalized ? normalized : undefined;
 }
 
 function submittedUserMessageContent(value: unknown): string {

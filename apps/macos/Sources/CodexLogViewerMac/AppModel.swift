@@ -585,7 +585,7 @@ final class AppModel: ObservableObject {
     if ProcessInfo.processInfo.environment["CODEX_LOG_VIEWER_UI_WORKFLOW_SMOKE"] == "1" {
       Task {
         do {
-          try await Task.sleep(for: .seconds(5))
+          try await Task.sleep(for: .seconds(10))
           try await runUITestWorkflow(api: api, filters: filters)
           Self.writeStdout("Native UI workflow smoke passed.\n")
           NSApp.terminate(nil)
@@ -700,6 +700,15 @@ final class AppModel: ObservableObject {
     )
     guard detail.messages.contains(where: { $0.content.contains("parser test") }) else {
       throw AppSmokeError.unexpected("The selected search result did not load full session context.")
+    }
+    guard let firstUserMessage = SessionInteractionBuilder.userMessageOffsets(in: detail).first,
+      let interaction = SessionInteractionBuilder.interaction(
+        in: detail,
+        selectedUserMessageIndex: firstUserMessage.offset
+      ),
+      !interaction.assistantMessages.isEmpty
+    else {
+      throw AppSmokeError.unexpected("The selected user message did not reconstruct its Codex response.")
     }
     selectedSessionDetail = detail
 

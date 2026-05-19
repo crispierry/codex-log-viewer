@@ -276,6 +276,7 @@ struct MessageSearchResult: Decodable, Identifiable, Hashable {
   let filePath: String
   let project: String
   let cwd: String?
+  let lineNumber: Int?
   let turnId: String?
   let model: String?
   let timestamp: String?
@@ -290,8 +291,8 @@ struct SessionDetail: Decodable {
   let messages: [MessageDetail]
   let tokenUsage: [TokenUsageDetail]
   let taskTimings: [TaskTimingDetail]
-  let toolEvents: [EventPlaceholder]
-  let unknownEvents: [EventPlaceholder]
+  let toolEvents: [ToolEventDetail]
+  let unknownEvents: [UnknownEventDetail]
   let warnings: [ParseWarningDetail]
 }
 
@@ -313,12 +314,15 @@ struct MessageDetail: Decodable, Hashable {
   let role: String
   let sourceEvent: String
   let content: String
+  let lineNumber: Int?
   let turnId: String?
   let timestamp: String?
   let phase: String?
 }
 
 struct TokenUsageDetail: Decodable, Hashable {
+  let lineNumber: Int?
+  let turnId: String?
   let timestamp: String?
   let usage: TokenUsage
   let cumulativeUsage: TokenUsage?
@@ -330,10 +334,28 @@ struct TaskTimingDetail: Decodable, Hashable {
   let timeToFirstTokenMs: Double?
 }
 
+struct ToolEventDetail: Decodable, Hashable {
+  let lineNumber: Int?
+  let turnId: String?
+  let timestamp: String?
+  let eventType: String
+  let name: String?
+  let callId: String?
+  let content: String?
+  let cwd: String?
+  let exitCode: Int?
+  let durationMs: Double?
+}
+
+struct UnknownEventDetail: Decodable, Hashable {
+  let lineNumber: Int?
+  let timestamp: String?
+  let topLevelType: String?
+  let payloadType: String?
+}
+
 struct ParseWarningDetail: Decodable, Hashable {
   let lineNumber: Int
   let code: String
   let message: String
 }
-
-struct EventPlaceholder: Decodable, Hashable {}

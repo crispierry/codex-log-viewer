@@ -32,6 +32,7 @@ Implemented for v0.1:
 - native source picker, recent source settings, date-filter settings, and local-only settings persistence
 - search result copy actions for session id, project, and sanitized snippets
 - native Messages I Sent action for browsing submitted user prompts by project without generated context wrappers
+- structured native interaction inspector for selected sent messages, including Codex response, tool activity, context, tokens, and timing
 - repeated-prompt grouping with counts across the current project/source/date filters
 - file-scoped handling for copied or archived logs that reuse a session id, covering summaries, search, and session detail
 - first-pass native empty states, failure retry action, and keyboard shortcuts for refresh, find, search, source picking, and exports
@@ -64,7 +65,7 @@ This audit reconciles the original work plan with the current implementation. Th
 | Native sources and settings | Complete for v0.1. | Source picker/recent-source/date-filter settings in `AppModel.swift` and `RootView.swift`; usage docs describe local settings. |
 | Parser and analytics accuracy | Complete for supported public fixtures and sanitized parity harness. Official release still needs maintainer-local private reference parity. | `fixtures/codex/*.jsonl`, parser/analytics tests including duplicate session-id scoping, `scripts/check-reference-report.mjs`, `fixtures/codex/sample-reference-summary.json`, and `docs/release-checklist.md`. |
 | Privacy-first exports | Complete for v0.1 aggregate exports. Raw/detail views remain explicitly private, and tracked-file privacy scanning is automated. | `packages/analytics/src/export.ts`, analytics/server tests, `scripts/privacy-scan.mjs`, `docs/privacy-and-redaction.md`, `docs/usage.md`. |
-| Search and session workflows | Complete for v0.1. Saved searches remain a later enhancement. | Search filters, Messages I Sent browsing for submitted prompts, file-scoped selected-session scoping, result-to-session context, matching-message highlight, repeated-prompt grouping, and copy actions in analytics and native app code. |
+| Search and session workflows | Complete for v0.1. Saved searches remain a later enhancement. | Search filters, Messages I Sent browsing for submitted prompts, structured sent-message interaction inspector, file-scoped selected-session scoping, result-to-session context, matching-message highlight, repeated-prompt grouping, and copy actions in analytics and native app code. |
 | UX, accessibility, and recovery | Complete for first public source release. | Empty states, retry action, keyboard shortcuts, and stable accessibility identifiers in the native app; release-critical UI smoke in CI. |
 | Release operations | Complete for repeatable source/tag releases. Official notarized macOS distribution still requires credentials. | `CHANGELOG.md`, `docs/release-checklist.md`, `docs/release-notes-template.md`, `.github/workflows/release.yml`, `.github/dependabot.yml`, tag/version guard, official-release notarization guard, runner certificate/notary setup, basename checksum output, rendered release notes, checksum guidance, and verified GitHub security settings. |
 

@@ -45,6 +45,7 @@ The product should answer:
 - [x] Launch a native SwiftUI macOS app backed by the local parser API
 - [x] Select data sources, projects, date ranges, exports, and sessions from the native app
 - [x] Inspect session details from the native app
+- [x] Select a submitted user message and inspect the related Codex response, tool activity, context, token usage, and timing in organized native sections
 - [x] Search parsed messages across all projects with project and date filters
 
 ## Post-MVP Enhancements

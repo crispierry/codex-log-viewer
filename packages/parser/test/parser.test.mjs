@@ -8,6 +8,7 @@ const testDir = dirname(fileURLToPath(import.meta.url));
 const fixturePath = resolve(testDir, "../../../fixtures/codex/sample-session.jsonl");
 const eventShapesFixturePath = resolve(testDir, "../../../fixtures/codex/event-shapes.jsonl");
 const visualCommentWrapperFixturePath = resolve(testDir, "../../../fixtures/codex/visual-comment-wrapper.jsonl");
+const interactionDetailFixturePath = resolve(testDir, "../../../fixtures/codex/interaction-detail.jsonl");
 
 test("parseCodexLogFile normalizes known Codex rollout events and preserves warnings", async () => {
   const parsed = await parseCodexLogFile(fixturePath);
@@ -93,4 +94,25 @@ test("parseCodexLogFile extracts visual review comments instead of generated ima
   assert.equal(userMessage?.content, "Move the fixture button to the right side");
   assert.equal(userMessage?.content.includes("The next image shows"), false);
   assert.equal(parsed.messages.filter((message) => message.sourceEvent === "event_msg.user_message").length, 1);
+});
+
+test("parseCodexLogFile preserves line order for interaction reconstruction", async () => {
+  const parsed = await parseCodexLogFile(interactionDetailFixturePath);
+  const firstUserMessage = parsed.messages.find((message) => message.content.includes("cache behavior"));
+  const assistantMessage = parsed.messages.find((message) => message.role === "assistant" && message.content.includes("unchanged parsed sessions"));
+  const developerMessage = parsed.messages.find((message) => message.role === "developer");
+  const toolEvent = parsed.toolEvents.find((event) => event.eventType === "custom_tool_call");
+  const toolOutput = parsed.toolEvents.find((event) => event.eventType === "custom_tool_call_output");
+  const tokenUsage = parsed.tokenUsage[0];
+
+  assert.equal(firstUserMessage?.lineNumber, 4);
+  assert.equal(developerMessage?.lineNumber, 5);
+  assert.equal(toolEvent?.lineNumber, 6);
+  assert.equal(toolOutput?.lineNumber, 7);
+  assert.equal(toolOutput?.content, "cache status: warm");
+  assert.equal(assistantMessage?.lineNumber, 9);
+  assert.equal(tokenUsage?.lineNumber, 10);
+  assert.equal(firstUserMessage?.turnId, "interaction-turn-1");
+  assert.equal(assistantMessage?.turnId, "interaction-turn-1");
+  assert.equal(toolEvent?.turnId, "interaction-turn-1");
 });

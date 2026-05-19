@@ -38,6 +38,7 @@ export type MessageRole = "user" | "assistant" | "system" | "developer" | "autom
 export interface MessageRecord {
   filePath: string;
   sessionId: string;
+  lineNumber?: number;
   turnId?: string;
   timestamp?: string;
   role: MessageRole;
@@ -51,6 +52,7 @@ export interface MessageRecord {
 export interface TokenUsageRecord {
   filePath: string;
   sessionId: string;
+  lineNumber?: number;
   turnId?: string;
   timestamp?: string;
   usage: TokenUsage;
@@ -73,11 +75,13 @@ export interface TaskTimingRecord {
 export interface ToolEventRecord {
   filePath: string;
   sessionId: string;
+  lineNumber?: number;
   turnId?: string;
   timestamp?: string;
   eventType: string;
   name?: string;
   callId?: string;
+  content?: string;
   cwd?: string;
   exitCode?: number;
   durationMs?: number;

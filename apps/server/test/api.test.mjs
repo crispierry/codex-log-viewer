@@ -8,6 +8,7 @@ import { startServer } from "../dist/index.js";
 
 const testDir = dirname(fileURLToPath(import.meta.url));
 const fixturePath = resolve(testDir, "../../../fixtures/codex/sample-session.jsonl");
+const interactionDetailFixturePath = resolve(testDir, "../../../fixtures/codex/interaction-detail.jsonl");
 
 test("local API requires bearer token when auth is enabled", async () => {
   const server = await startServer({ port: 0, authToken: "test-token", paths: [fixturePath] });
@@ -142,6 +143,33 @@ test("message search can limit browse mode to submitted user messages through th
   } finally {
     await server.close();
     await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("session detail exposes ordered interaction records for native reconstruction", async () => {
+  const server = await startServer({ port: 0, authToken: "test-token", paths: [interactionDetailFixturePath] });
+  const headers = { authorization: "Bearer test-token" };
+
+  try {
+    const search = await fetch(`${server.url}/api/messages/search?role=user&submittedOnly=true`, { headers });
+    assert.equal(search.status, 200);
+    const searchBody = await search.json();
+    const firstPrompt = searchBody.search.results.find((result) => result.snippet.includes("cache behavior"));
+    assert.equal(firstPrompt?.lineNumber, 4);
+    assert.equal(firstPrompt?.turnId, "interaction-turn-1");
+
+    const detail = await fetch(`${server.url}/api/session?sessionId=interaction-detail-session`, { headers });
+    assert.equal(detail.status, 200);
+    const detailBody = await detail.json();
+    assert.equal(detailBody.messages.find((message) => message.content.includes("cache behavior"))?.lineNumber, 4);
+    assert.equal(detailBody.messages.find((message) => message.role === "developer")?.lineNumber, 5);
+    assert.equal(detailBody.toolEvents.find((event) => event.eventType === "custom_tool_call")?.lineNumber, 6);
+    assert.equal(detailBody.toolEvents.find((event) => event.eventType === "custom_tool_call_output")?.content, "cache status: warm");
+    assert.equal(detailBody.toolEvents.find((event) => event.eventType === "exec_command_end")?.exitCode, 0);
+    assert.equal(detailBody.tokenUsage[0]?.lineNumber, 10);
+    assert.equal(detailBody.tokenUsage[0]?.turnId, "interaction-turn-1");
+  } finally {
+    await server.close();
   }
 });
 

@@ -118,6 +118,7 @@ export interface MessageSearchResult {
   filePath: string;
   project: string;
   cwd?: string;
+  lineNumber?: number;
   turnId?: string;
   model?: string;
   timestamp?: string;

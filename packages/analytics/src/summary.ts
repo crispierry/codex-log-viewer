@@ -200,6 +200,7 @@ export function searchMessages(corpus: ParsedCodexCorpus, options: MessageSearch
       id: [
         message.filePath,
         message.sessionId,
+        message.lineNumber ?? "",
         message.turnId ?? "",
         message.timestamp ?? "",
         message.role,
@@ -210,6 +211,7 @@ export function searchMessages(corpus: ParsedCodexCorpus, options: MessageSearch
       filePath: message.filePath,
       project: context.project,
       cwd: context.cwd,
+      lineNumber: message.lineNumber,
       turnId: message.turnId,
       model,
       timestamp: message.timestamp,

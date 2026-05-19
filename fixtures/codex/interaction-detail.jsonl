@@ -1,0 +1,14 @@
+{"timestamp":"2026-04-29T12:00:00.000Z","type":"session_meta","payload":{"id":"interaction-detail-session","timestamp":"2026-04-29T12:00:00.000Z","cwd":"/Users/example/projects/interaction-app"}}
+{"timestamp":"2026-04-29T12:00:01.000Z","type":"turn_context","payload":{"turn_id":"interaction-turn-1","cwd":"/Users/example/projects/interaction-app","model":"gpt-5.5","effort":"medium"}}
+{"timestamp":"2026-04-29T12:00:02.000Z","type":"event_msg","payload":{"type":"task_started","turn_id":"interaction-turn-1","started_at":1777464002000}}
+{"timestamp":"2026-04-29T12:00:03.000Z","type":"event_msg","payload":{"type":"user_message","message":"Explain the cache behavior clearly.","images":[],"local_images":[]}}
+{"timestamp":"2026-04-29T12:00:04.000Z","type":"response_item","payload":{"type":"message","role":"developer","content":[{"type":"output_text","text":"Use concise release-facing language."}]}}
+{"timestamp":"2026-04-29T12:00:05.000Z","type":"response_item","payload":{"type":"custom_tool_call","name":"exec_command","call_id":"call-cache-1"}}
+{"timestamp":"2026-04-29T12:00:06.000Z","type":"response_item","payload":{"type":"custom_tool_call_output","call_id":"call-cache-1","output":"cache status: warm"}}
+{"timestamp":"2026-04-29T12:00:07.000Z","type":"event_msg","payload":{"type":"exec_command_end","cwd":"/Users/example/projects/interaction-app","exit_code":0,"duration":{"millis":85}}}
+{"timestamp":"2026-04-29T12:00:08.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"The app reuses unchanged parsed sessions and only reparses changed log files."}],"phase":"final_answer"}}
+{"timestamp":"2026-04-29T12:00:09.000Z","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":200,"cached_input_tokens":120,"output_tokens":40,"reasoning_output_tokens":8,"total_tokens":240},"total_token_usage":{"input_tokens":200,"cached_input_tokens":120,"output_tokens":40,"reasoning_output_tokens":8,"total_tokens":240},"model_context_window":400000}}}
+{"timestamp":"2026-04-29T12:00:10.000Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"interaction-turn-1","completed_at":1777464010000,"duration_ms":8000,"time_to_first_token_ms":900,"last_agent_message":"The app reuses unchanged parsed sessions and only reparses changed log files."}}
+{"timestamp":"2026-04-29T12:00:11.000Z","type":"turn_context","payload":{"turn_id":"interaction-turn-2","cwd":"/Users/example/projects/interaction-app","model":"gpt-5.5","effort":"medium"}}
+{"timestamp":"2026-04-29T12:00:12.000Z","type":"event_msg","payload":{"type":"user_message","message":"Second prompt should not be part of the first interaction.","images":[],"local_images":[]}}
+{"timestamp":"2026-04-29T12:00:13.000Z","type":"event_msg","payload":{"type":"agent_message","message":"Second response.","phase":"final_answer"}}

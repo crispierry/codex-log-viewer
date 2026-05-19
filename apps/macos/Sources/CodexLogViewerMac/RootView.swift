@@ -992,7 +992,8 @@ struct SearchResultInspector: View {
 
   private var matchingMessageIndex: Int? {
     detail?.messages.firstIndex { message in
-      message.timestamp == result.timestamp &&
+      (result.lineNumber == nil || message.lineNumber == result.lineNumber) &&
+        message.timestamp == result.timestamp &&
         message.role == result.role &&
         message.sourceEvent == result.sourceEvent &&
         (result.turnId == nil || message.turnId == result.turnId)
@@ -1067,8 +1068,7 @@ struct SessionUserMessagesInspector: View {
   }
 
   private var userMessages: [(offset: Int, element: MessageDetail)] {
-    Array(detail.messages.enumerated())
-      .filter { $0.element.sourceEvent == "event_msg.user_message" }
+    SessionInteractionBuilder.userMessageOffsets(in: detail)
   }
 
   private var automationMessages: [(offset: Int, element: MessageDetail)] {
@@ -1076,9 +1076,9 @@ struct SessionUserMessagesInspector: View {
       .filter { $0.element.sourceEvent == "event_msg.automation_message" }
   }
 
-  private var selectedResponseMessages: [MessageDetail] {
-    guard let selectedUserMessageIndex else { return [] }
-    return responseMessages(after: selectedUserMessageIndex)
+  private var selectedInteraction: SessionInteraction? {
+    guard let selectedUserMessageIndex else { return nil }
+    return SessionInteractionBuilder.interaction(in: detail, selectedUserMessageIndex: selectedUserMessageIndex)
   }
 
   var body: some View {
@@ -1127,20 +1127,9 @@ struct SessionUserMessagesInspector: View {
           }
         }
 
-        if selectedUserMessageIndex != nil {
+        if let selectedInteraction {
           Divider()
-          InspectorSectionTitle("Codex Response")
-
-          if selectedResponseMessages.isEmpty {
-            Text("No Codex response was found after this message.")
-              .foregroundStyle(.secondary)
-          } else {
-            VStack(alignment: .leading, spacing: 10) {
-              ForEach(Array(selectedResponseMessages.enumerated()), id: \.offset) { _, message in
-                responseCard(message)
-              }
-            }
-          }
+          CodexInteractionView(interaction: selectedInteraction)
         } else if !userMessages.isEmpty {
           Divider()
           Text("Select a user message to show the Codex response.")
@@ -1151,7 +1140,17 @@ struct SessionUserMessagesInspector: View {
       .frame(maxWidth: .infinity, alignment: .leading)
     }
     .onChange(of: sessionIdentity) { _, _ in
-      selectedUserMessageIndex = nil
+      selectedUserMessageIndex = highlightedMessageIndex
+    }
+    .onChange(of: highlightedMessageIndex) { _, newValue in
+      if let newValue {
+        selectedUserMessageIndex = newValue
+      }
+    }
+    .onAppear {
+      if let highlightedMessageIndex {
+        selectedUserMessageIndex = highlightedMessageIndex
+      }
     }
   }
 
@@ -1169,7 +1168,7 @@ struct SessionUserMessagesInspector: View {
       Text(formattedDate(message.timestamp))
         .font(.caption.monospacedDigit())
         .foregroundStyle(.secondary)
-      Text(displayText(message))
+      Text(messageDisplayText(message))
         .font(.body)
         .lineLimit(4)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1196,7 +1195,7 @@ struct SessionUserMessagesInspector: View {
       Text(formattedDate(message.timestamp))
         .font(.caption.monospacedDigit())
         .foregroundStyle(.secondary)
-      Text(displayText(message))
+      Text(messageDisplayText(message))
         .font(.body)
         .lineLimit(4)
         .textSelection(.enabled)
@@ -1207,50 +1206,257 @@ struct SessionUserMessagesInspector: View {
     .background(Color.green.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
   }
 
-  private func responseCard(_ message: MessageDetail) -> some View {
+  private func rowBackground(isSelected: Bool) -> Color {
+    isSelected ? Color.accentColor.opacity(0.16) : Color.primary.opacity(0.05)
+  }
+
+  private func messageIndex(_ message: MessageDetail) -> Int? {
+    detail.messages.firstIndex(of: message)
+  }
+}
+
+struct CodexInteractionView: View {
+  let interaction: SessionInteraction
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      Label("Codex Interaction", systemImage: "text.bubble")
+        .font(.title3)
+        .fontWeight(.semibold)
+
+      InteractionMessageCard(
+        title: "User Message",
+        subtitle: formattedDate(interaction.userMessage.timestamp),
+        text: messageDisplayText(interaction.userMessage),
+        tint: .accentColor
+      )
+
+      InspectorSectionTitle("Codex Response")
+      if interaction.assistantMessages.isEmpty {
+        Text("No Codex response was found for this message.")
+          .foregroundStyle(.secondary)
+      } else {
+        VStack(alignment: .leading, spacing: 10) {
+          ForEach(Array(interaction.assistantMessages.enumerated()), id: \.offset) { _, message in
+            InteractionMessageCard(
+              title: responseTitle(message),
+              subtitle: formattedDate(message.timestamp),
+              text: messageDisplayText(message),
+              tint: .blue
+            )
+          }
+        }
+      }
+
+      if !interaction.toolEvents.isEmpty {
+        DisclosureGroup("Tool Activity (\(interaction.toolEvents.count.formatted()))") {
+          VStack(alignment: .leading, spacing: 8) {
+            ForEach(Array(interaction.toolEvents.enumerated()), id: \.offset) { _, event in
+              ToolEventRow(event: event)
+            }
+          }
+          .padding(.top, 6)
+        }
+      }
+
+      if !interaction.contextMessages.isEmpty {
+        DisclosureGroup("System / Developer Context (\(interaction.contextMessages.count.formatted()))") {
+          VStack(alignment: .leading, spacing: 8) {
+            ForEach(Array(interaction.contextMessages.enumerated()), id: \.offset) { _, message in
+              InteractionMessageCard(
+                title: message.role.capitalized,
+                subtitle: formattedDate(message.timestamp),
+                text: messageDisplayText(message),
+                tint: .secondary,
+                monospaced: true
+              )
+            }
+          }
+          .padding(.top, 6)
+        }
+      }
+
+      if interaction.taskTiming != nil || !interaction.tokenUsage.isEmpty {
+        TokenTimingSummary(interaction: interaction)
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+  }
+
+  private func responseTitle(_ message: MessageDetail) -> String {
+    if let phase = message.phase, !phase.isEmpty {
+      return "Codex Response - \(phase.replacingOccurrences(of: "_", with: " ").capitalized)"
+    }
+    return "Codex Response"
+  }
+}
+
+struct InteractionMessageCard: View {
+  let title: String
+  let subtitle: String
+  let text: String
+  let tint: Color
+  var monospaced = false
+
+  private var bodyFont: Font {
+    monospaced ? .system(.body, design: .monospaced) : .body
+  }
+
+  var body: some View {
     VStack(alignment: .leading, spacing: 6) {
-      Text(formattedDate(message.timestamp))
-        .font(.caption.monospacedDigit())
-        .foregroundStyle(.secondary)
-      Text(displayText(message))
+      HStack(alignment: .firstTextBaseline) {
+        Text(title)
+          .font(.caption)
+          .fontWeight(.semibold)
+          .foregroundStyle(tint)
+        Spacer()
+        Text(subtitle)
+          .font(.caption.monospacedDigit())
+          .foregroundStyle(.secondary)
+      }
+      Text(text)
+        .font(bodyFont)
         .textSelection(.enabled)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
     .padding(10)
     .frame(maxWidth: .infinity, alignment: .leading)
-    .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 8))
-  }
-
-  private func rowBackground(isSelected: Bool) -> Color {
-    isSelected ? Color.accentColor.opacity(0.16) : Color.primary.opacity(0.05)
-  }
-
-  private func responseMessages(after messageIndex: Int) -> [MessageDetail] {
-    let followingMessages = detail.messages.dropFirst(messageIndex + 1)
-    let sameTurnMessages = followingMessages.prefix { message in
-      message.sourceEvent != "event_msg.user_message" && message.sourceEvent != "event_msg.automation_message"
+    .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
+    .overlay(alignment: .leading) {
+      Rectangle()
+        .fill(tint.opacity(0.65))
+        .frame(width: 3)
     }
-    return uniqueMessages(
-      sameTurnMessages.filter { message in
-        message.role == "assistant" && !displayText(message).isEmpty
+    .clipShape(RoundedRectangle(cornerRadius: 8))
+  }
+}
+
+struct ToolEventRow: View {
+  let event: ToolEventDetail
+
+  var body: some View {
+    HStack(alignment: .firstTextBaseline, spacing: 8) {
+      Image(systemName: iconName)
+        .foregroundStyle(.purple)
+        .frame(width: 18)
+      VStack(alignment: .leading, spacing: 3) {
+        Text(title)
+          .font(.caption)
+          .fontWeight(.semibold)
+        if !detailText.isEmpty {
+          Text(detailText)
+            .font(.caption.monospacedDigit())
+            .foregroundStyle(.secondary)
+            .lineLimit(2)
+        }
+        if let content = event.content?.trimmingCharacters(in: .whitespacesAndNewlines), !content.isEmpty {
+          Text(content)
+            .font(.system(.caption, design: .monospaced))
+            .foregroundStyle(.secondary)
+            .lineLimit(4)
+            .textSelection(.enabled)
+        }
       }
-    )
+      Spacer()
+    }
+    .padding(8)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(Color.purple.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
   }
 
-  private func uniqueMessages(_ messages: [MessageDetail]) -> [MessageDetail] {
-    var seen = Set<String>()
-    return messages.filter { message in
-      seen.insert(displayText(message)).inserted
+  private var title: String {
+    event.name ?? event.eventType.replacingOccurrences(of: "_", with: " ").capitalized
+  }
+
+  private var detailText: String {
+    [
+      formattedDate(event.timestamp),
+      event.exitCode.map { "exit \($0)" },
+      event.durationMs.map { "\(Int($0).formatted()) ms" },
+      event.cwd
+    ]
+    .compactMap { $0 }
+    .filter { !$0.isEmpty }
+    .joined(separator: " | ")
+  }
+
+  private var iconName: String {
+    switch event.eventType {
+    case "exec_command_end":
+      return "terminal"
+    case "patch_apply_end":
+      return "hammer"
+    case "custom_tool_call", "function_call":
+      return "wrench.and.screwdriver"
+    default:
+      return "gearshape"
+    }
+  }
+}
+
+struct TokenTimingSummary: View {
+  let interaction: SessionInteraction
+
+  private var usage: TokenUsage? {
+    interaction.tokenUsage.last?.usage
+  }
+
+  var body: some View {
+    GroupBox("Tokens And Timing") {
+      HStack(spacing: 12) {
+        if let usage {
+          CompactStat(label: "Input", value: usage.inputTokens)
+          CompactStat(label: "Output", value: usage.outputTokens)
+          CompactStat(label: "Reasoning", value: usage.reasoningOutputTokens)
+        }
+        if let timing = interaction.taskTiming {
+          CompactDurationStat(label: "Duration", milliseconds: timing.durationMs)
+          CompactDurationStat(label: "First Token", milliseconds: timing.timeToFirstTokenMs)
+        }
+        Spacer()
+      }
+      .padding(.vertical, 4)
+    }
+  }
+}
+
+struct CompactStat: View {
+  let label: String
+  let value: Int
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 2) {
+      Text(label)
+        .font(.caption)
+        .foregroundStyle(.secondary)
+      Text(value.formatted())
+        .font(.caption.monospacedDigit())
+        .fontWeight(.semibold)
+    }
+  }
+}
+
+struct CompactDurationStat: View {
+  let label: String
+  let milliseconds: Double?
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 2) {
+      Text(label)
+        .font(.caption)
+        .foregroundStyle(.secondary)
+      Text(durationText)
+        .font(.caption.monospacedDigit())
+        .fontWeight(.semibold)
     }
   }
 
-  private func displayText(_ message: MessageDetail) -> String {
-    let text = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
-    return text.isEmpty ? message.sourceEvent : text
-  }
-
-  private func messageIndex(_ message: MessageDetail) -> Int? {
-    detail.messages.firstIndex(of: message)
+  private var durationText: String {
+    guard let milliseconds else { return "unknown" }
+    if milliseconds >= 1000 {
+      return "\(String(format: "%.1f", milliseconds / 1000)) s"
+    }
+    return "\(Int(milliseconds).formatted()) ms"
   }
 }
 

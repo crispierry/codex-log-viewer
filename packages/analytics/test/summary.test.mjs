@@ -631,6 +631,7 @@ test("searchMessages can browse only submitted user messages", () => {
       {
         filePath: "fixture.jsonl",
         sessionId: "session-1",
+        lineNumber: 2,
         timestamp: "2026-01-01T00:00:00.000Z",
         role: "user",
         sourceEvent: "event_msg.user_message",
@@ -641,6 +642,7 @@ test("searchMessages can browse only submitted user messages", () => {
       {
         filePath: "fixture.jsonl",
         sessionId: "session-1",
+        lineNumber: 3,
         timestamp: "2026-01-01T00:00:01.000Z",
         role: "user",
         sourceEvent: "response_item.message",
@@ -651,6 +653,7 @@ test("searchMessages can browse only submitted user messages", () => {
       {
         filePath: "fixture.jsonl",
         sessionId: "session-1",
+        lineNumber: 4,
         timestamp: "2026-01-01T00:00:02.000Z",
         role: "automation",
         sourceEvent: "event_msg.automation_message",
@@ -676,6 +679,7 @@ test("searchMessages can browse only submitted user messages", () => {
   const submittedMessages = searchMessages(corpus, { query: "", role: "user", submittedOnly: true });
   assert.equal(submittedMessages.totalMatches, 1);
   assert.equal(submittedMessages.results[0]?.sourceEvent, "event_msg.user_message");
+  assert.equal(submittedMessages.results[0]?.lineNumber, 2);
   assert.equal(submittedMessages.results[0]?.snippet, "Typed prompt");
 });
 

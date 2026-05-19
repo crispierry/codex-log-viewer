@@ -54,6 +54,8 @@ Use the message search panel to search across parsed messages. Search respects t
 
 Click `Messages I Sent` to list prompts you typed and submitted for the selected project without typing a search phrase. Generated context wrappers, such as browser state, file attachments, review metadata, and goal-resume prompts, are excluded from that view.
 
+Selecting a sent message opens its session context in the inspector. Click the user message to see the related Codex interaction split into user message, Codex response, tool activity, system/developer context, and token/timing sections.
+
 Selecting a search result opens its session context in the inspector. The inspector includes copy actions for the result's session id, project, and a whitespace-normalized snippet with local home paths shortened.
 
 Keyboard shortcuts:

@@ -12,7 +12,7 @@ import type {
 } from "./types.js";
 
 const CACHE_SCHEMA_VERSION = 1;
-const PARSER_CACHE_VERSION = "parser-v2";
+const PARSER_CACHE_VERSION = "parser-v4";
 
 interface CacheManifest {
   schemaVersion: number;

@@ -58,6 +58,7 @@ The app is the primary product experience. From the desktop UI you can:
 - filter by date range
 - search messages across projects
 - list the prompts you typed and submitted for the selected project
+- select a sent prompt and inspect the related Codex response, tool activity, context, tokens, and timing in organized native sections
 - filter message search by role, model, session, project, source, and date range
 - review repeated prompts for the current filters
 - refresh the scan

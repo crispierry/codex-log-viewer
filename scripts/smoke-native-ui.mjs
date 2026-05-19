@@ -38,27 +38,37 @@ child.stderr.on("data", (chunk) => {
   stderr += chunk;
 });
 
+let windowTextError;
 try {
-  await waitForWindowText(["All Projects"]);
-} finally {
-  await waitForExit(child);
-  assertNoLeakedEngine();
+  await waitForWindowText(["All Projects"], child);
+} catch (error) {
+  windowTextError = error;
 }
 
+await waitForExit(child);
+assertNoLeakedEngine();
+
 if (child.exitCode !== 0 && child.exitCode !== null) {
-  throw new Error(`Native UI smoke app exited with ${child.exitCode}\n${stderr}${stdout}`);
+  throw new Error(`Native UI smoke app exited with ${child.exitCode}\n${windowTextError?.message ?? ""}\n${stderr}${stdout}`);
+}
+
+if (child.signalCode !== null) {
+  throw new Error(`Native UI smoke app ended with signal ${child.signalCode}\n${windowTextError?.message ?? ""}\n${stderr}${stdout}`);
 }
 
 if (!stdout.includes("Native UI workflow smoke passed.")) {
-  throw new Error(`Native UI workflow did not report success.\n${stderr}${stdout}`);
+  throw new Error(`Native UI workflow did not report success.\n${windowTextError?.message ?? ""}\n${stderr}${stdout}`);
 }
 
 console.log("Native macOS UI smoke test passed.");
 
-async function waitForWindowText(expectedText) {
+async function waitForWindowText(expectedText, process) {
   const deadline = Date.now() + 45_000;
   let lastText = "";
   while (Date.now() < deadline) {
+    if (process.exitCode !== null || process.signalCode !== null) {
+      throw new Error(`Native UI process exited before window text was observed.\n${lastText}`);
+    }
     lastText = readWindowText();
     if (expectedText.every((text) => lastText.includes(text))) {
       return lastText;

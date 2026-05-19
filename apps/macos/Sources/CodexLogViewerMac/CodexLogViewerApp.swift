@@ -123,12 +123,21 @@ enum AppSmokeRunner {
       guard let firstSession = summary.sessions.first else {
         throw AppSmokeError.unexpected("No sessions found in smoke fixture.")
       }
-      _ = try await api.sessionDetail(
+      let detail = try await api.sessionDetail(
         sessionID: firstSession.sessionId,
         filePath: firstSession.filePath,
         project: AppConstants.allProjectsName,
         filters: filters
       )
+      guard let firstUserMessage = SessionInteractionBuilder.userMessageOffsets(in: detail).first,
+        let interaction = SessionInteractionBuilder.interaction(
+          in: detail,
+          selectedUserMessageIndex: firstUserMessage.offset
+        ),
+        !interaction.assistantMessages.isEmpty
+      else {
+        throw AppSmokeError.unexpected("Packaged app smoke workflow could not reconstruct a Codex interaction.")
+      }
       let jsonExport = try await api.exportSummary(format: .json, project: AppConstants.allProjectsName, filters: filters)
       let csvExport = try await api.exportSummary(format: .csv, project: AppConstants.allProjectsName, filters: filters)
       if projects.isEmpty || search.totalMatches == 0 || sentMessagesSearch.totalMatches == 0 || jsonExport.isEmpty || csvExport.isEmpty {
