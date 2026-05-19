@@ -44,6 +44,7 @@ enum AppSection: String, CaseIterable, Identifiable {
   case browse
   case overview
   case search
+  case audit
 
   var id: String { rawValue }
 
@@ -55,6 +56,8 @@ enum AppSection: String, CaseIterable, Identifiable {
       return "Overview"
     case .search:
       return "Search"
+    case .audit:
+      return "Audit"
     }
   }
 }
@@ -206,6 +209,30 @@ struct MessageSearchResponse: Decodable {
       updatedAt: updatedAt
     )
   }
+}
+
+struct AuditPreviewResponse: Decodable {
+  let audit: AuditPreview
+}
+
+struct AuditWriteResponse: Decodable {
+  let audit: AuditWriteResult
+}
+
+struct AuditPreview: Decodable, Equatable {
+  let targetPath: String
+  let generatedMarkdown: String
+  let existingMarkdown: String?
+  let mergedMarkdown: String
+  let appendedSections: Int
+  let skippedSections: Int
+  let existingSections: Int
+  let generatedSections: Int
+}
+
+struct AuditWriteResult: Decodable, Equatable {
+  let targetPath: String
+  let bytesWritten: Int
 }
 
 struct CacheMetadata: Decodable, Equatable {

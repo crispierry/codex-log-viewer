@@ -61,6 +61,8 @@ struct ProjectWorkspaceView: View {
           OverviewSectionView()
         case .search:
           SearchSectionView()
+        case .audit:
+          AuditSectionView()
         }
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -104,7 +106,7 @@ struct WorkspaceHeaderView: View {
       }
       .labelsHidden()
       .pickerStyle(.segmented)
-      .frame(width: 300)
+      .frame(width: 380)
     }
   }
 }
@@ -669,6 +671,160 @@ struct SearchSectionView: View {
       }
       .padding(20)
     }
+  }
+}
+
+struct AuditSectionView: View {
+  @EnvironmentObject private var model: AppModel
+
+  var body: some View {
+    VStack(spacing: 0) {
+      if case .failed(let message) = model.status {
+        ErrorBanner(message: message) {
+          model.retryAfterFailure()
+        }
+        .padding([.horizontal, .top], 16)
+      }
+
+      AuditControlBar()
+        .padding(.horizontal, 18)
+        .padding(.vertical, 14)
+      Divider()
+
+      if model.isAuditLoading && model.auditReviewMarkdown.isEmpty {
+        ProgressView("Generating audit preview")
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+      } else if model.auditReviewMarkdown.isEmpty {
+        ContentUnavailableView(
+          "No Audit Preview",
+          systemImage: "doc.badge.gearshape",
+          description: Text("Choose a repository and generate a preview.")
+        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+      } else {
+        VStack(spacing: 0) {
+          AuditPreviewHeader()
+          Divider()
+          TextEditor(text: $model.auditReviewMarkdown)
+            .font(.system(.body, design: .monospaced))
+            .scrollContentBackground(.hidden)
+            .background(.background)
+            .accessibilityIdentifier("audit-markdown-editor")
+        }
+      }
+    }
+    .background(.background)
+  }
+}
+
+struct AuditControlBar: View {
+  @EnvironmentObject private var model: AppModel
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      HStack(spacing: 10) {
+        Image(systemName: "folder")
+          .foregroundStyle(.secondary)
+        TextField("Repository path", text: $model.auditRepoPathDraft)
+          .textFieldStyle(.roundedBorder)
+          .accessibilityIdentifier("audit-repo-path-field")
+          .onChange(of: model.auditRepoPathDraft) { _, _ in
+            model.auditRepoPathChanged()
+          }
+        Button {
+          model.chooseAuditRepoPath()
+        } label: {
+          Label("Choose Repository", systemImage: "folder.badge.gearshape")
+            .labelStyle(.iconOnly)
+        }
+        .help("Choose repository")
+        .accessibilityIdentifier("audit-choose-repo-button")
+      }
+
+      HStack(spacing: 12) {
+        Toggle(
+          "Responses",
+          isOn: Binding(
+            get: { model.auditIncludeResponses },
+            set: { model.setAuditIncludeResponses($0) }
+          )
+        )
+        .toggleStyle(.switch)
+        .accessibilityIdentifier("audit-include-responses-toggle")
+
+        Text(model.auditTargetPathText)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+          .lineLimit(1)
+          .truncationMode(.middle)
+
+        Spacer()
+
+        if let message = model.auditStatusMessage {
+          Text(message)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+        }
+
+        Button {
+          model.generateAuditPreview()
+        } label: {
+          Label("Generate", systemImage: "wand.and.stars")
+        }
+        .disabled(!model.canGenerateAudit)
+        .accessibilityIdentifier("audit-generate-button")
+
+        Button {
+          model.approveAuditMarkdown()
+        } label: {
+          Label("Approve", systemImage: "checkmark.seal")
+        }
+        .buttonStyle(.borderedProminent)
+        .disabled(!model.canApproveAudit)
+        .accessibilityIdentifier("audit-approve-button")
+      }
+    }
+  }
+}
+
+struct AuditPreviewHeader: View {
+  @EnvironmentObject private var model: AppModel
+
+  var body: some View {
+    HStack(spacing: 12) {
+      VStack(alignment: .leading, spacing: 4) {
+        Text("Merged Worklog Preview")
+          .font(.headline)
+        Text(model.auditMergeSummaryText)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
+
+      Spacer()
+
+      if let preview = model.auditPreview {
+        Label("\(preview.generatedSections.formatted()) generated", systemImage: "doc.text")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+        Label("\(preview.appendedSections.formatted()) new", systemImage: "plus.circle")
+          .font(.caption)
+          .foregroundStyle(preview.appendedSections > 0 ? .primary : .secondary)
+        Label("\(preview.skippedSections.formatted()) present", systemImage: "checkmark.circle")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
+
+      Button {
+        model.openAuditWorklog()
+      } label: {
+        Label("Open Worklog", systemImage: "arrow.up.forward.app")
+      }
+      .disabled(model.auditPreview == nil)
+      .accessibilityIdentifier("audit-open-worklog-button")
+    }
+    .padding(.horizontal, 18)
+    .padding(.vertical, 12)
   }
 }
 

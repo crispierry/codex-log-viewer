@@ -121,8 +121,49 @@ struct LogEngineAPI {
     return try await getData("api/export", query: queryItems)
   }
 
+  func auditPreview(
+    repoPath: String,
+    project: String,
+    filters: LogFilters,
+    includeResponses: Bool
+  ) async throws -> AuditPreview {
+    var queryItems = queryItems(project: project, filters: filters)
+    queryItems.append(URLQueryItem(name: "repoPath", value: repoPath))
+    queryItems.append(URLQueryItem(name: "includeResponses", value: includeResponses ? "true" : "false"))
+    let response: AuditPreviewResponse = try await get("api/audit", query: queryItems)
+    return response.audit
+  }
+
+  func writeAudit(targetPath: String, markdown: String) async throws -> AuditWriteResult {
+    let response: AuditWriteResponse = try await postJson(
+      "api/audit",
+      body: [
+        "targetPath": targetPath,
+        "markdown": markdown
+      ]
+    )
+    return response.audit
+  }
+
   private func get<T: Decodable>(_ path: String, query: [URLQueryItem] = []) async throws -> T {
     let data = try await getData(path, query: query)
+    return try JSONDecoder().decode(T.self, from: data)
+  }
+
+  private func postJson<T: Decodable>(_ path: String, body: [String: String]) async throws -> T {
+    var request = URLRequest(url: baseURL.appending(path: path))
+    request.httpMethod = "POST"
+    request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+    request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
+    request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+    let (data, response) = try await URLSession.shared.data(for: request)
+    let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+    guard 200..<300 ~= statusCode else {
+      let body = String(data: data, encoding: .utf8)?
+        .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+      throw LogEngineAPIError.badStatus(path: path, statusCode: statusCode, body: body)
+    }
     return try JSONDecoder().decode(T.self, from: data)
   }
 

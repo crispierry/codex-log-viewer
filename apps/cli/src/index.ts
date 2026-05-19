@@ -1,7 +1,10 @@
 #!/usr/bin/env node
-import { writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
 import {
+  generateAuditMarkdown,
   loadCorpus,
+  mergeAuditMarkdown,
   summaryToCsv,
   summaryToJson,
   summarizeParsedCorpus,
@@ -29,6 +32,9 @@ async function main(argv: string[]): Promise<void> {
       break;
     case "export":
       await exportCommand(parsed);
+      break;
+    case "audit":
+      await auditCommand(parsed);
       break;
     case "help":
     case "--help":
@@ -132,6 +138,44 @@ async function exportCommand(parsed: ParsedArgs): Promise<void> {
   }
 }
 
+async function auditCommand(parsed: ParsedArgs): Promise<void> {
+  const repoPath = stringOption(parsed.options.repo);
+  const summaryOptionsValue = {
+    ...summaryOptions(parsed),
+    project: stringOption(parsed.options.project)
+  };
+  const loaded = await loadCorpus(summaryOptionsValue);
+  const body = generateAuditMarkdown(loaded.corpus, {
+    ...summaryOptionsValue,
+    repoPath: repoPath ? resolve(repoPath) : undefined,
+    includeResponses: parsed.options["no-responses"] !== true,
+    privacy: parsed.options.raw === true ? "raw" : "public"
+  });
+  const output = stringOption(parsed.options.output);
+
+  if (output) {
+    const existing = await readOptionalFile(output);
+    const merge = mergeAuditMarkdown(existing, body);
+    await mkdir(dirname(output), { recursive: true });
+    await writeFile(output, merge.markdown, "utf8");
+    process.stdout.write(`Wrote ${output} (${merge.appendedSections} new, ${merge.skippedSections} already present)\n`);
+  } else {
+    process.stdout.write(body);
+  }
+}
+
+async function readOptionalFile(path: string): Promise<string | undefined> {
+  try {
+    return await readFile(path, "utf8");
+  } catch (error) {
+    const nodeError = error as NodeJS.ErrnoException;
+    if (nodeError.code === "ENOENT") {
+      return undefined;
+    }
+    throw error;
+  }
+}
+
 function summaryOptions(parsed: ParsedArgs): SummaryOptions {
   const paths = arrayOption(parsed.options.path);
   return {
@@ -201,6 +245,7 @@ Usage:
   codex-log-viewer sessions [--project <name>] [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--json]
   codex-log-viewer export [--format json|csv] [--output <file>] [summary options]
   codex-log-viewer export --format json --raw [summary options]
+  codex-log-viewer audit [--repo <path>] [--project <name>] [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--output <file>] [--raw] [--no-responses]
 
 Defaults scan ~/.codex/sessions and ~/.codex/archived_sessions.
 `);

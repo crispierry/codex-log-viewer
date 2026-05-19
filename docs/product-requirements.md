@@ -13,6 +13,7 @@ The product should answer:
 - How many tokens were used, and where did they go?
 - Which models and reasoning settings were used?
 - Which sessions or turns drove unusual usage?
+- What did I ask Codex to do, and what did Codex do in response?
 
 ## Primary Users
 
@@ -29,6 +30,7 @@ The product should answer:
 4. As a maintainer, I want sanitized fixtures so parser behavior can improve without leaking private logs.
 5. As a contributor, I want clear schema notes so I can add support for new Codex event shapes.
 6. As a developer, I want to search every message across all projects and filter results by project or date range.
+7. As a developer, I want to generate a reviewed audit worklog for each repository so user intent and Codex responses remain traceable.
 
 ## MVP Requirements
 
@@ -48,6 +50,7 @@ The product should answer:
 - [x] Inspect session details from the native app
 - [x] Select a submitted user message and inspect the related Codex response, tool activity, context, token usage, and timing in organized native sections
 - [x] Search parsed messages across all projects with project and date filters
+- [x] Generate sanitized Markdown audit worklogs from local logs for in-app review and approval
 
 ## Post-MVP Enhancements
 

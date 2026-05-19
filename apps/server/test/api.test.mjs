@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, unlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import test from "node:test";
@@ -465,6 +465,84 @@ test("server reports fixed-port conflicts and dynamic ports avoid them", async (
     }
   } finally {
     await first.close();
+  }
+});
+
+test("audit endpoints preview smart merges and write approved Markdown", async () => {
+  const tempDir = await mkdtemp(`${tmpdir()}/codex-log-viewer-audit-api-`);
+  const repoPath = resolve(tempDir, "sample-app");
+  const fixture = resolve(tempDir, "audit-session.jsonl");
+
+  await mkdir(repoPath, { recursive: true });
+  await writeFile(
+    fixture,
+    [
+      JSON.stringify({
+        timestamp: "2026-05-19T12:00:00.000Z",
+        type: "session_meta",
+        payload: {
+          id: "audit-api-session",
+          timestamp: "2026-05-19T12:00:00.000Z",
+          cwd: repoPath
+        }
+      }),
+      JSON.stringify({
+        timestamp: "2026-05-19T12:00:01.000Z",
+        type: "event_msg",
+        payload: {
+          type: "user_message",
+          message: "Generate the repo audit trail."
+        }
+      }),
+      JSON.stringify({
+        timestamp: "2026-05-19T12:00:02.000Z",
+        type: "response_item",
+        payload: {
+          type: "message",
+          role: "assistant",
+          content: [{ type: "output_text", text: "Prepared the audit preview." }]
+        }
+      })
+    ].join("\n") + "\n",
+    "utf8"
+  );
+
+  const server = await startServer({ port: 0, authToken: "test-token", paths: [fixture] });
+  const headers = { authorization: "Bearer test-token" };
+
+  try {
+    const preview = await fetch(`${server.url}/api/audit?repoPath=${encodeURIComponent(repoPath)}`, { headers });
+    assert.equal(preview.status, 200);
+    const previewBody = await preview.json();
+    assert.equal(previewBody.audit.appendedSections, 1);
+    assert.equal(previewBody.audit.targetPath, resolve(repoPath, "docs/ai-worklog.md"));
+    assert.match(previewBody.audit.mergedMarkdown, /Generate the repo audit trail/);
+    assert.match(previewBody.audit.mergedMarkdown, /Prepared the audit preview/);
+
+    const approvedMarkdown = `${previewBody.audit.mergedMarkdown}\nReviewed: yes\n`;
+    const write = await fetch(`${server.url}/api/audit`, {
+      method: "POST",
+      headers: {
+        ...headers,
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        targetPath: previewBody.audit.targetPath,
+        markdown: approvedMarkdown
+      })
+    });
+    assert.equal(write.status, 200);
+    assert.equal(await readFile(previewBody.audit.targetPath, "utf8"), approvedMarkdown);
+
+    const duplicatePreview = await fetch(`${server.url}/api/audit?repoPath=${encodeURIComponent(repoPath)}`, { headers });
+    assert.equal(duplicatePreview.status, 200);
+    const duplicateBody = await duplicatePreview.json();
+    assert.equal(duplicateBody.audit.appendedSections, 0);
+    assert.equal(duplicateBody.audit.skippedSections, 1);
+    assert.match(duplicateBody.audit.mergedMarkdown, /Reviewed: yes/);
+  } finally {
+    await server.close();
+    await rm(tempDir, { recursive: true, force: true });
   }
 });
 

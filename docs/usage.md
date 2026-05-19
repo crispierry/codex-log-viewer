@@ -24,6 +24,7 @@ From the app you can:
 - use Browse to move from project to session to sent message to Codex interaction
 - use Overview for metrics, charts, and repeated prompts for the selected project
 - use Search for cross-project or project-filtered message search
+- use Audit to generate, review, smart-merge, and approve `docs/ai-worklog.md`
 - filter by all time, day, week, month, year, or a custom date range from the workspace header
 - search messages across all selected projects
 - filter message search by role, model, and selected session
@@ -83,6 +84,28 @@ The CLI supports explicit raw JSON for private local use:
 npm run cli -- export --format json --raw --output private-usage.json
 ```
 
+## AI Audit Worklogs
+
+Use the Audit section in the macOS app to generate a smart-merged Markdown preview, edit the reviewed text, and approve the write to `docs/ai-worklog.md`.
+
+The CLI remains available for fixture tests and automation:
+
+```sh
+npm run cli -- audit --repo /path/to/repo --output /path/to/repo/docs/ai-worklog.md
+```
+
+The audit flow includes every submitted user message it finds for the repository and, by default, the captured Codex responses that followed those messages. Output uses public privacy mode unless `--raw` is passed in the CLI, redacting obvious local home paths, email addresses, and token-like strings while preserving user intent.
+
+Smart merge mode skips generated sections already present in the target worklog and appends only new generated session sections. Existing reviewed text is preserved.
+
+Use raw mode only for private local review:
+
+```sh
+npm run cli -- audit --repo /path/to/repo --raw --output .codex/audit/raw-ai-worklog.md
+```
+
+Use `--no-responses` when the audit should store only the user-intent trail.
+
 ## CLI Fallback
 
 The CLI remains available for automation:
@@ -91,6 +114,7 @@ The CLI remains available for automation:
 npm run cli -- projects
 npm run cli -- summary --project sample-app --since 2026-04-22 --until 2026-04-29
 npm run cli -- export --format json --output usage.json --project sample-app
+npm run cli -- audit --repo /path/to/repo --output /path/to/repo/docs/ai-worklog.md
 ```
 
 You can still pass `--path` for fixture testing:

@@ -21,6 +21,14 @@ Once tooling exists, parser changes should include:
 
 Documentation-only changes do not need app tests.
 
+## AI Worklog
+
+- After meaningful AI-assisted work, update `docs/ai-worklog.md` before finishing.
+- Include every work-directing user message from the task, verbatim when safe, so user intent remains auditable.
+- Summarize Codex's response, work performed, verification, and follow-ups.
+- Redact secrets, tokens, private customer data, unsanitized local paths, and raw session-log content before committing.
+- Keep raw or fuller transcripts in local-only ignored locations such as `.codex/audit/` when needed.
+
 ## Native App Review Loop
 
 - After any user-visible native macOS app change, rebuild the app and relaunch the current packaged app so the user can immediately review the change.

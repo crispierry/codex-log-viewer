@@ -1,10 +1,12 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { realpathSync } from "node:fs";
-import { writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  generateAuditMarkdown,
   loadCorpus,
+  mergeAuditMarkdown,
   searchMessages,
   summaryToCsv,
   summaryToJson,
@@ -183,6 +185,57 @@ async function handleRequest(
     return;
   }
 
+  if (url.pathname === "/api/audit" && request.method === "GET") {
+    const repoPath = url.searchParams.get("repoPath");
+    if (!repoPath) {
+      sendJson(response, 400, { error: "repoPath is required" });
+      return;
+    }
+    const loaded = await loadCachedCorpus(url, options, corpusCache);
+    const summaryOptions = summaryOptionsFromQuery(url, options.paths);
+    const targetPath = auditTargetPath(url, repoPath);
+    const generatedMarkdown = generateAuditMarkdown(loaded.corpus, {
+      ...summaryOptions,
+      repoPath: resolve(repoPath),
+      includeResponses: url.searchParams.get("includeResponses") !== "false",
+      privacy: url.searchParams.get("privacy") === "raw" ? "raw" : "public"
+    });
+    const existingMarkdown = await readOptionalTextFile(targetPath);
+    const merge = mergeAuditMarkdown(existingMarkdown, generatedMarkdown);
+    sendJson(response, 200, {
+      audit: {
+        targetPath,
+        generatedMarkdown,
+        existingMarkdown,
+        mergedMarkdown: merge.markdown,
+        appendedSections: merge.appendedSections,
+        skippedSections: merge.skippedSections,
+        existingSections: merge.existingSections,
+        generatedSections: merge.generatedSections
+      }
+    });
+    return;
+  }
+
+  if (url.pathname === "/api/audit" && request.method === "POST") {
+    const body = await readJsonBody(request);
+    const targetPath = typeof body.targetPath === "string" ? body.targetPath : undefined;
+    const markdown = typeof body.markdown === "string" ? body.markdown : undefined;
+    if (!targetPath || markdown === undefined) {
+      sendJson(response, 400, { error: "targetPath and markdown are required" });
+      return;
+    }
+    await mkdir(dirname(targetPath), { recursive: true });
+    await writeFile(targetPath, markdown, "utf8");
+    sendJson(response, 200, {
+      audit: {
+        targetPath,
+        bytesWritten: Buffer.byteLength(markdown, "utf8")
+      }
+    });
+    return;
+  }
+
   sendJson(response, 404, { error: "Not found" });
 }
 
@@ -245,6 +298,46 @@ function projectFromQuery(url: URL): string | undefined {
 function pathsFromQuery(url: URL, fallbackPaths?: string[]): string[] | undefined {
   const queryPaths = url.searchParams.getAll("path").filter(Boolean);
   return queryPaths.length > 0 ? queryPaths : fallbackPaths;
+}
+
+function auditTargetPath(url: URL, repoPath: string): string {
+  const targetPath = url.searchParams.get("targetPath")?.trim();
+  return targetPath ? resolve(targetPath) : join(resolve(repoPath), "docs", "ai-worklog.md");
+}
+
+async function readOptionalTextFile(path: string): Promise<string | undefined> {
+  try {
+    return await readFile(path, "utf8");
+  } catch (error) {
+    if (isNodeError(error) && error.code === "ENOENT") {
+      return undefined;
+    }
+    throw error;
+  }
+}
+
+async function readJsonBody(request: IncomingMessage): Promise<Record<string, unknown>> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of request) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  if (chunks.length === 0) {
+    return {};
+  }
+  const body = Buffer.concat(chunks).toString("utf8").trim();
+  if (!body) {
+    return {};
+  }
+  const parsed = JSON.parse(body);
+  return isObject(parsed) ? parsed : {};
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && "code" in error;
 }
 
 function roleFromQuery(value: string | null): "all" | "user" | "automation" | "assistant" | "system" | "developer" | "unknown" {

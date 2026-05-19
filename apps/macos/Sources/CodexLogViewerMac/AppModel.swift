@@ -54,6 +54,12 @@ final class AppModel: ObservableObject {
   @Published var projectSortOption: ProjectSortOption = .mostUserMessages
   @Published var messageSearchFocusRequest = 0
   @Published var cacheMetadata: CacheMetadata?
+  @Published var auditRepoPathDraft = ""
+  @Published var auditIncludeResponses = true
+  @Published var auditPreview: AuditPreview?
+  @Published var auditReviewMarkdown = ""
+  @Published var auditStatusMessage: String?
+  @Published var isAuditLoading = false
 
   private var api: LogEngineAPI?
   private var hasStarted = false
@@ -61,9 +67,11 @@ final class AppModel: ObservableObject {
   private var reloadTask: Task<Void, Never>?
   private var detailTask: Task<Void, Never>?
   private var searchTask: Task<Void, Never>?
+  private var auditTask: Task<Void, Never>?
   private var reloadRequestID = 0
   private var detailRequestID = 0
   private var searchRequestID = 0
+  private var auditRequestID = 0
   private var pendingSearchResultTarget: SearchResultSelectionTarget?
   private let isEphemeralSettingsRun = ProcessInfo.processInfo.environment["CODEX_LOG_VIEWER_EPHEMERAL_SETTINGS"] == "1" ||
     ProcessInfo.processInfo.environment["CODEX_LOG_VIEWER_UI_TEST"] == "1"
@@ -204,6 +212,28 @@ final class AppModel: ObservableObject {
     "Source: \(sourceSummaryText)"
   }
 
+  var auditTargetPathText: String {
+    auditPreview?.targetPath ?? targetWorklogPath(for: auditRepoPathDraft)
+  }
+
+  var auditMergeSummaryText: String {
+    guard let auditPreview else {
+      return "No audit preview generated."
+    }
+    let newText = "\(auditPreview.appendedSections.formatted()) new"
+    let skippedText = "\(auditPreview.skippedSections.formatted()) already present"
+    let generatedText = "\(auditPreview.generatedSections.formatted()) generated"
+    return "\(newText), \(skippedText), \(generatedText)"
+  }
+
+  var canGenerateAudit: Bool {
+    !auditRepoPathDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && api != nil && !isAuditLoading
+  }
+
+  var canApproveAudit: Bool {
+    auditPreview != nil && !auditReviewMarkdown.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isAuditLoading
+  }
+
   var dateRangeButtonTitle: String {
     switch dateRangeMode {
     case .all:
@@ -264,6 +294,7 @@ final class AppModel: ObservableObject {
         self.projects = projectsResult.projects
         self.summary = summaryResult.summary
         self.cacheMetadata = summaryResult.cache ?? projectsResult.cache
+        updateAuditRepoPathSuggestion(force: auditRepoPathDraft.isEmpty)
         let summary = summaryResult.summary
         if messageModelFilter != AppConstants.allModelsName,
           !summary.models.contains(where: { $0.model == messageModelFilter }) {
@@ -304,6 +335,8 @@ final class AppModel: ObservableObject {
 
   func selectProject(_ project: String) {
     selectedProject = project
+    updateAuditRepoPathSuggestion(force: true)
+    clearAuditPreview()
     clearSelectionState()
     refresh()
   }
@@ -343,6 +376,7 @@ final class AppModel: ObservableObject {
 
   func filtersChanged() {
     saveSettings()
+    clearAuditPreview()
     clearSelectionState()
     refresh()
   }
@@ -571,6 +605,153 @@ final class AppModel: ObservableObject {
         status = .failed(error.localizedDescription)
       }
     }
+  }
+
+  func chooseAuditRepoPath() {
+    let panel = NSOpenPanel()
+    panel.title = "Choose Repository"
+    panel.prompt = "Choose"
+    panel.canChooseFiles = false
+    panel.canChooseDirectories = true
+    panel.allowsMultipleSelection = false
+    panel.canCreateDirectories = false
+
+    guard panel.runModal() == .OK, let url = panel.url else { return }
+    auditRepoPathDraft = url.path
+    clearAuditPreview()
+  }
+
+  func auditRepoPathChanged() {
+    clearAuditPreview()
+  }
+
+  func generateAuditPreview() {
+    guard let api else { return }
+    let repoPath = auditRepoPathDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !repoPath.isEmpty else { return }
+
+    auditTask?.cancel()
+    auditRequestID += 1
+    let requestID = auditRequestID
+    let filters = currentFilters()
+    let includeResponses = auditIncludeResponses
+
+    auditTask = Task {
+      do {
+        isAuditLoading = true
+        auditStatusMessage = "Generating audit preview."
+        let preview = try await api.auditPreview(
+          repoPath: repoPath,
+          project: AppConstants.allProjectsName,
+          filters: filters,
+          includeResponses: includeResponses
+        )
+        guard !Task.isCancelled, requestID == auditRequestID else { return }
+        auditPreview = preview
+        auditReviewMarkdown = preview.mergedMarkdown
+        auditStatusMessage = auditStatusText(for: preview)
+        isAuditLoading = false
+      } catch is CancellationError {
+        return
+      } catch {
+        guard requestID == auditRequestID else { return }
+        isAuditLoading = false
+        status = .failed(error.localizedDescription)
+      }
+    }
+  }
+
+  func approveAuditMarkdown() {
+    guard let api,
+      let auditPreview,
+      confirmAuditWrite(targetPath: auditPreview.targetPath)
+    else {
+      return
+    }
+    let markdown = auditReviewMarkdown
+
+    auditTask?.cancel()
+    auditRequestID += 1
+    let requestID = auditRequestID
+    auditTask = Task {
+      do {
+        isAuditLoading = true
+        auditStatusMessage = "Saving audit worklog."
+        let result = try await api.writeAudit(targetPath: auditPreview.targetPath, markdown: markdown)
+        guard !Task.isCancelled, requestID == auditRequestID else { return }
+        auditStatusMessage = "Saved \(result.bytesWritten.formatted()) bytes to \(URL(fileURLWithPath: result.targetPath).lastPathComponent)."
+        isAuditLoading = false
+      } catch is CancellationError {
+        return
+      } catch {
+        guard requestID == auditRequestID else { return }
+        isAuditLoading = false
+        status = .failed(error.localizedDescription)
+      }
+    }
+  }
+
+  func openAuditWorklog() {
+    guard let auditPreview else { return }
+    NSWorkspace.shared.open(URL(fileURLWithPath: auditPreview.targetPath))
+  }
+
+  func setAuditIncludeResponses(_ includeResponses: Bool) {
+    guard auditIncludeResponses != includeResponses else { return }
+    auditIncludeResponses = includeResponses
+    clearAuditPreview()
+  }
+
+  private func clearAuditPreview() {
+    auditTask?.cancel()
+    auditRequestID += 1
+    auditPreview = nil
+    auditReviewMarkdown = ""
+    auditStatusMessage = nil
+    isAuditLoading = false
+  }
+
+  private func updateAuditRepoPathSuggestion(force: Bool) {
+    guard selectedProject != AppConstants.allProjectsName,
+      let project = projects.first(where: { $0.project == selectedProject }),
+      let suggestedPath = project.cwdSamples.first
+    else {
+      if force {
+        auditRepoPathDraft = ""
+      }
+      return
+    }
+
+    if force || auditRepoPathDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+      auditRepoPathDraft = suggestedPath
+    }
+  }
+
+  private func auditStatusText(for preview: AuditPreview) -> String {
+    if preview.appendedSections == 0 {
+      return "No new generated sections. Existing worklog is up to date for this selection."
+    }
+    let sectionText = preview.appendedSections == 1 ? "section" : "sections"
+    return "Ready to review \(preview.appendedSections.formatted()) new \(sectionText)."
+  }
+
+  private func targetWorklogPath(for repoPath: String) -> String {
+    let trimmed = repoPath.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return "docs/ai-worklog.md" }
+    return URL(fileURLWithPath: trimmed)
+      .appendingPathComponent("docs")
+      .appendingPathComponent("ai-worklog.md")
+      .path
+  }
+
+  private func confirmAuditWrite(targetPath: String) -> Bool {
+    let alert = NSAlert()
+    alert.messageText = "Save Audit Worklog?"
+    alert.informativeText = "This writes the reviewed Markdown to \(targetPath). Review the preview for private content before saving."
+    alert.alertStyle = .informational
+    alert.addButton(withTitle: "Save")
+    alert.addButton(withTitle: "Cancel")
+    return alert.runModal() == .alertFirstButtonReturn
   }
 
   private func clearSelectionState() {
