@@ -7,7 +7,7 @@ struct RootView: View {
   var body: some View {
     HSplitView {
       SidebarView()
-        .frame(minWidth: 260, idealWidth: 300, maxWidth: 360)
+        .frame(minWidth: 210, idealWidth: 230, maxWidth: 270)
       ProjectWorkspaceView()
         .frame(minWidth: 820)
     }
@@ -95,6 +95,8 @@ struct WorkspaceHeaderView: View {
 
       Spacer(minLength: 12)
 
+      DateRangeControlView()
+
       Picker("Section", selection: $model.selectedSection) {
         ForEach(AppSection.allCases) { section in
           Text(section.label).tag(section)
@@ -107,99 +109,111 @@ struct WorkspaceHeaderView: View {
   }
 }
 
+struct DateRangeControlView: View {
+  @EnvironmentObject private var model: AppModel
+  @State private var isShowingPopover = false
+
+  var body: some View {
+    Button {
+      isShowingPopover.toggle()
+    } label: {
+      Label(model.dateRangeButtonTitle, systemImage: "calendar")
+        .lineLimit(1)
+    }
+    .buttonStyle(.bordered)
+    .help("Filter activity by day, week, month, year, or custom range")
+    .accessibilityIdentifier("date-range-button")
+    .popover(isPresented: $isShowingPopover, arrowEdge: .bottom) {
+      DateRangePopoverView()
+        .environmentObject(model)
+    }
+  }
+}
+
+struct DateRangePopoverView: View {
+  @EnvironmentObject private var model: AppModel
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 14) {
+      Text("Activity Range")
+        .font(.headline)
+
+      Picker(
+        "Range",
+        selection: Binding(
+          get: { model.dateRangeMode },
+          set: { model.setDateRangeMode($0) }
+        )
+      ) {
+        ForEach(DateRangeMode.allCases) { mode in
+          Text(mode.label).tag(mode)
+        }
+      }
+      .pickerStyle(.segmented)
+      .accessibilityIdentifier("date-range-mode-picker")
+
+      switch model.dateRangeMode {
+      case .all:
+        Text("All local Codex activity is included.")
+          .font(.callout)
+          .foregroundStyle(.secondary)
+      case .custom:
+        VStack(alignment: .leading, spacing: 10) {
+          DatePicker(
+            "Start",
+            selection: Binding(
+              get: { model.sinceDate },
+              set: { model.setCustomSinceDate($0) }
+            ),
+            displayedComponents: .date
+          )
+          .accessibilityIdentifier("date-range-start-picker")
+
+          DatePicker(
+            "End",
+            selection: Binding(
+              get: { model.untilDate },
+              set: { model.setCustomUntilDate($0) }
+            ),
+            displayedComponents: .date
+          )
+          .accessibilityIdentifier("date-range-end-picker")
+        }
+      default:
+        DatePicker(
+          model.dateRangeMode.anchorLabel,
+          selection: Binding(
+            get: { model.dateAnchorDate },
+            set: { model.setDateAnchorDate($0) }
+          ),
+          displayedComponents: .date
+        )
+        .accessibilityIdentifier("date-anchor-picker")
+      }
+
+      Text(model.dateRangeDetailText)
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .accessibilityIdentifier("date-range-summary-label")
+
+      HStack {
+        Spacer()
+        Button("Clear") {
+          model.clearDateRange()
+        }
+        .accessibilityIdentifier("date-range-clear-button")
+      }
+    }
+    .padding(16)
+    .frame(width: 430)
+  }
+}
+
 struct SidebarView: View {
   @EnvironmentObject private var model: AppModel
 
   var body: some View {
     List(selection: $model.selectedProject) {
-      Section("Source") {
-        VStack(alignment: .leading, spacing: 8) {
-          TextEditor(text: $model.pathDraft)
-            .font(.system(.caption, design: .monospaced))
-            .frame(minHeight: 82)
-            .accessibilityIdentifier("source-paths-editor")
-            .overlay {
-              if model.pathDraft.isEmpty {
-                Text("Default Codex log locations")
-                  .font(.caption)
-                  .foregroundStyle(.tertiary)
-                  .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                  .padding(5)
-                  .allowsHitTesting(false)
-              }
-            }
-          HStack {
-            Button {
-              model.chooseSourcePaths()
-            } label: {
-              Label("Choose", systemImage: "folder.badge.plus")
-            }
-            .accessibilityIdentifier("source-picker-button")
-
-            Button("Apply") {
-              model.applySourcePaths()
-            }
-            .accessibilityIdentifier("source-apply-button")
-
-            Button("Default") {
-              model.resetSourcePaths()
-            }
-            .accessibilityIdentifier("source-default-button")
-
-            if !model.recentSourcePaths.isEmpty {
-              Menu("Recent") {
-                ForEach(model.recentSourcePaths, id: \.self) { path in
-                  Button(path) {
-                    model.useRecentSourcePath(path)
-                  }
-                }
-              }
-              .accessibilityIdentifier("recent-sources-menu")
-            }
-          }
-
-          if !model.sourcePaths.isEmpty {
-            VStack(alignment: .leading, spacing: 6) {
-              ForEach(model.sourcePaths, id: \.self) { path in
-                HStack(spacing: 6) {
-                  Text(path)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                  Spacer()
-                  Button {
-                    model.removeSourcePath(path)
-                  } label: {
-                    Image(systemName: "xmark.circle")
-                  }
-                  .buttonStyle(.borderless)
-                  .accessibilityLabel("Remove source")
-                  .help("Remove source")
-                }
-              }
-            }
-          }
-        }
-        .padding(.vertical, 4)
-      }
-
-      Section("Filters") {
-        Toggle("Since", isOn: $model.hasSinceFilter)
-          .accessibilityIdentifier("since-toggle")
-        DatePicker("Since Date", selection: $model.sinceDate, displayedComponents: .date)
-          .labelsHidden()
-          .disabled(!model.hasSinceFilter)
-          .accessibilityIdentifier("since-date-picker")
-
-        Toggle("Until", isOn: $model.hasUntilFilter)
-          .accessibilityIdentifier("until-toggle")
-        DatePicker("Until Date", selection: $model.untilDate, displayedComponents: .date)
-          .labelsHidden()
-          .disabled(!model.hasUntilFilter)
-          .accessibilityIdentifier("until-date-picker")
-      }
-
       Section("Library") {
         ProjectListRow(
           title: AppConstants.allProjectsName,
@@ -230,18 +244,6 @@ struct SidebarView: View {
     .accessibilityIdentifier("project-sidebar")
     .onChange(of: model.selectedProject) { _, newValue in
       model.selectProject(newValue)
-    }
-    .onChange(of: model.hasSinceFilter) { _, _ in
-      model.filtersChanged()
-    }
-    .onChange(of: model.hasUntilFilter) { _, _ in
-      model.filtersChanged()
-    }
-    .onChange(of: model.sinceDate) { _, _ in
-      if model.hasSinceFilter { model.filtersChanged() }
-    }
-    .onChange(of: model.untilDate) { _, _ in
-      if model.hasUntilFilter { model.filtersChanged() }
     }
   }
 

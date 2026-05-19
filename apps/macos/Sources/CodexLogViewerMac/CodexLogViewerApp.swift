@@ -21,6 +21,13 @@ struct CodexLogViewerApp: App {
       }
     }
     .commands {
+      CommandGroup(replacing: .appInfo) {
+        Button("About Codex Log Viewer") {
+          model.showAboutBox()
+        }
+        .accessibilityIdentifier("about-menu-item")
+      }
+
       CommandGroup(replacing: .newItem) {}
       CommandMenu("Logs") {
         Button("Refresh") {
@@ -49,10 +56,33 @@ struct CodexLogViewerApp: App {
 
         Divider()
 
-        Button("Choose Sources...") {
+        Button(model.sourceMenuLabel) {}
+          .disabled(true)
+
+        Button("Choose Codex Log Location...") {
           model.chooseSourcePaths()
         }
         .keyboardShortcut("o", modifiers: .command)
+        .accessibilityIdentifier("source-picker-menu-item")
+
+        Button("Use Default Codex Log Locations") {
+          model.resetSourcePaths()
+        }
+        .accessibilityIdentifier("source-default-menu-item")
+
+        Menu("Recent Log Locations") {
+          if model.recentSourcePaths.isEmpty {
+            Button("No Recent Locations") {}
+              .disabled(true)
+          } else {
+            ForEach(model.recentSourcePaths, id: \.self) { path in
+              Button(path) {
+                model.useRecentSourcePath(path)
+              }
+            }
+          }
+        }
+        .accessibilityIdentifier("recent-sources-menu")
 
         Divider()
 

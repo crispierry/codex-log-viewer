@@ -19,12 +19,12 @@ npm run app:mac
 From the app you can:
 
 - use the default Codex log locations
-- add custom files or directories with the native source picker or source panel
+- add custom files or directories from the native `Logs` menu
 - select a project from the sidebar
 - use Browse to move from project to session to sent message to Codex interaction
 - use Overview for metrics, charts, and repeated prompts for the selected project
 - use Search for cross-project or project-filtered message search
-- filter by date range
+- filter by all time, day, week, month, year, or a custom date range from the workspace header
 - search messages across all selected projects
 - filter message search by role, model, and selected session
 - review repeated user prompts for the current filters
@@ -41,15 +41,9 @@ open "dist/macos/Codex Log Viewer.app"
 
 ## Custom Sources
 
-In the app source panel, use `Choose` to pick files or directories. You can also paste one path per line:
+Use `Logs > Choose Codex Log Location...` to pick custom Codex log files or folders. Use `Logs > Use Default Codex Log Locations` to return to `~/.codex/sessions` and `~/.codex/archived_sessions`. Recent custom sources and date filter choices are stored in local app settings.
 
-```sh
-/Users/example/.codex/sessions
-/Users/example/.codex/archived_sessions
-/Users/example/Downloads/sample-session.jsonl
-```
-
-Click `Apply` to rescan typed paths. Click `Default` to return to `~/.codex/sessions` and `~/.codex/archived_sessions`. Recent custom sources and date filter choices are stored in local app settings.
+The date filter lives in the workspace header. Use the calendar control to switch between all time, a specific day, week, month, year, or a custom start/end range.
 
 ## Message Search
 

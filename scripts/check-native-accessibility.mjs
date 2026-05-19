@@ -1,25 +1,30 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const rootViewPath = resolve("apps/macos/Sources/CodexLogViewerMac/RootView.swift");
-const rootView = readFileSync(rootViewPath, "utf8");
+const nativeSourcePaths = [
+  resolve("apps/macos/Sources/CodexLogViewerMac/RootView.swift"),
+  resolve("apps/macos/Sources/CodexLogViewerMac/CodexLogViewerApp.swift")
+];
+const nativeSource = nativeSourcePaths.map((path) => readFileSync(path, "utf8")).join("\n");
 
 const requiredIdentifiers = [
   "refresh-button",
   "export-json-button",
   "export-csv-button",
   "status-pill",
+  "about-menu-item",
   "activity-range-label",
   "cache-status-label",
-  "source-paths-editor",
-  "source-picker-button",
-  "source-apply-button",
-  "source-default-button",
+  "source-picker-menu-item",
+  "source-default-menu-item",
+  "recent-sources-menu",
   "project-sidebar",
-  "since-toggle",
-  "since-date-picker",
-  "until-toggle",
-  "until-date-picker",
+  "date-range-button",
+  "date-range-mode-picker",
+  "date-anchor-picker",
+  "date-range-start-picker",
+  "date-range-end-picker",
+  "date-range-clear-button",
   "message-search-field",
   "message-search-button",
   "show-sent-messages-button",
@@ -35,7 +40,7 @@ const requiredIdentifiers = [
 ];
 
 const missing = requiredIdentifiers.filter(
-  (identifier) => !rootView.includes(`.accessibilityIdentifier("${identifier}")`)
+  (identifier) => !nativeSource.includes(`.accessibilityIdentifier("${identifier}")`)
 );
 
 if (missing.length > 0) {

@@ -50,6 +50,8 @@ final class AppModel: ObservableObject {
   @Published var hasUntilFilter = false
   @Published var sinceDate = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
   @Published var untilDate = Date()
+  @Published var dateRangeMode: DateRangeMode = .all
+  @Published var dateAnchorDate = Date()
   @Published var messageSearchFocusRequest = 0
   @Published var cacheMetadata: CacheMetadata?
 
@@ -151,6 +153,46 @@ final class AppModel: ObservableObject {
       return "Last session \(last)"
     case (.none, .none):
       return nil
+    }
+  }
+
+  var sourceSummaryText: String {
+    guard !sourcePaths.isEmpty else {
+      return "Default Codex log locations"
+    }
+    if sourcePaths.count == 1, let path = sourcePaths.first {
+      return URL(fileURLWithPath: path).lastPathComponent.isEmpty ? path : URL(fileURLWithPath: path).lastPathComponent
+    }
+    return "\(sourcePaths.count.formatted()) custom locations"
+  }
+
+  var sourceMenuLabel: String {
+    "Source: \(sourceSummaryText)"
+  }
+
+  var dateRangeButtonTitle: String {
+    switch dateRangeMode {
+    case .all:
+      return "All Time"
+    case .day:
+      return Self.displayDateOnly(sinceDate)
+    case .week:
+      return "Week of \(Self.displayDateOnly(sinceDate))"
+    case .month:
+      return Self.displayMonth(dateAnchorDate)
+    case .year:
+      return Self.displayYear(dateAnchorDate)
+    case .custom:
+      return "\(Self.displayDateOnly(sinceDate)) - \(Self.displayDateOnly(untilDate))"
+    }
+  }
+
+  var dateRangeDetailText: String {
+    switch dateRangeMode {
+    case .all:
+      return "Showing all local Codex activity."
+    default:
+      return "Showing \(Self.displayDateOnly(sinceDate)) through \(Self.displayDateOnly(untilDate))."
     }
   }
 
@@ -267,6 +309,45 @@ final class AppModel: ObservableObject {
     saveSettings()
     clearSelectionState()
     refresh()
+  }
+
+  func setDateRangeMode(_ mode: DateRangeMode) {
+    guard dateRangeMode != mode else { return }
+    dateRangeMode = mode
+    applyDateRangeMode()
+  }
+
+  func setDateAnchorDate(_ date: Date) {
+    dateAnchorDate = Calendar.current.startOfDay(for: date)
+    guard dateRangeMode != .all, dateRangeMode != .custom else {
+      saveSettings()
+      return
+    }
+    applyDateRangeMode()
+  }
+
+  func setCustomSinceDate(_ date: Date) {
+    dateRangeMode = .custom
+    sinceDate = Calendar.current.startOfDay(for: date)
+    if untilDate < sinceDate {
+      untilDate = sinceDate
+    }
+    applyDateRangeMode()
+  }
+
+  func setCustomUntilDate(_ date: Date) {
+    dateRangeMode = .custom
+    untilDate = Calendar.current.startOfDay(for: date)
+    if sinceDate > untilDate {
+      sinceDate = untilDate
+    }
+    applyDateRangeMode()
+  }
+
+  func clearDateRange() {
+    guard dateRangeMode != .all || hasSinceFilter || hasUntilFilter else { return }
+    dateRangeMode = .all
+    applyDateRangeMode()
   }
 
   func selectSession(_ sessionID: SessionSummary.ID?) {
@@ -589,6 +670,19 @@ final class AppModel: ObservableObject {
     if let savedUntilDate = Self.date(forKey: DefaultsKeys.untilDate) {
       untilDate = savedUntilDate
     }
+    if let savedAnchorDate = Self.date(forKey: DefaultsKeys.dateAnchorDate) {
+      dateAnchorDate = savedAnchorDate
+    } else {
+      dateAnchorDate = untilDate
+    }
+    if let savedMode = UserDefaults.standard.string(forKey: DefaultsKeys.dateRangeMode),
+      let mode = DateRangeMode(rawValue: savedMode) {
+      dateRangeMode = mode
+      applyDateRangeMode(save: false, reload: false)
+    } else if hasSinceFilter || hasUntilFilter {
+      dateRangeMode = .custom
+      applyDateRangeMode(save: false, reload: false)
+    }
   }
 
   private func saveSettings() {
@@ -601,6 +695,56 @@ final class AppModel: ObservableObject {
     UserDefaults.standard.set(hasUntilFilter, forKey: DefaultsKeys.hasUntilFilter)
     UserDefaults.standard.set(Self.dateFormatter.string(from: sinceDate), forKey: DefaultsKeys.sinceDate)
     UserDefaults.standard.set(Self.dateFormatter.string(from: untilDate), forKey: DefaultsKeys.untilDate)
+    UserDefaults.standard.set(dateRangeMode.rawValue, forKey: DefaultsKeys.dateRangeMode)
+    UserDefaults.standard.set(Self.dateFormatter.string(from: dateAnchorDate), forKey: DefaultsKeys.dateAnchorDate)
+  }
+
+  private func applyDateRangeMode(save: Bool = true, reload: Bool = true) {
+    let calendar = Calendar.current
+    dateAnchorDate = calendar.startOfDay(for: dateAnchorDate)
+
+    switch dateRangeMode {
+    case .all:
+      hasSinceFilter = false
+      hasUntilFilter = false
+    case .day:
+      hasSinceFilter = true
+      hasUntilFilter = true
+      sinceDate = dateAnchorDate
+      untilDate = dateAnchorDate
+    case .week:
+      applyInterval(calendar.dateInterval(of: .weekOfYear, for: dateAnchorDate))
+    case .month:
+      applyInterval(calendar.dateInterval(of: .month, for: dateAnchorDate))
+    case .year:
+      applyInterval(calendar.dateInterval(of: .year, for: dateAnchorDate))
+    case .custom:
+      hasSinceFilter = true
+      hasUntilFilter = true
+      sinceDate = calendar.startOfDay(for: sinceDate)
+      untilDate = calendar.startOfDay(for: untilDate)
+      if sinceDate > untilDate {
+        untilDate = sinceDate
+      }
+      dateAnchorDate = untilDate
+    }
+
+    if save {
+      saveSettings()
+    }
+    if reload {
+      clearSelectionState()
+      refresh()
+    }
+  }
+
+  private func applyInterval(_ interval: DateInterval?) {
+    let calendar = Calendar.current
+    let interval = interval ?? DateInterval(start: dateAnchorDate, duration: 86_400)
+    hasSinceFilter = true
+    hasUntilFilter = true
+    sinceDate = calendar.startOfDay(for: interval.start)
+    untilDate = calendar.date(byAdding: .day, value: -1, to: interval.end) ?? sinceDate
   }
 
   private func scheduleUITestWorkflowIfNeeded(api: LogEngineAPI, filters: LogFilters) {
@@ -649,6 +793,8 @@ final class AppModel: ObservableObject {
     hasUntilFilter = true
     sinceDate = date
     untilDate = date
+    dateRangeMode = .day
+    dateAnchorDate = date
 
     let dateFilters = LogFilters(
       paths: filters.paths,
@@ -823,6 +969,37 @@ final class AppModel: ObservableObject {
     return formatter
   }()
 
+  private static let displayDateFormatter: DateFormatter = {
+    let formatter = DateFormatter()
+    formatter.dateStyle = .medium
+    formatter.timeStyle = .none
+    return formatter
+  }()
+
+  private static let displayMonthFormatter: DateFormatter = {
+    let formatter = DateFormatter()
+    formatter.dateFormat = "LLLL yyyy"
+    return formatter
+  }()
+
+  private static let displayYearFormatter: DateFormatter = {
+    let formatter = DateFormatter()
+    formatter.dateFormat = "yyyy"
+    return formatter
+  }()
+
+  private static func displayDateOnly(_ date: Date) -> String {
+    displayDateFormatter.string(from: date)
+  }
+
+  private static func displayMonth(_ date: Date) -> String {
+    displayMonthFormatter.string(from: date)
+  }
+
+  private static func displayYear(_ date: Date) -> String {
+    displayYearFormatter.string(from: date)
+  }
+
   private static func displayDateTime(_ value: String?) -> String? {
     guard let value,
       let date = Self.isoDateFormatter.date(from: value) ?? Self.isoDateFormatterWithoutFractionalSeconds.date(from: value)
@@ -880,6 +1057,24 @@ final class AppModel: ObservableObject {
   private static func writeStderr(_ message: String) {
     FileHandle.standardError.write(Data(message.utf8))
   }
+
+  func showAboutBox() {
+    let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.0"
+    let credits = NSAttributedString(
+      string: "A local-first native macOS viewer for Codex session logs.\n\nCodex logs stay on this Mac unless you explicitly export data.",
+      attributes: [
+        .font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize),
+        .foregroundColor: NSColor.secondaryLabelColor
+      ]
+    )
+    NSApp.orderFrontStandardAboutPanel(options: [
+      .applicationName: "Codex Log Viewer",
+      .applicationVersion: version,
+      .version: version,
+      .credits: credits
+    ])
+    NSApp.activate(ignoringOtherApps: true)
+  }
 }
 
 private enum DefaultsKeys {
@@ -889,4 +1084,6 @@ private enum DefaultsKeys {
   static let hasUntilFilter = "hasUntilFilter"
   static let sinceDate = "sinceDate"
   static let untilDate = "untilDate"
+  static let dateRangeMode = "dateRangeMode"
+  static let dateAnchorDate = "dateAnchorDate"
 }

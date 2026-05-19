@@ -78,7 +78,7 @@ npm run smoke:mac-ui
 
 Covers packaged native window launch through macOS accessibility automation using sanitized fixture paths and ephemeral settings. This is a smoke check, not a full replacement for deeper XCUITest coverage.
 
-`npm run check:mac-accessibility` verifies that release-critical native controls expose stable accessibility identifiers for source selection, message search, session search, exports, retry, and search-result copy actions.
+`npm run check:mac-accessibility` verifies that release-critical native controls expose stable accessibility identifiers for menu-based source selection, header date filtering, message search, session search, exports, retry, and search-result copy actions.
 
 The smoke workflow also drives the native app model through the release-critical path:
 
@@ -105,7 +105,7 @@ Check:
 
 - App window opens and becomes active
 - Project list appears
-- Source paths can be applied and reset to defaults
+- Source paths can be selected from the Logs menu and reset to defaults
 - Date filters reload metrics
 - Selecting a project changes metric cards and session list
 - Selecting `All Projects` restores all-project totals

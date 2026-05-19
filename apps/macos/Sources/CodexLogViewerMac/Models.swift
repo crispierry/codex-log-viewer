@@ -59,6 +59,49 @@ enum AppSection: String, CaseIterable, Identifiable {
   }
 }
 
+enum DateRangeMode: String, CaseIterable, Identifiable {
+  case all
+  case day
+  case week
+  case month
+  case year
+  case custom
+
+  var id: String { rawValue }
+
+  var label: String {
+    switch self {
+    case .all:
+      return "All Time"
+    case .day:
+      return "Day"
+    case .week:
+      return "Week"
+    case .month:
+      return "Month"
+    case .year:
+      return "Year"
+    case .custom:
+      return "Custom"
+    }
+  }
+
+  var anchorLabel: String {
+    switch self {
+    case .day:
+      return "Day"
+    case .week:
+      return "Week Of"
+    case .month:
+      return "Month"
+    case .year:
+      return "Year"
+    case .all, .custom:
+      return "Date"
+    }
+  }
+}
+
 struct LogFilters: Equatable {
   var paths: [String] = []
   var since: String?

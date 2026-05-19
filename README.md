@@ -53,11 +53,11 @@ open "dist/macos/Codex Log Viewer.app"
 The app is the primary product experience. From the desktop UI you can:
 
 - scan default Codex logs
-- add custom files or directories
+- add custom files or directories from the native `Logs` menu
 - select projects or all projects
 - browse projects, sessions, sent messages, and Codex interactions in a four-column native layout
 - switch between Browse, Overview, and Search sections for the selected project
-- filter by date range
+- filter by all time, day, week, month, year, or custom date range from the workspace header
 - search messages across projects
 - list the prompts you typed and submitted for the selected project
 - select a sent prompt and inspect the related Codex response, tool activity, context, tokens, and timing in organized native sections
