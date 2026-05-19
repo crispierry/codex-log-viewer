@@ -143,7 +143,10 @@ struct SidebarView: View {
       Section("Library") {
         ProjectListRow(
           title: AppConstants.allProjectsName,
-          subtitle: "\(model.projects.reduce(0) { $0 + $1.sessions }) sessions",
+          subtitle: projectSubtitle(
+            sessions: model.projects.reduce(0) { $0 + $1.sessions },
+            userMessages: model.projects.reduce(0) { $0 + $1.messages }
+          ),
           tokenCount: model.projects.reduce(0) { $0 + $1.totalTokens },
           systemImage: "square.grid.2x2"
         )
@@ -154,7 +157,7 @@ struct SidebarView: View {
         ForEach(model.projects) { project in
           ProjectListRow(
             title: project.project,
-            subtitle: "\(project.sessions) sessions",
+            subtitle: projectSubtitle(sessions: project.sessions, userMessages: project.messages),
             tokenCount: project.totalTokens,
             systemImage: "folder"
           )
@@ -180,6 +183,14 @@ struct SidebarView: View {
     .onChange(of: model.untilDate) { _, _ in
       if model.hasUntilFilter { model.filtersChanged() }
     }
+  }
+
+  private func projectSubtitle(sessions: Int, userMessages: Int) -> String {
+    "\(countLabel(sessions, singular: "session", plural: "sessions")) - \(countLabel(userMessages, singular: "user message", plural: "user messages"))"
+  }
+
+  private func countLabel(_ count: Int, singular: String, plural: String) -> String {
+    "\(count.formatted()) \(count == 1 ? singular : plural)"
   }
 }
 
