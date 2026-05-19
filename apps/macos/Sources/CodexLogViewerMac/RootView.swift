@@ -320,6 +320,26 @@ struct RepeatedPromptsView: View {
               Text(message.sample)
                 .lineLimit(2)
                 .textSelection(.enabled)
+              if message.category != nil || message.variants.count > 1 {
+                DisclosureGroup("View grouped messages") {
+                  VStack(alignment: .leading, spacing: 6) {
+                    ForEach(Array(message.variants.enumerated()), id: \.offset) { _, variant in
+                      HStack(alignment: .firstTextBaseline) {
+                        Text("\(variant.count.formatted())x")
+                          .font(.caption.monospacedDigit())
+                          .foregroundStyle(.secondary)
+                          .frame(width: 34, alignment: .leading)
+                        Text(variant.sample)
+                          .font(.caption)
+                          .lineLimit(2)
+                          .textSelection(.enabled)
+                      }
+                    }
+                  }
+                  .padding(.top, 4)
+                }
+                .font(.caption)
+              }
               Text(message.projects.joined(separator: ", "))
                 .font(.caption)
                 .foregroundStyle(.secondary)

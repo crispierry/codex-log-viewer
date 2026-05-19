@@ -15,7 +15,11 @@ export function redactedProjectSummary(summary: ProjectSummary): ProjectSummary 
     repeatedUserMessages: summary.repeatedUserMessages.map((message) => ({
       ...message,
       id: "[redacted]",
-      sample: "[redacted]"
+      sample: "[redacted]",
+      variants: message.variants.map((variant) => ({
+        ...variant,
+        sample: "[redacted]"
+      }))
     }))
   };
 }

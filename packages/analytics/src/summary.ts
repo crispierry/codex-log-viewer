@@ -198,7 +198,7 @@ export function searchMessages(corpus: ParsedCodexCorpus, options: MessageSearch
 }
 
 export function normalizeMessage(message: string): string {
-  return message.trim().replace(/\s+/g, " ").toLowerCase();
+  return userMessageGroup(message).key;
 }
 
 function normalizeSearchText(value: string): string {
@@ -344,25 +344,43 @@ function repeatedUserMessageGroups(
     string,
     {
       sample: string;
+      category?: string;
       count: number;
       sessionIds: Set<string>;
       projects: Set<string>;
       firstSeen?: string;
       lastSeen?: string;
+      variants: Map<
+        string,
+        {
+          sample: string;
+          count: number;
+          firstSeen?: string;
+          lastSeen?: string;
+        }
+      >;
     }
   >();
 
   for (const message of messages) {
-    const normalized = normalizeMessage(message.content);
-    if (!normalized) {
+    const messageGroup = userMessageGroup(message.content);
+    if (!messageGroup.key) {
       continue;
     }
 
-    const group = groups.get(normalized) ?? {
-      sample: compactMessageSample(message.content),
+    const group = groups.get(messageGroup.key) ?? {
+      sample: messageGroup.sample,
+      category: messageGroup.category,
       count: 0,
       sessionIds: new Set<string>(),
       projects: new Set<string>(),
+      firstSeen: message.timestamp,
+      lastSeen: message.timestamp,
+      variants: new Map()
+    };
+    const variant = group.variants.get(messageGroup.variantKey) ?? {
+      sample: messageGroup.variantSample,
+      count: 0,
       firstSeen: message.timestamp,
       lastSeen: message.timestamp
     };
@@ -372,7 +390,11 @@ function repeatedUserMessageGroups(
     group.projects.add(project);
     group.firstSeen = earlierTimestamp(group.firstSeen, message.timestamp);
     group.lastSeen = laterTimestamp(group.lastSeen, message.timestamp);
-    groups.set(normalized, group);
+    variant.count += 1;
+    variant.firstSeen = earlierTimestamp(variant.firstSeen, message.timestamp);
+    variant.lastSeen = laterTimestamp(variant.lastSeen, message.timestamp);
+    group.variants.set(messageGroup.variantKey, variant);
+    groups.set(messageGroup.key, group);
   }
 
   return [...groups.entries()]
@@ -380,11 +402,18 @@ function repeatedUserMessageGroups(
     .map(([normalized, group]) => ({
       id: repeatedMessageId(normalized),
       sample: group.sample,
+      category: group.category,
       count: group.count,
       sessionCount: group.sessionIds.size,
       projects: [...group.projects].sort((a, b) => a.localeCompare(b)),
       firstSeen: group.firstSeen,
-      lastSeen: group.lastSeen
+      lastSeen: group.lastSeen,
+      variants: [...group.variants.values()].sort(
+        (a, b) =>
+          b.count - a.count ||
+          (b.lastSeen ?? "").localeCompare(a.lastSeen ?? "") ||
+          a.sample.localeCompare(b.sample)
+      )
     }))
     .sort(
       (a, b) =>
@@ -398,6 +427,87 @@ function repeatedUserMessageGroups(
 function compactMessageSample(value: string): string {
   const compacted = value.trim().replace(/\s+/g, " ");
   return compacted.length > 240 ? `${compacted.slice(0, 237)}...` : compacted;
+}
+
+function userMessageGroup(message: string): {
+  key: string;
+  sample: string;
+  variantKey: string;
+  variantSample: string;
+  category?: string;
+} {
+  const normalized = normalizeLiteralMessage(message);
+  const variantSample = compactMessageSample(message);
+  const commandCategory = commandMessageCategory(normalized);
+  if (commandCategory) {
+    return {
+      key: `category:${commandCategory.key}`,
+      sample: commandCategory.label,
+      variantKey: normalized,
+      variantSample,
+      category: commandCategory.label
+    };
+  }
+
+  return {
+    key: normalized,
+    sample: variantSample,
+    variantKey: normalized,
+    variantSample
+  };
+}
+
+function normalizeLiteralMessage(message: string): string {
+  return message.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function commandMessageCategory(normalized: string): { key: string; label: string } | undefined {
+  const commandText = normalizedCommandText(normalized);
+  if (isGitCommandMessage(commandText)) {
+    return { key: "git-commands", label: "Git commands" };
+  }
+  if (isRunAppMessage(commandText)) {
+    return { key: "run-app", label: "Run app" };
+  }
+  return undefined;
+}
+
+function normalizedCommandText(normalized: string): string {
+  let value = normalized;
+  let changed = true;
+  while (changed) {
+    const previous = value;
+    value = value
+      .replace(/^(ok|okay)[, ]+/, "")
+      .replace(/^(please|pls)[, ]+/, "")
+      .replace(/^(can|could|would) you\s+/, "")
+      .replace(/^let'?s\s+/, "");
+    changed = value !== previous;
+  }
+  return value.replace(/\s+(please|for me)$/u, "").trim();
+}
+
+function isGitCommandMessage(normalized: string): boolean {
+  if (normalized.length > 120) {
+    return false;
+  }
+  const directGitCommand =
+    /^(git )?(commit|push|merge|rebase|branch|checkout|switch|pull|fetch|stash|tag|open pr|create pr|close pr|merge pr)\b/.test(normalized);
+  const explicitGitInspection = /^git (status|diff|log)\b/.test(normalized);
+  const gitObjectAction =
+    /^(create|make|open|merge|close|delete|remove|clean|switch|checkout) ((a|the|current|new) )*(branch|commit|pull request|pr|worktree|work tree)\b/.test(normalized);
+  const worktreeCleanup = /^(close|delete|remove|clean) ((the|current) )*(worktree|work tree)\b/.test(normalized);
+  return directGitCommand || explicitGitInspection || gitObjectAction || worktreeCleanup;
+}
+
+function isRunAppMessage(normalized: string): boolean {
+  if (normalized.length > 140) {
+    return false;
+  }
+  const appLaunchCommand =
+    /^(run|start|restart|launch|open) (the )?(app|application|desktop app|mac app|macos app|native app|packaged app|server|local server|dev server|development server)\b/.test(normalized);
+  const devServerCommand = /^(run|start|restart) (npm run dev|dev|desktop|local app)\b/.test(normalized);
+  return appLaunchCommand || devServerCommand;
 }
 
 function repeatedMessageId(normalized: string): string {

@@ -116,8 +116,84 @@ test("summarizeParsedCorpus groups repeated user prompts without exposing them i
   assert.equal(repeated?.count, 2);
   assert.equal(repeated?.sessionCount, 2);
   assert.deepEqual(repeated?.projects, ["sample-app"]);
+  assert.deepEqual(
+    repeated?.variants.map((variant) => [variant.sample, variant.count]),
+    [["Please make the parser stricter", 2]]
+  );
   assert.equal(redacted.repeatedUserMessages[0]?.id, "[redacted]");
   assert.equal(redacted.repeatedUserMessages[0]?.sample, "[redacted]");
+  assert.equal(redacted.repeatedUserMessages[0]?.variants[0]?.sample, "[redacted]");
+});
+
+test("summarizeParsedCorpus groups command-style prompt families", () => {
+  const message = ({ content, timestamp }, index) => ({
+    filePath: `session-${index}.jsonl`,
+    sessionId: `session-${index}`,
+    timestamp,
+    role: "user",
+    sourceEvent: "event_msg.user_message",
+    content,
+    imagesCount: 0,
+    localImagesCount: 0
+  });
+  const messages = [
+    message({ content: "commit", timestamp: "2026-01-01T00:00:00.000Z" }, 1),
+    message({ content: "commit and push", timestamp: "2026-01-01T00:01:00.000Z" }, 2),
+    message({ content: "push", timestamp: "2026-01-01T00:02:00.000Z" }, 3),
+    message({ content: "close work tree", timestamp: "2026-01-01T00:03:00.000Z" }, 4),
+    message({ content: "create a new branch", timestamp: "2026-01-01T00:04:00.000Z" }, 5),
+    message({ content: "Can you make a commit please", timestamp: "2026-01-01T00:05:00.000Z" }, 6),
+    message({ content: "run the app", timestamp: "2026-01-01T00:06:00.000Z" }, 7),
+    message({ content: "start the server", timestamp: "2026-01-01T00:07:00.000Z" }, 8),
+    message({ content: "OK open the app for me", timestamp: "2026-01-01T00:08:00.000Z" }, 9)
+  ];
+  const corpus = {
+    files: messages.map((item) => ({
+      filePath: item.filePath,
+      sessionId: item.sessionId,
+      lineCount: 1,
+      sessions: [],
+      turns: [],
+      messages: [],
+      tokenUsage: [],
+      taskTimings: [],
+      toolEvents: [],
+      unknownEvents: [],
+      warnings: []
+    })),
+    sessions: messages.map((item) => ({
+      filePath: item.filePath,
+      sessionId: item.sessionId,
+      cwd: "/tmp/sample-app",
+      timestamp: item.timestamp
+    })),
+    turns: [],
+    messages,
+    tokenUsage: [],
+    taskTimings: [],
+    toolEvents: [],
+    unknownEvents: [],
+    warnings: []
+  };
+
+  const summary = summarizeParsedCorpus(corpus, { project: "sample-app" });
+  assert.equal(summary.totals.userMessages, 9);
+  assert.equal(summary.totals.uniqueUserMessages, 2);
+  assert.equal(summary.messagesByDay[0]?.uniqueCount, 2);
+
+  const gitGroup = summary.repeatedUserMessages.find((group) => group.sample === "Git commands");
+  assert.equal(gitGroup?.count, 6);
+  assert.deepEqual(
+    gitGroup?.variants.map((variant) => variant.sample),
+    ["Can you make a commit please", "create a new branch", "close work tree", "push", "commit and push", "commit"]
+  );
+
+  const runAppGroup = summary.repeatedUserMessages.find((group) => group.sample === "Run app");
+  assert.equal(runAppGroup?.count, 3);
+  assert.deepEqual(
+    runAppGroup?.variants.map((variant) => variant.sample),
+    ["OK open the app for me", "start the server", "run the app"]
+  );
 });
 
 test("summarizeParsedCorpus attributes token usage to models by session and turn", () => {

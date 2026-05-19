@@ -123,9 +123,18 @@ struct SessionSummary: Decodable, Identifiable, Hashable {
 struct RepeatedUserMessage: Decodable, Identifiable, Hashable {
   let id: String
   let sample: String
+  let category: String?
   let count: Int
   let sessionCount: Int
   let projects: [String]
+  let firstSeen: String?
+  let lastSeen: String?
+  let variants: [RepeatedUserMessageVariant]
+}
+
+struct RepeatedUserMessageVariant: Decodable, Hashable {
+  let sample: String
+  let count: Int
   let firstSeen: String?
   let lastSeen: String?
 }

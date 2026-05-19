@@ -47,9 +47,18 @@ export interface SessionSummary {
 export interface RepeatedUserMessage {
   id: string;
   sample: string;
+  category?: string;
   count: number;
   sessionCount: number;
   projects: string[];
+  firstSeen?: string;
+  lastSeen?: string;
+  variants: RepeatedUserMessageVariant[];
+}
+
+export interface RepeatedUserMessageVariant {
+  sample: string;
+  count: number;
   firstSeen?: string;
   lastSeen?: string;
 }
