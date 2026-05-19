@@ -113,6 +113,7 @@ struct SidebarView: View {
                     Image(systemName: "xmark.circle")
                   }
                   .buttonStyle(.borderless)
+                  .accessibilityLabel("Remove source")
                   .help("Remove source")
                 }
               }
@@ -217,10 +218,19 @@ struct OverviewView: View {
         HeaderView()
 
         if case .failed(let message) = model.status {
-          ErrorBanner(message: message)
+          ErrorBanner(message: message) {
+            model.retryAfterFailure()
+          }
+        }
+
+        if let summary = model.summary, summary.totals.sessions == 0 {
+          EmptyLibraryView()
         }
 
         MetricsGrid(summary: model.summary)
+        if let summary = model.summary, summary.totals.sessions > 0 {
+          RepeatedPromptsView(messages: summary.repeatedUserMessages)
+        }
         MessageSearchView()
         SessionsTableView()
       }
@@ -244,6 +254,17 @@ struct HeaderView: View {
   }
 }
 
+struct EmptyLibraryView: View {
+  var body: some View {
+    ContentUnavailableView(
+      "No Logs Found",
+      systemImage: "tray",
+      description: Text("Choose a Codex log folder or return to the default source.")
+    )
+    .frame(maxWidth: .infinity, minHeight: 160)
+  }
+}
+
 struct MetricsGrid: View {
   let summary: ProjectSummary?
 
@@ -258,6 +279,56 @@ struct MetricsGrid: View {
         MetricTile(label: "Total Tokens", value: summary?.tokens.totalTokens)
         MetricTile(label: "Fresh Input", value: summary?.tokens.freshInputTokens)
         MetricTile(label: "Cached Input", value: summary?.tokens.cachedInputTokens)
+      }
+    }
+  }
+}
+
+struct RepeatedPromptsView: View {
+  let messages: [RepeatedUserMessage]
+
+  private func sessionLabel(for message: RepeatedUserMessage) -> String {
+    "\(message.sessionCount.formatted()) \(message.sessionCount == 1 ? "session" : "sessions")"
+  }
+
+  var body: some View {
+    GroupBox("Repeated Prompts") {
+      if messages.isEmpty {
+        ContentUnavailableView(
+          "No Repeated Prompts",
+          systemImage: "text.badge.checkmark",
+          description: Text("Submitted user messages are unique in the current filters.")
+        )
+        .frame(maxWidth: .infinity, minHeight: 110)
+      } else {
+        VStack(alignment: .leading, spacing: 10) {
+          ForEach(messages.prefix(5)) { message in
+            VStack(alignment: .leading, spacing: 4) {
+              HStack(alignment: .firstTextBaseline) {
+                Text("\(message.count.formatted()) repeats")
+                  .font(.caption)
+                  .fontWeight(.semibold)
+                  .foregroundStyle(.secondary)
+                Text(sessionLabel(for: message))
+                  .font(.caption)
+                  .foregroundStyle(.secondary)
+                Spacer()
+                Text(formattedDate(message.lastSeen))
+                  .font(.caption)
+                  .foregroundStyle(.secondary)
+              }
+              Text(message.sample)
+                .lineLimit(2)
+                .textSelection(.enabled)
+              Text(message.projects.joined(separator: ", "))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            }
+            .padding(.vertical, 4)
+          }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
       }
     }
   }
@@ -287,6 +358,7 @@ struct MetricTile: View {
 
 struct MessageSearchView: View {
   @EnvironmentObject private var model: AppModel
+  @FocusState private var isSearchFocused: Bool
 
   var body: some View {
     GroupBox("Message Search") {
@@ -296,6 +368,7 @@ struct MessageSearchView: View {
             .foregroundStyle(.secondary)
           TextField("Search messages across projects", text: $model.messageQuery)
             .textFieldStyle(.plain)
+            .focused($isSearchFocused)
             .accessibilityIdentifier("message-search-field")
             .onSubmit {
               model.searchMessages()
@@ -366,36 +439,46 @@ struct MessageSearchView: View {
             .font(.caption)
             .foregroundStyle(.secondary)
 
-          Table(search.results, selection: $model.selectedSearchResultID) {
-            TableColumn("Role") { result in
-              Text(result.role.capitalized)
-            }
-            .width(72)
+          if search.results.isEmpty {
+            ContentUnavailableView(
+              "No Matches",
+              systemImage: "magnifyingglass",
+              description: Text("Try another phrase or broaden the current filters.")
+            )
+            .frame(maxWidth: .infinity, minHeight: 220)
+            .accessibilityIdentifier("message-search-empty-state")
+          } else {
+            Table(search.results, selection: $model.selectedSearchResultID) {
+              TableColumn("Role") { result in
+                Text(result.role.capitalized)
+              }
+              .width(72)
 
-            TableColumn("Project") { result in
-              Text(result.project)
-            }
-            .width(min: 120, ideal: 170)
+              TableColumn("Project") { result in
+                Text(result.project)
+              }
+              .width(min: 120, ideal: 170)
 
-            TableColumn("Model") { result in
-              Text(result.model ?? "unknown")
-            }
-            .width(min: 100, ideal: 130)
+              TableColumn("Model") { result in
+                Text(result.model ?? "unknown")
+              }
+              .width(min: 100, ideal: 130)
 
-            TableColumn("Message") { result in
-              Text(result.snippet)
-                .lineLimit(2)
-            }
+              TableColumn("Message") { result in
+                Text(result.snippet)
+                  .lineLimit(2)
+              }
 
-            TableColumn("Time") { result in
-              Text(formattedDate(result.timestamp))
+              TableColumn("Time") { result in
+                Text(formattedDate(result.timestamp))
+              }
+              .width(min: 120, ideal: 150)
             }
-            .width(min: 120, ideal: 150)
-          }
-          .frame(minHeight: 220)
-          .accessibilityIdentifier("message-search-results-table")
-          .onChange(of: model.selectedSearchResultID) { _, newValue in
-            model.selectSearchResult(newValue)
+            .frame(minHeight: 220)
+            .accessibilityIdentifier("message-search-results-table")
+            .onChange(of: model.selectedSearchResultID) { _, newValue in
+              model.selectSearchResult(newValue)
+            }
           }
         } else {
           Text("Search respects the current source, project, and date filters.")
@@ -404,12 +487,26 @@ struct MessageSearchView: View {
         }
       }
       .padding(.top, 4)
+      .onChange(of: model.messageSearchFocusRequest) { _, _ in
+        isSearchFocused = true
+      }
     }
   }
 }
 
 struct SessionsTableView: View {
   @EnvironmentObject private var model: AppModel
+
+  private var emptySessionsTitle: String {
+    model.summary?.totals.sessions == 0 ? "No Sessions Found" : "No Matching Sessions"
+  }
+
+  private var emptySessionsDescription: String {
+    if model.summary?.totals.sessions == 0 {
+      return "Choose another source or return to the default Codex log locations."
+    }
+    return "Clear the session search or adjust the current filters."
+  }
 
   var body: some View {
     GroupBox("Sessions") {
@@ -428,37 +525,47 @@ struct SessionsTableView: View {
         .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
 
         if model.summary != nil {
-          Table(model.filteredSessions, selection: $model.selectedSessionID) {
-            TableColumn("Session") { session in
-              Text(session.shortSessionId)
-                .font(.system(.body, design: .monospaced))
-            }
-            .width(96)
+          if model.filteredSessions.isEmpty {
+            ContentUnavailableView(
+              emptySessionsTitle,
+              systemImage: "tray",
+              description: Text(emptySessionsDescription)
+            )
+            .frame(maxWidth: .infinity, minHeight: 280)
+            .accessibilityIdentifier("sessions-empty-state")
+          } else {
+            Table(model.filteredSessions, selection: $model.selectedSessionID) {
+              TableColumn("Session") { session in
+                Text(session.shortSessionId)
+                  .font(.system(.body, design: .monospaced))
+              }
+              .width(96)
 
-            TableColumn("Project") { session in
-              Text(session.project)
-            }
-            .width(min: 140, ideal: 220)
+              TableColumn("Project") { session in
+                Text(session.project)
+              }
+              .width(min: 140, ideal: 220)
 
-            TableColumn("User Messages") { session in
-              Text(session.userMessages.formatted())
-            }
-            .width(110)
+              TableColumn("User Messages") { session in
+                Text(session.userMessages.formatted())
+              }
+              .width(110)
 
-            TableColumn("Tokens") { session in
-              Text(session.totalTokens.formatted())
-            }
-            .width(120)
+              TableColumn("Tokens") { session in
+                Text(session.totalTokens.formatted())
+              }
+              .width(120)
 
-            TableColumn("Last Seen") { session in
-              Text(formattedDate(session.lastSeen))
+              TableColumn("Last Seen") { session in
+                Text(formattedDate(session.lastSeen))
+              }
+              .width(min: 140, ideal: 180)
             }
-            .width(min: 140, ideal: 180)
-          }
-          .frame(minHeight: 280)
-          .accessibilityIdentifier("sessions-table")
-          .onChange(of: model.selectedSessionID) { _, newValue in
-            model.selectSession(newValue)
+            .frame(minHeight: 280)
+            .accessibilityIdentifier("sessions-table")
+            .onChange(of: model.selectedSessionID) { _, newValue in
+              model.selectSession(newValue)
+            }
           }
         } else {
           ProgressView("Scanning local logs")
@@ -730,13 +837,19 @@ struct StatusPill: View {
 
 struct ErrorBanner: View {
   let message: String
+  let onRetry: () -> Void
 
   var body: some View {
-    Label(message, systemImage: "exclamationmark.triangle")
-      .foregroundStyle(.red)
-      .padding(10)
-      .frame(maxWidth: .infinity, alignment: .leading)
-      .background(.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+    HStack(spacing: 12) {
+      Label(message, systemImage: "exclamationmark.triangle")
+        .foregroundStyle(.red)
+      Spacer()
+      Button("Try Again", action: onRetry)
+        .accessibilityIdentifier("retry-button")
+    }
+    .padding(10)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
   }
 }
 

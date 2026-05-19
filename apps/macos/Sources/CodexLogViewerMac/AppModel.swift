@@ -45,6 +45,7 @@ final class AppModel: ObservableObject {
   @Published var hasUntilFilter = false
   @Published var sinceDate = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
   @Published var untilDate = Date()
+  @Published var messageSearchFocusRequest = 0
 
   private var api: LogEngineAPI?
   private var hasStarted = false
@@ -149,6 +150,15 @@ final class AppModel: ObservableObject {
         status = .failed(error.localizedDescription)
       }
     }
+  }
+
+  func retryAfterFailure() {
+    guard api != nil else {
+      hasStarted = false
+      startIfNeeded()
+      return
+    }
+    refresh(force: true)
   }
 
   func selectProject(_ project: String) {
@@ -272,6 +282,10 @@ final class AppModel: ObservableObject {
         status = .failed(error.localizedDescription)
       }
     }
+  }
+
+  func focusMessageSearch() {
+    messageSearchFocusRequest += 1
   }
 
   func selectSearchResult(_ resultID: MessageSearchResult.ID?) {

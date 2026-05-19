@@ -37,6 +37,7 @@ The product should answer:
 - [x] Normalize session metadata, turns, messages, token usage, task timing, and raw unknown events
 - [x] Group sessions by project path and Codex worktree name
 - [x] Calculate message counts and unique user-message counts
+- [x] Group repeated user messages for the current filters
 - [x] Calculate day and hour buckets
 - [x] Calculate total, input, cached input, fresh input, output, and reasoning tokens
 - [x] Break metrics down by model and session

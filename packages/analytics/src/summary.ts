@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { parseCodexCorpus } from "@codex-log-viewer/parser";
 import type {
   MessageRecord,
@@ -17,6 +18,7 @@ import type {
   ProjectAlias,
   ProjectListItem,
   ProjectSummary,
+  RepeatedUserMessage,
   SessionSummary,
   SummaryOptions
 } from "./types.js";
@@ -81,6 +83,7 @@ export function summarizeParsedCorpus(corpus: ParsedCodexCorpus, options: Summar
   const tokensByDay = bucketTokens(tokenUsage, "day");
   const models = modelBuckets(turns, tokenUsage, turnModels);
   const sessions = sessionSummaries(corpus, [...sessionIds], aliases, range);
+  const repeatedUserMessages = repeatedUserMessageGroups(submittedUserMessages, corpus, aliases);
   const visibleSessionIds = new Set(sessions.map((session) => session.sessionId));
   const parseWarnings = corpus.warnings.filter((warning) => {
     const sessionId = sessionIdByFilePath.get(warning.filePath);
@@ -110,7 +113,8 @@ export function summarizeParsedCorpus(corpus: ParsedCodexCorpus, options: Summar
     messagesByHour,
     tokensByDay,
     models,
-    sessions
+    sessions,
+    repeatedUserMessages
   };
 }
 
@@ -346,6 +350,95 @@ function bucketMessages(messages: MessageRecord[], grain: "day" | "hour", tokenU
   }
 
   return [...buckets.values()].sort((a, b) => a.key.localeCompare(b.key));
+}
+
+function repeatedUserMessageGroups(
+  messages: MessageRecord[],
+  corpus: ParsedCodexCorpus,
+  aliases: ProjectAlias[]
+): RepeatedUserMessage[] {
+  const groups = new Map<
+    string,
+    {
+      sample: string;
+      count: number;
+      sessionIds: Set<string>;
+      projects: Set<string>;
+      firstSeen?: string;
+      lastSeen?: string;
+    }
+  >();
+
+  for (const message of messages) {
+    const normalized = normalizeMessage(message.content);
+    if (!normalized) {
+      continue;
+    }
+
+    const group = groups.get(normalized) ?? {
+      sample: compactMessageSample(message.content),
+      count: 0,
+      sessionIds: new Set<string>(),
+      projects: new Set<string>(),
+      firstSeen: message.timestamp,
+      lastSeen: message.timestamp
+    };
+    const project = projectContextForSession(message.sessionId, corpus, aliases).project;
+    group.count += 1;
+    group.sessionIds.add(message.sessionId);
+    group.projects.add(project);
+    group.firstSeen = earlierTimestamp(group.firstSeen, message.timestamp);
+    group.lastSeen = laterTimestamp(group.lastSeen, message.timestamp);
+    groups.set(normalized, group);
+  }
+
+  return [...groups.entries()]
+    .filter(([, group]) => group.count > 1)
+    .map(([normalized, group]) => ({
+      id: repeatedMessageId(normalized),
+      sample: group.sample,
+      count: group.count,
+      sessionCount: group.sessionIds.size,
+      projects: [...group.projects].sort((a, b) => a.localeCompare(b)),
+      firstSeen: group.firstSeen,
+      lastSeen: group.lastSeen
+    }))
+    .sort(
+      (a, b) =>
+        b.count - a.count ||
+        (b.lastSeen ?? "").localeCompare(a.lastSeen ?? "") ||
+        a.sample.localeCompare(b.sample)
+    )
+    .slice(0, 10);
+}
+
+function compactMessageSample(value: string): string {
+  const compacted = value.trim().replace(/\s+/g, " ");
+  return compacted.length > 240 ? `${compacted.slice(0, 237)}...` : compacted;
+}
+
+function repeatedMessageId(normalized: string): string {
+  return createHash("sha256").update(normalized).digest("hex").slice(0, 16);
+}
+
+function earlierTimestamp(current: string | undefined, candidate: string | undefined): string | undefined {
+  if (!current) {
+    return candidate;
+  }
+  if (!candidate) {
+    return current;
+  }
+  return candidate.localeCompare(current) < 0 ? candidate : current;
+}
+
+function laterTimestamp(current: string | undefined, candidate: string | undefined): string | undefined {
+  if (!current) {
+    return candidate;
+  }
+  if (!candidate) {
+    return current;
+  }
+  return candidate.localeCompare(current) > 0 ? candidate : current;
 }
 
 function bucketTokens(tokenUsage: TokenUsageRecord[], grain: "day" | "hour"): DateBucket[] {

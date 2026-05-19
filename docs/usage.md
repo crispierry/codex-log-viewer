@@ -24,6 +24,7 @@ From the app you can:
 - filter by date range
 - search messages across all selected projects
 - filter message search by role, model, and selected session
+- review repeated user prompts for the current filters
 - export redacted JSON or aggregate CSV
 - search sessions
 - inspect session messages, token events, warnings, and unknown events
@@ -52,6 +53,15 @@ Click `Apply` to rescan typed paths. Click `Default` to return to `~/.codex/sess
 Use the message search panel to search across parsed messages. Search respects the current source, project, date, role, model, and session filters. Choose `All Projects` to search across every discovered project.
 
 Selecting a search result opens its session context in the inspector. The inspector includes copy actions for the result's session id, project, and a whitespace-normalized snippet with local home paths shortened.
+
+Keyboard shortcuts:
+
+- `Command-R`: refresh local logs
+- `Command-F`: focus message search
+- `Command-Return`: run message search
+- `Command-O`: choose sources
+- `Command-E`: export redacted JSON
+- `Command-Shift-E`: export CSV
 
 ## Exports
 
@@ -87,6 +97,7 @@ You can pass multiple `--path` values.
 
 - User-message counts come from `event_msg.user_message`.
 - Unique user messages are trimmed, whitespace-collapsed, and lowercased.
+- Repeated prompts are grouped from normalized user messages and shown only for groups with more than one submission.
 - Token totals sum `token_count.info.last_token_usage` records.
 - `token_count` events with `info: null` are ignored for token totals.
 - Unknown event shapes are preserved and counted.

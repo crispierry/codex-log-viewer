@@ -23,6 +23,103 @@ test("summarizeParsedCorpus aggregates messages, unique messages, tokens, models
   assert.equal(summary.messagesByDay[0]?.count, 1);
 });
 
+test("summarizeParsedCorpus groups repeated user prompts without exposing them in redacted exports", () => {
+  const corpus = {
+    files: [
+      {
+        filePath: "session-a.jsonl",
+        sessionId: "session-a",
+        lineCount: 1,
+        sessions: [],
+        turns: [],
+        messages: [],
+        tokenUsage: [],
+        taskTimings: [],
+        toolEvents: [],
+        unknownEvents: [],
+        warnings: []
+      },
+      {
+        filePath: "session-b.jsonl",
+        sessionId: "session-b",
+        lineCount: 1,
+        sessions: [],
+        turns: [],
+        messages: [],
+        tokenUsage: [],
+        taskTimings: [],
+        toolEvents: [],
+        unknownEvents: [],
+        warnings: []
+      }
+    ],
+    sessions: [
+      {
+        filePath: "session-a.jsonl",
+        sessionId: "session-a",
+        cwd: "/tmp/sample-app",
+        timestamp: "2026-01-01T00:00:00.000Z"
+      },
+      {
+        filePath: "session-b.jsonl",
+        sessionId: "session-b",
+        cwd: "/tmp/sample-app",
+        timestamp: "2026-01-02T00:00:00.000Z"
+      }
+    ],
+    turns: [],
+    messages: [
+      {
+        filePath: "session-a.jsonl",
+        sessionId: "session-a",
+        timestamp: "2026-01-01T00:00:00.000Z",
+        role: "user",
+        sourceEvent: "event_msg.user_message",
+        content: "Please make the parser stricter",
+        imagesCount: 0,
+        localImagesCount: 0
+      },
+      {
+        filePath: "session-b.jsonl",
+        sessionId: "session-b",
+        timestamp: "2026-01-02T00:00:00.000Z",
+        role: "user",
+        sourceEvent: "event_msg.user_message",
+        content: "Please   make\n\nthe parser stricter",
+        imagesCount: 0,
+        localImagesCount: 0
+      },
+      {
+        filePath: "session-b.jsonl",
+        sessionId: "session-b",
+        timestamp: "2026-01-02T00:01:00.000Z",
+        role: "assistant",
+        sourceEvent: "response_item.message",
+        content: "Done",
+        imagesCount: 0,
+        localImagesCount: 0
+      }
+    ],
+    tokenUsage: [],
+    taskTimings: [],
+    toolEvents: [],
+    unknownEvents: [],
+    warnings: []
+  };
+
+  const summary = summarizeParsedCorpus(corpus, { project: "sample-app" });
+  const repeated = summary.repeatedUserMessages[0];
+  const redacted = redactedProjectSummary(summary);
+
+  assert.equal(summary.repeatedUserMessages.length, 1);
+  assert.equal(repeated?.sample, "Please make the parser stricter");
+  assert.equal(repeated?.count, 2);
+  assert.equal(repeated?.sessionCount, 2);
+  assert.deepEqual(repeated?.projects, ["sample-app"]);
+  assert.equal(redacted.repeatedUserMessages[0]?.id, "[redacted]");
+  assert.equal(redacted.repeatedUserMessages[0]?.sample, "[redacted]");
+});
+
 test("summarizeParsedCorpus attributes token usage to models by session and turn", () => {
   const corpus = {
     files: [

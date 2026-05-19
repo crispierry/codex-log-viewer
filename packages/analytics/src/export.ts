@@ -11,6 +11,11 @@ export function redactedProjectSummary(summary: ProjectSummary): ProjectSummary 
       ...session,
       filePath: "[redacted]",
       cwd: session.cwd ? "[redacted]" : undefined
+    })),
+    repeatedUserMessages: summary.repeatedUserMessages.map((message) => ({
+      ...message,
+      id: "[redacted]",
+      sample: "[redacted]"
     }))
   };
 }
@@ -29,6 +34,7 @@ export function summaryToCsv(summary: ProjectSummary): string {
     ["user_messages", summary.totals.userMessages],
     ["assistant_messages", summary.totals.assistantMessages],
     ["unique_user_messages", summary.totals.uniqueUserMessages],
+    ["repeated_user_messages", summary.repeatedUserMessages.length],
     ["input_tokens", summary.tokens.inputTokens],
     ["cached_input_tokens", summary.tokens.cachedInputTokens],
     ["fresh_input_tokens", summary.tokens.freshInputTokens],

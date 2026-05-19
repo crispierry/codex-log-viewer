@@ -74,6 +74,7 @@ struct ProjectSummary: Decodable {
   let tokens: TokenUsage
   let models: [ModelBucket]
   let sessions: [SessionSummary]
+  let repeatedUserMessages: [RepeatedUserMessage]
 }
 
 struct SummaryTotals: Decodable {
@@ -116,6 +117,16 @@ struct SessionSummary: Decodable, Identifiable, Hashable {
 
   var id: String { sessionId }
   var shortSessionId: String { String(sessionId.prefix(8)) }
+}
+
+struct RepeatedUserMessage: Decodable, Identifiable, Hashable {
+  let id: String
+  let sample: String
+  let count: Int
+  let sessionCount: Int
+  let projects: [String]
+  let firstSeen: String?
+  let lastSeen: String?
 }
 
 struct MessageSearchSummary: Decodable {

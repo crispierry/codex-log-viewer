@@ -154,6 +154,7 @@ function printSummary(summary: ProjectSummary): void {
       ["User messages", summary.totals.userMessages],
       ["Assistant messages", summary.totals.assistantMessages],
       ["Unique user messages", summary.totals.uniqueUserMessages],
+      ["Repeated user prompts", summary.repeatedUserMessages.length],
       ["Input tokens", formatNumber(summary.tokens.inputTokens)],
       ["Cached input tokens", formatNumber(summary.tokens.cachedInputTokens)],
       ["Fresh input tokens", formatNumber(summary.tokens.freshInputTokens)],

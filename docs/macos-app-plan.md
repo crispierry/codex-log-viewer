@@ -46,8 +46,6 @@ Phase 2 should add a local persistent index:
 Phase 3 should add richer app workflows:
 
 - saved searches
-- search result deep links into a session and turn
-- repeated prompt grouping
 - redacted export from search results
 
 ## Desktop App Roadmap
@@ -69,7 +67,7 @@ Phase 1 makes it feel complete as a macOS app:
 - better empty states and scan progress
 - graceful error recovery when logs are malformed or inaccessible
 
-Status: native source picking, recent source settings, date-filter settings, role/model/session search filters, and release-critical smoke automation are implemented for v0.1. Richer empty states, more keyboard workflows, and deeper recovery affordances remain later polish.
+Status: native source picking, recent source settings, date-filter settings, role/model/session search filters, search result session context, repeated-prompt grouping, first-pass empty states, keyboard shortcuts, retry recovery, and release-critical smoke automation are implemented for v0.1. Deeper VoiceOver QA, selection-navigation shortcuts, and persistent indexed search remain follow-up work.
 
 Phase 2 prepares public releases:
 

@@ -94,7 +94,7 @@ Exit criteria:
 
 - A user can launch the app and inspect/search local logs with expected macOS controls.
 
-Status: complete for native source picking, local source/date settings, role/model/session search filters, packaged app verification, and release-critical smoke automation. Deeper empty states, richer keyboard workflows, and persistent indexed search remain follow-up work.
+Status: complete for native source picking, local source/date settings, role/model/session search filters, search result session context, repeated-prompt grouping, first-pass empty states, keyboard shortcuts, retry recovery, packaged app verification, and release-critical smoke automation. Deeper VoiceOver QA, selection-navigation shortcuts, and persistent indexed search remain follow-up work.
 
 ## Milestone 5: Public Release
 

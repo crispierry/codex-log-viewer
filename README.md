@@ -2,7 +2,7 @@
 
 Codex Log Viewer is a local-first native macOS app and parser for OpenAI Codex session logs.
 
-The goal is to help developers understand how they use Codex across projects: message volume, unique prompts, token usage, model usage, session history, and time-based activity patterns.
+The goal is to help developers understand how they use Codex across projects: message volume, unique and repeated prompts, token usage, model usage, session history, and time-based activity patterns.
 
 ## Status
 
@@ -23,6 +23,7 @@ This project has a working v0 implementation:
 - Group sessions by project path and Codex worktree name
 - Count messages by project, session, day, and hour
 - Count unique normalized user messages
+- Group repeated user prompts for the current filters
 - Track total, input, cached input, fresh input, output, and reasoning tokens
 - Break usage down by model
 - Export summaries as JSON and CSV
@@ -57,6 +58,7 @@ The app is the primary product experience. From the desktop UI you can:
 - filter by date range
 - search messages across projects
 - filter message search by role, model, session, project, source, and date range
+- review repeated prompts for the current filters
 - refresh the scan
 - export redacted JSON or aggregate CSV
 - inspect session messages, turns, tokens, warnings, and unknown events
@@ -110,6 +112,7 @@ npm run build:mac # macOS only
 npm run package:mac # macOS only
 npm run smoke:mac-package # macOS only
 npm run smoke:mac-ui # macOS only
+npm run release:mac # macOS only, package plus smoke tests
 npm run benchmark:search
 npm run check:reference -- --reference fixtures/codex/sample-reference-summary.json --path fixtures/codex/sample-session.jsonl --project sample-app
 ```

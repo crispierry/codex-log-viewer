@@ -28,10 +28,34 @@ struct CodexLogViewerApp: App {
         }
         .keyboardShortcut("r", modifiers: .command)
 
+        Button("Find in Messages") {
+          model.focusMessageSearch()
+        }
+        .keyboardShortcut("f", modifiers: .command)
+
         Button("Search Messages") {
           model.searchMessages()
         }
-        .keyboardShortcut("f", modifiers: .command)
+        .keyboardShortcut(.return, modifiers: .command)
+
+        Divider()
+
+        Button("Choose Sources...") {
+          model.chooseSourcePaths()
+        }
+        .keyboardShortcut("o", modifiers: .command)
+
+        Divider()
+
+        Button("Export Redacted JSON...") {
+          model.exportSummary(.json)
+        }
+        .keyboardShortcut("e", modifiers: .command)
+
+        Button("Export CSV...") {
+          model.exportSummary(.csv)
+        }
+        .keyboardShortcut("e", modifiers: [.command, .shift])
       }
     }
   }

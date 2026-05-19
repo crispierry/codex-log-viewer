@@ -2,7 +2,7 @@
 
 This plan tracks the remaining work before Codex Log Viewer is ready for a first public version. It assumes the first public version is a native macOS release, not a web app, and that local Codex logs stay on the user's machine by default.
 
-Last reviewed: 2026-05-18
+Last reviewed: 2026-05-19
 
 ## Release Definition
 
@@ -30,6 +30,8 @@ Implemented for v0.1:
 - per-run local API bearer token for data endpoints
 - native source picker, recent source settings, date-filter settings, and local-only settings persistence
 - search result copy actions for session id, project, and sanitized snippets
+- repeated-prompt grouping with counts across the current project/source/date filters
+- first-pass native empty states, failure retry action, and keyboard shortcuts for refresh, find, search, source picking, and exports
 - parser fixture coverage for supported event shapes, null token info, malformed lines, unknown payloads, and tool events
 - analytics tests for date/project filtering, diagnostics filtering, model/session search filters, token aggregation, and redacted exports
 - redacted JSON exports by default with explicit raw JSON for private local use
@@ -299,10 +301,13 @@ Acceptance:
 
 ### 10. Improve Search And Session Workflows
 
-Gap:
+Status:
 
-- Search supports project/date/source, but not role, model, session, repeated-message, or saved-search filters.
-- Selecting a search result shows a snippet but does not deep-link into the full session and turn context.
+- Search supports project/date/source, role, model, selected-session scoping, full session context, matching-message highlighting, repeated-prompt grouping, and copy actions.
+
+Remaining:
+
+- Saved searches remain a later enhancement.
 
 Plan:
 
@@ -320,9 +325,13 @@ Acceptance:
 
 ### 11. Improve App UX, Accessibility, And Error Handling
 
-Gap:
+Status:
 
-- Empty states, scan progress, error recovery, and accessibility have not had a full pass.
+- The first native pass covers empty states, scan messaging, failed-scan retry, stable accessibility identifiers, and core keyboard shortcuts.
+
+Remaining:
+
+- Deeper VoiceOver QA and selection-navigation shortcuts still need manual validation before broad promotion.
 
 Plan:
 

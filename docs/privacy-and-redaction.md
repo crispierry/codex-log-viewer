@@ -53,6 +53,7 @@ Current exports respect the active source, project, and date filters. CSV export
 - `filters.paths` becomes `[redacted]`
 - session `filePath` values become `[redacted]`
 - session `cwd` values become `[redacted]`
+- repeated-prompt sample text and content-derived IDs become `[redacted]`
 
 Default JSON still includes project names, timestamps, session IDs, model names, and usage counts. Users should review exports before sharing.
 

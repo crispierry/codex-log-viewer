@@ -44,6 +44,16 @@ export interface SessionSummary {
   models: string[];
 }
 
+export interface RepeatedUserMessage {
+  id: string;
+  sample: string;
+  count: number;
+  sessionCount: number;
+  projects: string[];
+  firstSeen?: string;
+  lastSeen?: string;
+}
+
 export interface ProjectSummary {
   project: string;
   generatedAt: string;
@@ -68,6 +78,7 @@ export interface ProjectSummary {
   tokensByDay: DateBucket[];
   models: ModelBucket[];
   sessions: SessionSummary[];
+  repeatedUserMessages: RepeatedUserMessage[];
 }
 
 export interface MessageSearchOptions extends SummaryOptions {
