@@ -45,7 +45,7 @@ In the app source panel, use `Choose` to pick files or directories. You can also
 /Users/example/Downloads/sample-session.jsonl
 ```
 
-Click `Apply` to rescan typed paths. Click `Default` to return to `~/.codex/sessions` and `~/.codex/archived_sessions`. Recent custom sources are stored in local app settings.
+Click `Apply` to rescan typed paths. Click `Default` to return to `~/.codex/sessions` and `~/.codex/archived_sessions`. Recent custom sources and date filter choices are stored in local app settings.
 
 ## Message Search
 

@@ -77,7 +77,7 @@ Responsibilities:
 - generate and pass an ephemeral token to the local engine
 - render projects, summaries, sessions, search, and inspection with SwiftUI
 - provide native sidebar, toolbar, table, and inspector behavior
-- provide native file picking, local recent-source settings, packaged app smoke support, and release metadata
+- provide native file picking, local recent-source and date-filter settings, packaged app smoke support, and release metadata
 
 ### Local API Engine
 

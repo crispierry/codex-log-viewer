@@ -28,7 +28,7 @@ Implemented for v0.1:
 - packaged app smoke workflow that verifies engine startup, API access, search, session detail, exports, repeated launch, Finder-style `.app` launch, relocated `.app` launch outside the repo, missing-engine failure diagnostics, and child-process cleanup
 - native UI smoke workflow through macOS accessibility automation using sanitized fixtures and ephemeral settings; it verifies source loading, project/date selection, search, session context, session-scoped search, and export data
 - per-run local API bearer token for data endpoints
-- native source picker, recent source settings, and local-only settings persistence
+- native source picker, recent source settings, date-filter settings, and local-only settings persistence
 - parser fixture coverage for supported event shapes, null token info, malformed lines, unknown payloads, and tool events
 - analytics tests for date/project filtering, diagnostics filtering, model/session search filters, token aggregation, and redacted exports
 - redacted JSON exports by default with explicit raw JSON for private local use

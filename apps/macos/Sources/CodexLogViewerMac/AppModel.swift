@@ -191,6 +191,7 @@ final class AppModel: ObservableObject {
   }
 
   func filtersChanged() {
+    saveSettings()
     clearSelectionState()
     refresh()
   }
@@ -399,6 +400,14 @@ final class AppModel: ObservableObject {
     sourcePaths = Self.stringArray(forKey: DefaultsKeys.sourcePaths)
     recentSourcePaths = Self.stringArray(forKey: DefaultsKeys.recentSourcePaths)
     pathDraft = sourcePaths.joined(separator: "\n")
+    hasSinceFilter = UserDefaults.standard.bool(forKey: DefaultsKeys.hasSinceFilter)
+    hasUntilFilter = UserDefaults.standard.bool(forKey: DefaultsKeys.hasUntilFilter)
+    if let savedSinceDate = Self.date(forKey: DefaultsKeys.sinceDate) {
+      sinceDate = savedSinceDate
+    }
+    if let savedUntilDate = Self.date(forKey: DefaultsKeys.untilDate) {
+      untilDate = savedUntilDate
+    }
   }
 
   private func saveSettings() {
@@ -407,6 +416,10 @@ final class AppModel: ObservableObject {
     }
     UserDefaults.standard.set(sourcePaths, forKey: DefaultsKeys.sourcePaths)
     UserDefaults.standard.set(recentSourcePaths, forKey: DefaultsKeys.recentSourcePaths)
+    UserDefaults.standard.set(hasSinceFilter, forKey: DefaultsKeys.hasSinceFilter)
+    UserDefaults.standard.set(hasUntilFilter, forKey: DefaultsKeys.hasUntilFilter)
+    UserDefaults.standard.set(Self.dateFormatter.string(from: sinceDate), forKey: DefaultsKeys.sinceDate)
+    UserDefaults.standard.set(Self.dateFormatter.string(from: untilDate), forKey: DefaultsKeys.untilDate)
   }
 
   private func scheduleUITestWorkflowIfNeeded(api: LogEngineAPI, filters: LogFilters) {
@@ -578,6 +591,13 @@ final class AppModel: ObservableObject {
     UserDefaults.standard.stringArray(forKey: key) ?? []
   }
 
+  private static func date(forKey key: String) -> Date? {
+    guard let value = UserDefaults.standard.string(forKey: key) else {
+      return nil
+    }
+    return dateFormatter.date(from: value)
+  }
+
   private static func writeStdout(_ message: String) {
     FileHandle.standardOutput.write(Data(message.utf8))
   }
@@ -590,4 +610,8 @@ final class AppModel: ObservableObject {
 private enum DefaultsKeys {
   static let sourcePaths = "sourcePaths"
   static let recentSourcePaths = "recentSourcePaths"
+  static let hasSinceFilter = "hasSinceFilter"
+  static let hasUntilFilter = "hasUntilFilter"
+  static let sinceDate = "sinceDate"
+  static let untilDate = "untilDate"
 }

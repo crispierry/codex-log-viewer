@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Added GitHub Actions CI.
 - Added a native SwiftUI macOS app as the primary product surface.
 - Added project selection, source paths, exports, searchable sessions, and session details to the native app.
+- Added persisted local date filter settings to the native app.
 - Added cross-project message search with project/date/source filtering.
 - Added role, model, and session filters for message search.
 - Added packaged macOS app creation with bundled local engine, bundled Node runtime, app icon, zip artifact, and checksum.
