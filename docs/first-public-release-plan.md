@@ -46,6 +46,27 @@ External release prerequisites:
 - A maintainer should run the private-log parity check locally with a private reference report, without committing private inputs or outputs.
 - PR #8 is blocked only on the configured review requirement before merge/tag.
 
+## Current Completion Audit
+
+This audit reconciles the original work plan with the current implementation. The detailed `Gap` and `Plan` subsections below are retained as the historical work breakdown; this table is the authoritative current status before the first public release.
+
+| Area | Current status | Evidence |
+| --- | --- | --- |
+| Native-only product surface | Complete for v0.1. No web dashboard or Electron shell is shipped. | `README.md`, `docs/architecture.md`, `docs/decisions/0004-native-macos-app.md`, and the absence of a web/Electron app in source. |
+| Packaged macOS app | Complete for source and ad-hoc local artifacts. Official notarized artifact still needs Developer ID/notary credentials. | `scripts/package-macos.mjs`, `npm run release:mac`, `.github/workflows/release.yml`, app metadata/icon files, zip and checksum output. |
+| Packaged app verification | Complete for CI and local release smoke. | `scripts/smoke-packaged-app.mjs`, `.github/workflows/ci.yml`, `docs/ui-test-plan.md`; covers engine startup, health/API access, fixture scan, exports, repeated launch, Finder-style launch, relocated launch, missing-engine diagnostics, and process cleanup. |
+| Native UI automation | Complete for the release-critical workflow. Deeper VoiceOver QA and selection-navigation shortcuts remain post-v0.1 polish. | `scripts/smoke-native-ui.mjs`, accessibility identifiers in `apps/macos/Sources/CodexLogViewerMac/RootView.swift`, and CI `macos-app`. |
+| Local API security | Complete for v0.1. The native app passes an ephemeral token to the local engine and API routes reject unauthenticated requests. | `apps/macos/Sources/CodexLogViewerMac/LocalLogEngineServer.swift`, `apps/macos/Sources/CodexLogViewerMac/LogEngineAPI.swift`, `apps/server/src/index.ts`, `apps/server/test/api.test.mjs`. |
+| Startup conflicts and lifecycle | Complete for v0.1. | `apps/server/test/api.test.mjs`, `apps/server/test/entrypoint.test.mjs`, `scripts/smoke-packaged-app.mjs`, and `LocalLogEngineServer.stop()`. |
+| Native sources and settings | Complete for v0.1. | Source picker/recent-source/date-filter settings in `AppModel.swift` and `RootView.swift`; usage docs describe local settings. |
+| Parser and analytics accuracy | Complete for supported public fixtures and sanitized parity harness. Official release still needs maintainer-local private reference parity. | `fixtures/codex/*.jsonl`, parser/analytics tests, `scripts/check-reference-report.mjs`, `fixtures/codex/sample-reference-summary.json`, and `docs/release-checklist.md`. |
+| Privacy-first exports | Complete for v0.1 aggregate exports. Raw/detail views remain explicitly private. | `packages/analytics/src/export.ts`, analytics tests, `docs/privacy-and-redaction.md`, `docs/usage.md`. |
+| Search and session workflows | Complete for v0.1. Saved searches remain a later enhancement. | Search filters, selected-session scoping, result-to-session context, matching-message highlight, repeated-prompt grouping, and copy actions in analytics and native app code. |
+| UX, accessibility, and recovery | Complete for first public source release. | Empty states, retry action, keyboard shortcuts, and stable accessibility identifiers in the native app; release-critical UI smoke in CI. |
+| Release operations | Complete for repeatable source/tag releases. Official notarized macOS distribution still requires credentials. | `CHANGELOG.md`, `docs/release-checklist.md`, `docs/release-notes-template.md`, `.github/workflows/release.yml`, checksum guidance. |
+
+The remaining gates are external to this branch: human PR review, maintainer-local private parity, Developer ID/notary credentials, then merge/tag/release.
+
 ## Current State
 
 Already done:
@@ -64,6 +85,8 @@ Already done:
 ## P0 Release Blockers
 
 These must be done before publishing a downloadable first version.
+
+The subsections below preserve the original implementation plan and acceptance criteria. See the current completion audit above for the up-to-date state of each blocker.
 
 ### 1. Package A Real macOS App
 
