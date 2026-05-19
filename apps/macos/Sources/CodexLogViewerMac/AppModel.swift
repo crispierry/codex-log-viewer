@@ -1387,7 +1387,14 @@ final class AppModel: ObservableObject {
     else {
       throw AppSmokeError.unexpected("The sample project summary did not match the sanitized fixture.")
     }
+    guard projectSummary.promptIntents.totalMessages == 1,
+      projectSummary.promptIntents.buckets.first?.label == "Testing/verification",
+      projectSummary.promptIntents.buckets.first?.count == 1
+    else {
+      throw AppSmokeError.unexpected("The sample project focus summary did not classify the fixture prompt.")
+    }
     summary = projectSummary
+    selectedSection = .overview
 
     messageQuery = "parser test"
     messageRoleFilter = .all
@@ -1424,6 +1431,7 @@ final class AppModel: ObservableObject {
     )
     guard sentMessagesSearch.totalMatches == 1,
       sentMessagesSearch.results.first?.role == MessageRoleFilter.user.rawValue,
+      sentMessagesSearch.results.first?.promptIntent == "Testing/verification",
       sentMessagesSearch.results.first?.snippet.contains("parser test") == true
     else {
       throw AppSmokeError.unexpected("The UI workflow sent-messages search did not return the fixture prompt.")
@@ -1454,6 +1462,9 @@ final class AppModel: ObservableObject {
     )
     guard detail.messages.contains(where: { $0.content.contains("parser test") }) else {
       throw AppSmokeError.unexpected("The selected search result did not load full session context.")
+    }
+    guard detail.messages.first(where: { $0.content.contains("parser test") })?.promptIntent == "Testing/verification" else {
+      throw AppSmokeError.unexpected("The selected session detail did not expose prompt intent labels.")
     }
     guard let firstUserMessage = SessionInteractionBuilder.userMessageOffsets(in: detail).first,
       let interaction = SessionInteractionBuilder.interaction(
@@ -1659,6 +1670,7 @@ final class AppModel: ObservableObject {
   private static let operationalPromptCategoryOrder = [
     "Code review",
     "Git commands",
+    "Plan approvals",
     "Run app"
   ]
   private static let operationalPromptCategorySet = Set(operationalPromptCategoryOrder)
@@ -1695,8 +1707,11 @@ final class AppModel: ObservableObject {
     Browse
     Choose a project, pick a submitted message, and read the matching Codex interaction.
 
+    Overview
+    Project Focus shows the main types of work in the current project and date range.
+
     Filters
-    Use the date control in the header. Use View > Operational Messages to hide Git, run-app, and code-review prompts. Use View > Show Sessions only when you need the session column.
+    Use the date control in the header. Use View > Operational Messages to hide Git, plan approval, run app, and code review prompts. Use View > Show Sessions only when you need the session column.
 
     Search and Audit
     Search finds messages across the current filters. Audit prepares a reviewed AI worklog for the selected repository.

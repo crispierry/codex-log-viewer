@@ -2,6 +2,7 @@ export { generateAuditMarkdown, mergeAuditMarkdown } from "./audit.js";
 export type { AuditMarkdownOptions, AuditMergeResult, AuditPrivacyMode } from "./audit.js";
 export { redactedProjectSummary, summaryToCsv, summaryToJson } from "./export.js";
 export { listProjects, projectContextForFile, projectContextForSession, projectNameForCwd, sessionsById } from "./project.js";
+export { classifyPromptIntent } from "./prompt-intents.js";
 export {
   loadCorpus,
   normalizeMessage,
@@ -20,6 +21,9 @@ export type {
   MessageSearchSummary,
   ModelBucket,
   ParseCacheMetadata,
+  PromptIntentBucket,
+  PromptIntentCategory,
+  PromptIntentSummary,
   ProjectAlias,
   ProjectListItem,
   ProjectSummary,

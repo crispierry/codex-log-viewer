@@ -673,9 +673,13 @@ struct SentMessageBrowserRow: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
-      Text(formattedDate(message.timestamp))
-        .font(.caption.monospacedDigit())
-        .foregroundStyle(.secondary)
+      HStack(alignment: .firstTextBaseline, spacing: 8) {
+        PromptIntentBadge(key: message.promptIntentKey, label: message.promptIntent)
+        Text(formattedDate(message.timestamp))
+          .font(.caption.monospacedDigit())
+          .foregroundStyle(.secondary)
+        Spacer(minLength: 8)
+      }
       Text(messageDisplayText(message))
         .font(.body)
         .lineLimit(4)
@@ -683,10 +687,7 @@ struct SentMessageBrowserRow: View {
     }
     .padding(10)
     .frame(maxWidth: .infinity, alignment: .leading)
-    .background(
-      isSelected ? Color.accentColor.opacity(0.16) : Color.primary.opacity(0.04),
-      in: RoundedRectangle(cornerRadius: 8)
-    )
+    .promptIntentCardChrome(key: message.promptIntentKey, isSelected: isSelected)
     .contentShape(Rectangle())
   }
 }
@@ -698,10 +699,21 @@ struct SentMessageResultBrowserRow: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
       HStack(alignment: .firstTextBaseline, spacing: 8) {
+        PromptIntentBadge(key: message.promptIntentKey, label: message.promptIntent)
+        Label {
+          Text(message.project)
+            .lineLimit(1)
+            .truncationMode(.middle)
+        } icon: {
+          Image(systemName: "folder")
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+
         Text(formattedDate(message.timestamp))
           .font(.caption.monospacedDigit())
           .foregroundStyle(.secondary)
-        Spacer()
+        Spacer(minLength: 8)
         if let model = message.model, !model.isEmpty {
           Text(model)
             .font(.caption)
@@ -713,25 +725,73 @@ struct SentMessageResultBrowserRow: View {
         .font(.body)
         .lineLimit(4)
         .frame(maxWidth: .infinity, alignment: .leading)
-      HStack(spacing: 8) {
-        Label(message.project, systemImage: "folder")
-        if let category = message.category, !category.isEmpty {
-          Text(category)
-        }
-        Text(String(message.sessionId.prefix(8)))
-          .font(.caption.monospacedDigit())
-      }
-      .font(.caption)
-      .foregroundStyle(.secondary)
-      .lineLimit(1)
     }
     .padding(10)
     .frame(maxWidth: .infinity, alignment: .leading)
-    .background(
-      isSelected ? Color.accentColor.opacity(0.16) : Color.primary.opacity(0.04),
-      in: RoundedRectangle(cornerRadius: 8)
-    )
+    .promptIntentCardChrome(key: message.promptIntentKey, isSelected: isSelected)
     .contentShape(Rectangle())
+  }
+}
+
+struct PromptIntentBadge: View {
+  let key: String?
+  let label: String?
+
+  var body: some View {
+    if let label, !label.isEmpty {
+      HStack(spacing: 5) {
+        Circle()
+          .fill(projectFocusColor(for: key ?? ""))
+          .frame(width: 6, height: 6)
+        Text(label)
+          .lineLimit(1)
+      }
+      .font(.caption)
+      .fontWeight(.medium)
+      .foregroundStyle(.primary)
+      .padding(.horizontal, 7)
+      .padding(.vertical, 3)
+      .background(projectFocusColor(for: key ?? "").opacity(0.14), in: Capsule())
+      .overlay(
+        Capsule()
+          .stroke(projectFocusColor(for: key ?? "").opacity(0.25), lineWidth: 1)
+      )
+      .accessibilityLabel("Prompt category: \(label)")
+    }
+  }
+}
+
+private struct PromptIntentCardChrome: ViewModifier {
+  let key: String?
+  let isSelected: Bool
+  var isHighlighted = false
+
+  private var tint: Color {
+    projectFocusColor(for: key ?? "")
+  }
+
+  func body(content: Content) -> some View {
+    content
+      .background(tint.opacity(isSelected ? 0.16 : 0.10), in: RoundedRectangle(cornerRadius: 8))
+      .overlay(alignment: .leading) {
+        Rectangle()
+          .fill(tint.opacity(0.65))
+          .frame(width: 3)
+      }
+      .overlay {
+        RoundedRectangle(cornerRadius: 8)
+          .stroke(
+            isSelected || isHighlighted ? Color.accentColor.opacity(0.45) : tint.opacity(0.18),
+            lineWidth: 1
+          )
+      }
+      .clipShape(RoundedRectangle(cornerRadius: 8))
+  }
+}
+
+private extension View {
+  func promptIntentCardChrome(key: String?, isSelected: Bool = false, isHighlighted: Bool = false) -> some View {
+    modifier(PromptIntentCardChrome(key: key, isSelected: isSelected, isHighlighted: isHighlighted))
   }
 }
 
@@ -824,8 +884,8 @@ struct OverviewSectionView: View {
 
         MetricsGrid(summary: model.summary)
         if let summary = model.summary, summary.totals.sessions > 0 {
+          ProjectFocusView(summary: summary.promptIntents)
           ChartsSection(summary: summary)
-          RepeatedPromptsView(messages: summary.repeatedUserMessages)
         }
       }
       .padding(20)
@@ -1326,6 +1386,239 @@ private enum BucketDateFormatters {
   }()
 }
 
+struct ProjectFocusView: View {
+  let summary: PromptIntentSummary
+  @State private var showsAllCategories = false
+
+  private var buckets: [PromptIntentBucket] {
+    summary.buckets.filter { $0.count > 0 }
+  }
+
+  private var visibleBuckets: [PromptIntentBucket] {
+    showsAllCategories ? buckets : Array(buckets.prefix(7))
+  }
+
+  private var leadingBucket: PromptIntentBucket? {
+    buckets.first
+  }
+
+  var body: some View {
+    GroupBox("Project Focus") {
+      if summary.totalMessages == 0 {
+        ContentUnavailableView(
+          "No Prompt Activity",
+          systemImage: "text.bubble",
+          description: Text("No submitted user messages are in the current filters.")
+        )
+        .frame(maxWidth: .infinity, minHeight: 160)
+      } else {
+        VStack(alignment: .leading, spacing: 16) {
+          projectFocusHeader
+
+          ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 22) {
+              ProjectFocusDonutChart(buckets: buckets, totalMessages: summary.totalMessages)
+                .frame(width: 220, height: 220)
+              projectFocusCategoryList
+            }
+
+            VStack(alignment: .leading, spacing: 16) {
+              ProjectFocusDonutChart(buckets: buckets, totalMessages: summary.totalMessages)
+                .frame(maxWidth: .infinity, minHeight: 220, maxHeight: 240)
+              projectFocusCategoryList
+            }
+          }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, 4)
+      }
+    }
+    .accessibilityIdentifier("project-focus-section")
+  }
+
+  private var projectFocusHeader: some View {
+    HStack(alignment: .firstTextBaseline) {
+      VStack(alignment: .leading, spacing: 4) {
+        Text("\(summary.totalMessages.formatted()) prompts analyzed")
+          .font(.headline)
+        Text(classificationSubtitle)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
+
+      Spacer(minLength: 16)
+
+      if let leadingBucket {
+        HStack(spacing: 6) {
+          Circle()
+            .fill(projectFocusColor(for: leadingBucket.key))
+            .frame(width: 8, height: 8)
+          Text("Top: \(leadingBucket.label)")
+            .font(.caption)
+            .fontWeight(.semibold)
+            .lineLimit(1)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(.quaternary, in: Capsule())
+      }
+    }
+  }
+
+  private var classificationSubtitle: String {
+    if summary.unclassifiedMessages == 0 {
+      return "\(summary.classifiedMessages.formatted()) classified by work type"
+    }
+    return "\(summary.classifiedMessages.formatted()) classified · \(summary.unclassifiedMessages.formatted()) other"
+  }
+
+  private var projectFocusCategoryList: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      ForEach(visibleBuckets) { bucket in
+        ProjectFocusCategoryRow(bucket: bucket, totalMessages: summary.totalMessages)
+      }
+
+      if buckets.count > 7 {
+        Button {
+          withAnimation(.snappy(duration: 0.18)) {
+            showsAllCategories.toggle()
+          }
+        } label: {
+          Label(
+            showsAllCategories
+              ? "Show fewer categories"
+              : "Show all \(buckets.count.formatted()) categories",
+            systemImage: showsAllCategories ? "chevron.up.circle" : "chevron.down.circle"
+          )
+        }
+        .buttonStyle(.plain)
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .accessibilityIdentifier("project-focus-toggle-all-categories")
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .accessibilityIdentifier("project-focus-category-list")
+  }
+}
+
+struct ProjectFocusDonutChart: View {
+  let buckets: [PromptIntentBucket]
+  let totalMessages: Int
+
+  var body: some View {
+    ZStack {
+      Chart(buckets) { bucket in
+        SectorMark(
+          angle: .value("Prompts", bucket.count),
+          innerRadius: .ratio(0.62),
+          angularInset: 1.2
+        )
+        .cornerRadius(4)
+        .foregroundStyle(projectFocusColor(for: bucket.key))
+      }
+      .chartLegend(.hidden)
+      .accessibilityIdentifier("project-focus-pie-chart")
+
+      VStack(spacing: 2) {
+        Text(totalMessages.formatted())
+          .font(.title3.monospacedDigit())
+          .fontWeight(.semibold)
+        Text("prompts")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
+      .accessibilityHidden(true)
+    }
+  }
+}
+
+struct ProjectFocusCategoryRow: View {
+  let bucket: PromptIntentBucket
+  let totalMessages: Int
+
+  private var percentageText: String {
+    "\(bucket.percentage.formatted(.number.precision(.fractionLength(1))))%"
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 6) {
+      HStack(alignment: .firstTextBaseline, spacing: 8) {
+        Circle()
+          .fill(projectFocusColor(for: bucket.key))
+          .frame(width: 8, height: 8)
+        Text(bucket.label)
+          .font(.subheadline)
+          .fontWeight(.semibold)
+          .lineLimit(1)
+        Spacer(minLength: 8)
+        Text("\(bucket.count.formatted()) · \(percentageText)")
+          .font(.caption.monospacedDigit())
+          .foregroundStyle(.secondary)
+      }
+
+      ProgressView(value: Double(bucket.count), total: Double(max(totalMessages, 1)))
+        .tint(projectFocusColor(for: bucket.key))
+        .frame(height: 6)
+
+      HStack(alignment: .firstTextBaseline, spacing: 8) {
+        Text("\(bucket.sessionCount.formatted()) \(bucket.sessionCount == 1 ? "session" : "sessions")")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+
+        if let example = bucket.examples.first {
+          Text(example)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .textSelection(.enabled)
+        }
+      }
+    }
+    .padding(.vertical, 2)
+  }
+}
+
+private func projectFocusColor(for key: String) -> Color {
+  switch key {
+  case "feature-design":
+    return .cyan
+  case "implementation":
+    return .accentColor
+  case "bug-fixes":
+    return .red
+  case "git-commands":
+    return .purple
+  case "deploy-release":
+    return .orange
+  case "run-build-app":
+    return .green
+  case "code-review-qa":
+    return .blue
+  case "planning-strategy":
+    return .orange
+  case "research":
+    return .mint
+  case "documentation":
+    return .brown
+  case "testing-verification":
+    return .indigo
+  case "refactor-cleanup":
+    return .pink
+  case "content-creation":
+    return .teal
+  case "data-analysis":
+    return .yellow
+  case "feedback-context":
+    return .secondary
+  case "plan-approvals":
+    return .gray
+  default:
+    return .secondary
+  }
+}
+
 struct RepeatedPromptsView: View {
   @EnvironmentObject private var model: AppModel
 
@@ -1594,12 +1887,18 @@ struct MessageSearchView: View {
               .width(min: 118, ideal: 132, max: 146)
 
               TableColumn("Message") { result in
-                HighlightedSearchText(
-                  text: result.snippet,
-                  query: model.messageQuery,
-                  lineLimit: 2,
-                  collapsesWhitespace: true
-                )
+                VStack(alignment: .leading, spacing: 4) {
+                  if let promptIntent = result.promptIntent, !promptIntent.isEmpty {
+                    PromptIntentBadge(key: result.promptIntentKey, label: promptIntent)
+                  }
+                  HighlightedSearchText(
+                    text: result.snippet,
+                    query: model.messageQuery,
+                    lineLimit: 2,
+                    collapsesWhitespace: true
+                  )
+                }
+                .padding(.vertical, 2)
               }
 
               TableColumn("Project") { result in
@@ -1665,23 +1964,44 @@ struct SearchResultDetailView: View {
               .font(.headline)
 
             ScrollView {
-              HighlightedSearchText(
-                text: result.content,
-                query: model.messageQuery,
-                lineLimit: nil,
-                collapsesWhitespace: false
-              )
-                .font(.body)
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(8)
+              VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                  PromptIntentBadge(key: result.promptIntentKey, label: result.promptIntent)
+                  Label {
+                    Text(result.project)
+                      .lineLimit(1)
+                      .truncationMode(.middle)
+                  } icon: {
+                    Image(systemName: "folder")
+                  }
+                  .font(.caption)
+                  .foregroundStyle(.secondary)
+                  Spacer(minLength: 8)
+                  Text(formattedDate(result.timestamp))
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                }
+                HighlightedSearchText(
+                  text: result.content,
+                  query: model.messageQuery,
+                  lineLimit: nil,
+                  collapsesWhitespace: false
+                )
+                  .font(.body)
+                  .textSelection(.enabled)
+                  .frame(maxWidth: .infinity, alignment: .leading)
+              }
+              .padding(10)
+              .promptIntentCardChrome(key: result.promptIntentKey)
             }
             .frame(maxWidth: .infinity, minHeight: 96, maxHeight: 220, alignment: .leading)
-            .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
             .accessibilityIdentifier("selected-search-message-preview")
 
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), alignment: .leading)], alignment: .leading, spacing: 8) {
               SearchResultMetadataItem(label: "Date/Time", value: formattedDate(result.timestamp))
+              if let promptIntent = result.promptIntent, !promptIntent.isEmpty {
+                SearchResultMetadataItem(label: "Category", value: promptIntent)
+              }
               SearchResultMetadataItem(label: "Project", value: result.project)
               SearchResultMetadataItem(label: "Role", value: result.role.capitalized)
               SearchResultMetadataItem(label: "Session Day", value: result.dateKey ?? "")
@@ -2079,6 +2399,9 @@ struct SearchResultInspector: View {
           .font(.title3)
           .fontWeight(.semibold)
         LabeledContent("Role", value: result.role.capitalized)
+        if let promptIntent = result.promptIntent, !promptIntent.isEmpty {
+          LabeledContent("Category", value: promptIntent)
+        }
         LabeledContent("Project", value: result.project)
         LabeledContent("Session", value: result.sessionId)
         LabeledContent("Time", value: formattedDate(result.timestamp))
@@ -2108,8 +2431,30 @@ struct SearchResultInspector: View {
         .buttonStyle(.bordered)
 
         Divider()
-        Text(result.content)
-          .textSelection(.enabled)
+        VStack(alignment: .leading, spacing: 8) {
+          HStack(alignment: .firstTextBaseline, spacing: 8) {
+            PromptIntentBadge(key: result.promptIntentKey, label: result.promptIntent)
+            Label {
+              Text(result.project)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            } icon: {
+              Image(systemName: "folder")
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            Spacer(minLength: 8)
+            Text(formattedDate(result.timestamp))
+              .font(.caption.monospacedDigit())
+              .foregroundStyle(.secondary)
+          }
+          Text(result.content)
+            .textSelection(.enabled)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .promptIntentCardChrome(key: result.promptIntentKey)
 
         Divider()
         InspectorSectionTitle("Session Context")
@@ -2257,9 +2602,13 @@ struct SessionUserMessagesInspector: View {
 
   private func userMessageRow(message: MessageDetail, isSelected: Bool) -> some View {
     VStack(alignment: .leading, spacing: 6) {
-      Text(formattedDate(message.timestamp))
-        .font(.caption.monospacedDigit())
-        .foregroundStyle(.secondary)
+      HStack(alignment: .firstTextBaseline, spacing: 8) {
+        PromptIntentBadge(key: message.promptIntentKey, label: message.promptIntent)
+        Text(formattedDate(message.timestamp))
+          .font(.caption.monospacedDigit())
+          .foregroundStyle(.secondary)
+        Spacer(minLength: 8)
+      }
       Text(messageDisplayText(message))
         .font(.body)
         .lineLimit(4)
@@ -2267,18 +2616,10 @@ struct SessionUserMessagesInspector: View {
     }
     .padding(10)
     .frame(maxWidth: .infinity, alignment: .leading)
-    .background(
-      rowBackground(isSelected: isSelected),
-      in: RoundedRectangle(cornerRadius: 8)
-    )
-    .overlay(
-      RoundedRectangle(cornerRadius: 8)
-        .stroke(
-          isSelected || highlightedMessageIndex == messageIndex(message)
-            ? Color.accentColor.opacity(0.45)
-            : Color.clear,
-          lineWidth: 1
-        )
+    .promptIntentCardChrome(
+      key: message.promptIntentKey,
+      isSelected: isSelected,
+      isHighlighted: highlightedMessageIndex == messageIndex(message)
     )
   }
 
@@ -2296,10 +2637,6 @@ struct SessionUserMessagesInspector: View {
     .padding(10)
     .frame(maxWidth: .infinity, alignment: .leading)
     .background(Color.green.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
-  }
-
-  private func rowBackground(isSelected: Bool) -> Color {
-    isSelected ? Color.accentColor.opacity(0.16) : Color.primary.opacity(0.05)
   }
 
   private func messageIndex(_ message: MessageDetail) -> Int? {
@@ -2320,7 +2657,9 @@ struct CodexInteractionView: View {
         title: "User Message",
         subtitle: formattedDate(interaction.userMessage.timestamp),
         text: messageDisplayText(interaction.userMessage),
-        tint: .green
+        tint: .green,
+        promptIntentKey: interaction.userMessage.promptIntentKey,
+        promptIntent: interaction.userMessage.promptIntent
       )
 
       InspectorSectionTitle("Codex Response")
@@ -2410,6 +2749,8 @@ struct InteractionMessageCard: View {
   let subtitle: String
   let text: String
   let tint: Color
+  var promptIntentKey: String?
+  var promptIntent: String?
   var monospaced = false
 
   private var bodyFont: Font {
@@ -2423,6 +2764,7 @@ struct InteractionMessageCard: View {
           .font(.caption)
           .fontWeight(.semibold)
           .foregroundStyle(tint)
+        PromptIntentBadge(key: promptIntentKey, label: promptIntent)
         Spacer()
         Text(subtitle)
           .font(.caption.monospacedDigit())

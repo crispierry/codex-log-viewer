@@ -202,6 +202,7 @@ test("summarizeParsedCorpus groups repeated user prompts without exposing them i
   assert.equal(redacted.repeatedUserMessages[0]?.id, "[redacted]");
   assert.equal(redacted.repeatedUserMessages[0]?.sample, "[redacted]");
   assert.equal(redacted.repeatedUserMessages[0]?.variants[0]?.sample, "[redacted]");
+  assert.equal(redacted.promptIntents.buckets[0]?.examples[0], "[redacted]");
 });
 
 test("summarizeParsedCorpus groups command-style prompt families", () => {
@@ -222,16 +223,19 @@ test("summarizeParsedCorpus groups command-style prompt families", () => {
     message({ content: "close work tree", timestamp: "2026-01-01T00:03:00.000Z" }, 4),
     message({ content: "create a new branch", timestamp: "2026-01-01T00:04:00.000Z" }, 5),
     message({ content: "Can you make a commit please", timestamp: "2026-01-01T00:05:00.000Z" }, 6),
-    message({ content: "run the app", timestamp: "2026-01-01T00:06:00.000Z" }, 7),
-    message({ content: "start the server", timestamp: "2026-01-01T00:07:00.000Z" }, 8),
-    message({ content: "OK open the app for me", timestamp: "2026-01-01T00:08:00.000Z" }, 9),
-    message({ content: "Are all files committed?", timestamp: "2026-01-01T00:09:00.000Z" }, 10),
-    message({ content: "Have all changes been pushed?", timestamp: "2026-01-01T00:10:00.000Z" }, 11),
-    message({ content: "is repo clean?", timestamp: "2026-01-01T00:11:00.000Z" }, 12),
-    message({ content: "anything uncommitted?", timestamp: "2026-01-01T00:12:00.000Z" }, 13),
-    message({ content: "do a code review", timestamp: "2026-01-01T00:13:00.000Z" }, 14),
-    message({ content: "review the diff", timestamp: "2026-01-01T00:14:00.000Z" }, 15),
-    message({ content: "inspect the changes", timestamp: "2026-01-01T00:15:00.000Z" }, 16)
+    message({ content: "publish", timestamp: "2026-01-01T00:06:00.000Z" }, 7),
+    message({ content: "Deploy to production", timestamp: "2026-01-01T00:07:00.000Z" }, 8),
+    message({ content: "publish to origin", timestamp: "2026-01-01T00:08:00.000Z" }, 9),
+    message({ content: "run the app", timestamp: "2026-01-01T00:09:00.000Z" }, 10),
+    message({ content: "start the server", timestamp: "2026-01-01T00:10:00.000Z" }, 11),
+    message({ content: "OK open the app for me", timestamp: "2026-01-01T00:11:00.000Z" }, 12),
+    message({ content: "Are all files committed?", timestamp: "2026-01-01T00:12:00.000Z" }, 13),
+    message({ content: "Have all changes been pushed?", timestamp: "2026-01-01T00:13:00.000Z" }, 14),
+    message({ content: "is repo clean?", timestamp: "2026-01-01T00:14:00.000Z" }, 15),
+    message({ content: "anything uncommitted?", timestamp: "2026-01-01T00:15:00.000Z" }, 16),
+    message({ content: "do a code review", timestamp: "2026-01-01T00:16:00.000Z" }, 17),
+    message({ content: "review the diff", timestamp: "2026-01-01T00:17:00.000Z" }, 18),
+    message({ content: "inspect the changes", timestamp: "2026-01-01T00:18:00.000Z" }, 19)
   ];
   const corpus = {
     files: messages.map((item) => ({
@@ -263,12 +267,12 @@ test("summarizeParsedCorpus groups command-style prompt families", () => {
   };
 
   const summary = summarizeParsedCorpus(corpus, { project: "sample-app" });
-  assert.equal(summary.totals.userMessages, 16);
+  assert.equal(summary.totals.userMessages, 19);
   assert.equal(summary.totals.uniqueUserMessages, 3);
   assert.equal(summary.messagesByDay[0]?.uniqueCount, 3);
 
   const gitGroup = summary.repeatedUserMessages.find((group) => group.sample === "Git commands");
-  assert.equal(gitGroup?.count, 10);
+  assert.equal(gitGroup?.count, 13);
   assert.deepEqual(
     gitGroup?.variants.map((variant) => variant.sample),
     [
@@ -276,6 +280,9 @@ test("summarizeParsedCorpus groups command-style prompt families", () => {
       "is repo clean?",
       "Have all changes been pushed?",
       "Are all files committed?",
+      "publish to origin",
+      "Deploy to production",
+      "publish",
       "Can you make a commit please",
       "create a new branch",
       "close work tree",
@@ -301,6 +308,8 @@ test("summarizeParsedCorpus groups command-style prompt families", () => {
 
   const search = searchMessages(corpus, { query: "", role: "user", submittedOnly: true });
   assert.equal(search.results.find((result) => result.content === "do a code review")?.category, "Code review");
+  assert.equal(search.results.find((result) => result.content === "do a code review")?.promptIntent, "Code review/QA");
+  assert.equal(search.results.find((result) => result.content === "publish")?.promptIntent, "Deploy/release");
 
   const filteredSearch = searchMessages(corpus, {
     query: "",
@@ -308,7 +317,7 @@ test("summarizeParsedCorpus groups command-style prompt families", () => {
     submittedOnly: true,
     hiddenCategories: ["Code review", "Run app"]
   });
-  assert.equal(filteredSearch.totalMatches, 10);
+  assert.equal(filteredSearch.totalMatches, 13);
   assert.equal(filteredSearch.results.some((result) => result.category === "Code review"), false);
   assert.equal(filteredSearch.results.some((result) => result.category === "Run app"), false);
 });
@@ -330,7 +339,10 @@ test("summarizeParsedCorpus groups short plan approval prompt families", () => {
     message({ content: "yeah", timestamp: "2026-01-01T00:02:00.000Z" }, 3),
     message({ content: "go ahead", timestamp: "2026-01-01T00:03:00.000Z" }, 4),
     message({ content: "sounds good", timestamp: "2026-01-01T00:04:00.000Z" }, 5),
-    message({ content: "yes, also add filtering", timestamp: "2026-01-01T00:05:00.000Z" }, 6)
+    message({ content: "Execute", timestamp: "2026-01-01T00:05:00.000Z" }, 6),
+    message({ content: "Do that", timestamp: "2026-01-01T00:06:00.000Z" }, 7),
+    message({ content: "execute the plan", timestamp: "2026-01-01T00:07:00.000Z" }, 8),
+    message({ content: "yes, also add filtering", timestamp: "2026-01-01T00:08:00.000Z" }, 9)
   ];
   const corpus = {
     files: messages.map((item) => ({
@@ -362,17 +374,127 @@ test("summarizeParsedCorpus groups short plan approval prompt families", () => {
   };
 
   const summary = summarizeParsedCorpus(corpus, { project: "sample-app" });
-  assert.equal(summary.totals.userMessages, 6);
+  assert.equal(summary.totals.userMessages, 9);
   assert.equal(summary.totals.uniqueUserMessages, 2);
   assert.equal(summary.messagesByDay[0]?.uniqueCount, 2);
 
   const approvalGroup = summary.repeatedUserMessages.find((group) => group.sample === "Plan approvals");
   assert.equal(approvalGroup?.category, "Plan approvals");
-  assert.equal(approvalGroup?.count, 5);
+  assert.equal(approvalGroup?.count, 8);
   assert.deepEqual(
     approvalGroup?.variants.map((variant) => variant.sample),
-    ["sounds good", "go ahead", "yeah", "Yes please.", "yes"]
+    ["execute the plan", "Do that", "Execute", "sounds good", "go ahead", "yeah", "Yes please.", "yes"]
   );
+
+  const filteredSearch = searchMessages(corpus, {
+    query: "",
+    role: "user",
+    submittedOnly: true,
+    hiddenCategories: ["Plan approvals"]
+  });
+  assert.equal(filteredSearch.totalMatches, 1);
+  assert.equal(filteredSearch.results[0]?.content, "yes, also add filtering");
+  assert.equal(filteredSearch.results[0]?.promptIntent, "Feature design");
+});
+
+test("summarizeParsedCorpus classifies project focus prompt intents accurately", () => {
+  const message = ({ content, timestamp }, index) => ({
+    filePath: `intent-session-${index}.jsonl`,
+    sessionId: `intent-session-${index}`,
+    timestamp,
+    role: "user",
+    sourceEvent: "event_msg.user_message",
+    content,
+    imagesCount: 0,
+    localImagesCount: 0
+  });
+  const messages = [
+    message(
+      {
+        content: "Act as a principal designer and improve the visibility of this section",
+        timestamp: "2026-01-01T12:00:00.000Z"
+      },
+      1
+    ),
+    message({ content: "Fix this broken date picker bug", timestamp: "2026-01-01T12:01:00.000Z" }, 2),
+    message({ content: "push to origin", timestamp: "2026-01-01T12:02:00.000Z" }, 3),
+    message({ content: "Deploy to production", timestamp: "2026-01-01T12:03:00.000Z" }, 4),
+    message({ content: "relaunch the packaged app", timestamp: "2026-01-01T12:04:00.000Z" }, 5),
+    message({ content: "do a code review", timestamp: "2026-01-01T12:05:00.000Z" }, 6),
+    message({ content: "investigate why the cache is stale", timestamp: "2026-01-01T12:06:00.000Z" }, 7),
+    message({ content: "update the usage guide", timestamp: "2026-01-01T12:07:00.000Z" }, 8),
+    message({ content: "run the accessibility check", timestamp: "2026-01-01T12:08:00.000Z" }, 9),
+    message({ content: "declutter the sidebar", timestamp: "2026-01-01T12:09:00.000Z" }, 10),
+    message({ content: "Do that", timestamp: "2026-01-01T12:10:00.000Z" }, 11),
+    message({ content: "thanks for the update", timestamp: "2026-01-01T12:11:00.000Z" }, 12),
+    message({ content: "Please implement this", timestamp: "2026-01-01T12:12:00.000Z" }, 13),
+    message({ content: "Do we need the sessions column?", timestamp: "2026-01-01T12:13:00.000Z" }, 14),
+    message({ content: "Generate a logo image", timestamp: "2026-01-01T12:14:00.000Z" }, 15),
+    message({ content: "Show the metrics as a pie chart", timestamp: "2026-01-01T12:15:00.000Z" }, 16),
+    message({ content: "publish the release", timestamp: "2026-01-02T12:00:00.000Z" }, 17)
+  ];
+  const corpus = {
+    files: messages.map((item) => ({
+      filePath: item.filePath,
+      sessionId: item.sessionId,
+      lineCount: 1,
+      sessions: [],
+      turns: [],
+      messages: [],
+      tokenUsage: [],
+      taskTimings: [],
+      toolEvents: [],
+      unknownEvents: [],
+      warnings: []
+    })),
+    sessions: messages.map((item) => ({
+      filePath: item.filePath,
+      sessionId: item.sessionId,
+      cwd: "/tmp/sample-app",
+      timestamp: item.timestamp
+    })),
+    turns: [],
+    messages,
+    tokenUsage: [],
+    taskTimings: [],
+    toolEvents: [],
+    unknownEvents: [],
+    warnings: []
+  };
+
+  const summary = summarizeParsedCorpus(corpus, {
+    project: "sample-app",
+    since: "2026-01-01",
+    until: "2026-01-01"
+  });
+  const buckets = new Map(summary.promptIntents.buckets.map((bucket) => [bucket.label, bucket]));
+
+  assert.equal(summary.promptIntents.totalMessages, 16);
+  assert.equal(summary.promptIntents.classifiedMessages, 16);
+  assert.equal(summary.promptIntents.unclassifiedMessages, 0);
+  assert.equal(buckets.get("Feature design")?.count, 1);
+  assert.equal(buckets.get("Bug fixes")?.count, 1);
+  assert.equal(buckets.get("Git commands")?.count, 1);
+  assert.equal(buckets.get("Deploy/release")?.count, 1);
+  assert.equal(buckets.get("Run/build app")?.count, 1);
+  assert.equal(buckets.get("Code review/QA")?.count, 1);
+  assert.equal(buckets.get("Research")?.count, 1);
+  assert.equal(buckets.get("Documentation")?.count, 1);
+  assert.equal(buckets.get("Testing/verification")?.count, 1);
+  assert.equal(buckets.get("Refactor/cleanup")?.count, 1);
+  assert.equal(buckets.get("Plan approvals")?.count, 1);
+  assert.equal(buckets.get("Feedback/context")?.count, 1);
+  assert.equal(buckets.get("Implementation")?.count, 1);
+  assert.equal(buckets.get("Planning/strategy")?.count, 1);
+  assert.equal(buckets.get("Content creation")?.count, 1);
+  assert.equal(buckets.get("Data/metrics")?.count, 1);
+  assert.equal(buckets.get("Deploy/release")?.examples[0], "Deploy to production");
+  assert.equal(buckets.get("Deploy/release")?.percentage, 6.3);
+
+  const unfilteredSummary = summarizeParsedCorpus(corpus, { project: "sample-app" });
+  const unfilteredBuckets = new Map(unfilteredSummary.promptIntents.buckets.map((bucket) => [bucket.label, bucket]));
+  assert.equal(unfilteredSummary.promptIntents.totalMessages, 17);
+  assert.equal(unfilteredBuckets.get("Deploy/release")?.count, 2);
 });
 
 test("summarizeParsedCorpus counts automation prompts separately from sent user messages", () => {

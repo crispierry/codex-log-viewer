@@ -5,6 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   generateAuditMarkdown,
+  classifyPromptIntent,
   loadCorpus,
   mergeAuditMarkdown,
   searchMessages,
@@ -142,12 +143,19 @@ async function handleRequest(
         lineCount: file.lineCount
       },
       turns: file.turns,
-      messages: file.messages.map((message) => ({
-        ...message,
-        category: message.sourceEvent === "event_msg.user_message"
-          ? userMessageCategoryLabel(message.content)
-          : undefined
-      })),
+      messages: file.messages.map((message) => {
+        const promptIntent = message.sourceEvent === "event_msg.user_message"
+          ? classifyPromptIntent(message.content)
+          : undefined;
+        return {
+          ...message,
+          category: message.sourceEvent === "event_msg.user_message"
+            ? userMessageCategoryLabel(message.content)
+            : undefined,
+          promptIntentKey: promptIntent?.key,
+          promptIntent: promptIntent?.label
+        };
+      }),
       tokenUsage: file.tokenUsage,
       taskTimings: file.taskTimings,
       toolEvents: file.toolEvents,

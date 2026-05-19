@@ -309,6 +309,7 @@ struct ProjectSummary: Decodable {
   let tokensByDay: [DateBucket]
   let models: [ModelBucket]
   let sessions: [SessionSummary]
+  let promptIntents: PromptIntentSummary
   let repeatedUserMessages: [RepeatedUserMessage]
 }
 
@@ -388,6 +389,27 @@ struct RepeatedUserMessageVariant: Decodable, Hashable {
   let lastSeen: String?
 }
 
+struct PromptIntentSummary: Decodable, Hashable {
+  let totalMessages: Int
+  let classifiedMessages: Int
+  let unclassifiedMessages: Int
+  let buckets: [PromptIntentBucket]
+}
+
+struct PromptIntentBucket: Decodable, Identifiable, Hashable {
+  let key: String
+  let label: String
+  let count: Int
+  let percentage: Double
+  let sessionCount: Int
+  let projects: [String]
+  let examples: [String]
+  let firstSeen: String?
+  let lastSeen: String?
+
+  var id: String { key }
+}
+
 struct MessageSearchSummary: Decodable {
   let query: String
   let project: String
@@ -411,6 +433,8 @@ struct MessageSearchResult: Decodable, Identifiable, Hashable {
   let role: String
   let sourceEvent: String
   let category: String?
+  let promptIntentKey: String?
+  let promptIntent: String?
   let snippet: String
   let content: String
 }
@@ -444,6 +468,8 @@ struct MessageDetail: Decodable, Hashable {
   let role: String
   let sourceEvent: String
   let category: String?
+  let promptIntentKey: String?
+  let promptIntent: String?
   let content: String
   let lineNumber: Int?
   let turnId: String?

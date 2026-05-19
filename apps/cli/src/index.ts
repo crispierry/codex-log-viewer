@@ -201,6 +201,8 @@ function printSummary(summary: ProjectSummary): void {
       ["Assistant messages", summary.totals.assistantMessages],
       ["Unique user messages", summary.totals.uniqueUserMessages],
       ["Repeated user prompts", summary.repeatedUserMessages.length],
+      ["Classified prompt intents", summary.promptIntents.classifiedMessages],
+      ["Unclassified prompt intents", summary.promptIntents.unclassifiedMessages],
       ["Input tokens", formatNumber(summary.tokens.inputTokens)],
       ["Cached input tokens", formatNumber(summary.tokens.cachedInputTokens)],
       ["Fresh input tokens", formatNumber(summary.tokens.freshInputTokens)],
@@ -217,6 +219,18 @@ function printSummary(summary: ProjectSummary): void {
     printTable(
       ["Model", "Turns", "Tokens"],
       summary.models.map((model) => [model.model, model.turns, formatNumber(model.tokens.totalTokens)])
+    );
+  }
+
+  if (summary.promptIntents.buckets.length > 0) {
+    process.stdout.write("\nProject Focus\n");
+    printTable(
+      ["Category", "Prompts", "Share"],
+      summary.promptIntents.buckets.map((bucket) => [
+        bucket.label,
+        formatNumber(bucket.count),
+        `${bucket.percentage.toFixed(1)}%`
+      ])
     );
   }
 }

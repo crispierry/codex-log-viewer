@@ -193,6 +193,11 @@ test("message search and session detail expose operational prompt categories", a
     assert.equal(search.status, 200);
     const searchBody = await search.json();
     assert.equal(searchBody.search.results.find((message) => message.content === "commit")?.category, "Git commands");
+    assert.equal(searchBody.search.results.find((message) => message.content === "commit")?.promptIntent, "Git commands");
+    assert.equal(
+      searchBody.search.results.find((message) => message.content === "make the sidebar clearer")?.promptIntent,
+      "Implementation"
+    );
 
     const filteredSearch = await fetch(
       `${server.url}/api/messages/search?role=user&submittedOnly=true&hiddenCategory=${encodeURIComponent("Git commands")}`,
@@ -203,10 +208,20 @@ test("message search and session detail expose operational prompt categories", a
     assert.equal(filteredSearchBody.search.totalMatches, 1);
     assert.equal(filteredSearchBody.search.results[0]?.content, "make the sidebar clearer");
 
+    const summary = await fetch(`${server.url}/api/summary?project=sample-app`, { headers });
+    assert.equal(summary.status, 200);
+    const summaryBody = await summary.json();
+    assert.equal(summaryBody.summary.promptIntents.totalMessages, 2);
+    assert.equal(
+      summaryBody.summary.promptIntents.buckets.find((bucket) => bucket.label === "Git commands")?.count,
+      1
+    );
+
     const detail = await fetch(`${server.url}/api/session?sessionId=operational-categories-session`, { headers });
     assert.equal(detail.status, 200);
     const detailBody = await detail.json();
     assert.equal(detailBody.messages.find((message) => message.content === "commit")?.category, "Git commands");
+    assert.equal(detailBody.messages.find((message) => message.content === "commit")?.promptIntent, "Git commands");
   } finally {
     await server.close();
     await rm(tempDir, { recursive: true, force: true });

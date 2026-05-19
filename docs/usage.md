@@ -22,7 +22,7 @@ From the app you can:
 - add custom files or directories from the native `Logs` menu
 - select a project from the sidebar
 - use Browse to move from project to submitted message to Codex interaction, with sessions available as an optional view
-- use Overview for metrics, charts, and repeated prompts for the selected project
+- use Overview for metrics, charts, and Project Focus prompt categories for the selected project
 - use Search for cross-project or project-filtered message search
 - use Audit to generate, review, smart-merge, and approve `docs/ai-worklog.md`
 - filter by all time, day, week, month, year, or a custom date range from the workspace header
@@ -52,13 +52,13 @@ Use the Search section to search across parsed messages. Search respects the cur
 
 Browse lists prompts you typed and submitted for the selected project without requiring a session first. Generated context wrappers, such as browser state, file attachments, review metadata, and goal-resume prompts, are excluded from that view.
 
-In Browse, the sidebar selects the project, the main Messages column lists submitted prompts for the current project and date filters, and the Codex Interaction column shows the selected message split into user message, Codex response, tool activity, system/developer context, and token/timing sections. Use `View > Show Sessions` when you want an extra session column before the message list.
+In Browse, the sidebar selects the project, the main Messages column lists submitted prompts for the current project and date filters, and the Codex Interaction column shows the selected message split into user message, Codex response, tool activity, system/developer context, and token/timing sections. User messages show their Project Focus category label anywhere they appear. Use `View > Show Sessions` when you want an extra session column before the message list.
 
-Use `View > Operational Messages` to hide or show all operational prompt families at once, or control families independently, such as `Git commands`, `Run app`, and `Code review`. The same operational filters apply in Browse, optional session-message lists, Search results, and repeated prompts.
+Use `View > Operational Messages` to hide or show all operational prompt families at once, or control families independently: `Code review`, `Git commands`, `Plan approvals`, and `Run app`. The same operational filters apply in Browse, optional session-message lists, Search results, and repeated prompts.
 
 The native macOS tab bar is hidden while there is only one viewer tab. Use `File > New Tab` when you want another app tab; each tab keeps its own project, date, filter, search, and selection state, and the tab bar appears once multiple tabs are open.
 
-Select a search result to copy its session id, project, or a whitespace-normalized snippet with local home paths shortened. Use `Show Conversation` to jump from the result into Browse.
+Search results include the same Project Focus category labels as Browse. Select a search result to copy its session id, project, or a whitespace-normalized snippet with local home paths shortened. Use `Show Conversation` to jump from the result into Browse.
 
 Keyboard shortcuts:
 
@@ -133,12 +133,14 @@ You can pass multiple `--path` values.
 
 - User-message counts come from `event_msg.user_message`.
 - Unique user messages are trimmed, whitespace-collapsed, and lowercased.
-- Repeated prompts are grouped from normalized user messages and shown only for groups with more than one submission.
-- Short approvals such as `yes`, `go ahead`, or `sounds good` are grouped as `Plan approvals`.
-- Short Git workflow requests such as commit, push, branch, PR, worktree, or repo-cleanliness checks are grouped as `Git commands`.
+- Project Focus classifies submitted user messages into deterministic local categories such as `Feature design`, `Implementation`, `Bug fixes`, `Git commands`, `Deploy/release`, `Planning/strategy`, `Research`, `Content creation`, `Data/metrics`, `Documentation`, and `Feedback/context`.
+- Project Focus percentages are based on the current project and date filters, with representative examples shown only inside the local app or non-redacted exports.
+- Repeated prompts are still grouped from normalized user messages in the analytics API and shown only for groups with more than one submission.
+- Short approvals such as `yes`, `go ahead`, `execute`, `do that`, or `sounds good` are grouped as `Plan approvals`.
+- Short Git workflow requests such as commit, push, publish, deploy to production, branch, PR, worktree, or repo-cleanliness checks are grouped as `Git commands`.
 - Short app launch requests such as run, start, restart, launch, or open the app/server are grouped as `Run app`.
 - Short review requests such as `do a code review`, `review the diff`, or `inspect the changes` are grouped as `Code review`.
-- Browse and the Overview repeated-prompt card can hide or show grouped prompt families with individual checkboxes.
+- Browse, Search, and operational prompt groups can hide or show grouped prompt families from the `View > Operational Messages` menu.
 - Token totals sum `token_count.info.last_token_usage` records.
 - `token_count` events with `info: null` are ignored for token totals.
 - Unknown event shapes are preserved and counted.

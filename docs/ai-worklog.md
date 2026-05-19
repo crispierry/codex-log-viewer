@@ -2,6 +2,46 @@
 
 Sanitized audit trail of AI-assisted work on this project.
 
+## 2026-05-19 - Refine Prompt Category Cards
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> I color code it in the same way that we do for codex interaction and also move the label to the top of the rectangle.
+>
+> And while we're at it we can remove the session ID from that rectangle and we can also move the project to the top-level line
+
+### Interpreted Intent
+
+The user wanted submitted-message cards to feel visually aligned with Codex Interaction cards, with prompt category labels and project context promoted into the card header and session IDs removed from the visible card chrome.
+
+### Response / Work Done
+
+- Added a shared prompt-intent card treatment with a subtle tinted background, left color edge, and selected/highlighted outline behavior.
+- Moved prompt category labels to the top row of submitted-message cards.
+- Moved project names into the top row for browse and search-preview cards.
+- Removed the session ID prefix from submitted-message cards.
+- Moved Search category labels into the Message column instead of a separate table column.
+- Applied the same category-card treatment to selected Search result previews and inspector message previews.
+
+### Privacy Notes
+
+No raw logs or unsanitized session content were added. This was a native UI layout change.
+
+### Verification
+
+- Ran `swift build --package-path apps/macos`.
+- Ran `npm run check:mac-accessibility`.
+- Ran `git diff --check`.
+- Ran `npm run build:mac`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`.
+- Ran `npm run smoke:mac-ui`.
+- Relaunched the packaged macOS app at build 83.
+- Ran `npm run privacy:scan`.
+
 ## 2026-05-19 - Add AI audit trail generation
 
 Status: Completed
@@ -51,6 +91,46 @@ The committed worklog is intentionally sanitized. Raw Codex session JSONL files 
 - Ran `npm run smoke:mac-package`.
 - Ran `npm run smoke:mac-ui`.
 - Relaunched the packaged macOS app.
+
+## 2026-05-19 - Show Project Focus labels on messages
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> enable me to expand and see all categories
+>
+> add the category lavels to the message colun (and to search) - basiclly anytime we show a user message, I want to see their label/classification as well
+
+### Interpreted Intent
+
+The user wanted Project Focus to reveal the full category breakdown on demand and wanted every displayed submitted user message to carry its Project Focus classification.
+
+### Response / Work Done
+
+- Added an expandable Project Focus category list so the Overview can show all categories instead of only the top set.
+- Added prompt-intent fields to message search results and session-detail user messages.
+- Rendered category badges in Browse message rows, optional session message rows, Search results, selected Search details, session inspectors, and the Codex Interaction user-message card.
+- Kept operational filter categories separate from Project Focus labels so existing `View > Operational Messages` behavior stays intact.
+- Added analytics, server, and native smoke assertions for prompt-intent labels on user messages.
+
+### Privacy Notes
+
+No raw logs or unsanitized session content were added. Tests use synthetic fixture prompts.
+
+### Verification
+
+- Ran `npm run test -w @codex-log-viewer/analytics`.
+- Ran `npm test`.
+- Ran `npm run lint`.
+- Ran `npm run check:mac-accessibility`.
+- Ran `npm run build:mac`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`.
+- Ran `npm run smoke:mac-ui`.
+- Relaunched the packaged macOS app at build 81.
+- Ran `npm run privacy:scan`.
 
 ## 2026-05-19 - Add operational message filters
 
@@ -463,3 +543,125 @@ No raw logs or session content were added. This change only affects native app c
 - Ran `npm run package:mac`.
 - Relaunched the packaged macOS app.
 - Visually checked that the top-right toolbar utility cluster was removed.
+
+## 2026-05-19 - Refine operational repeated-prompt grouping
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> In the overview tab it is clear that we are not grouping things quite correctly
+>
+> Commands like execute and do that are basically plan approvals
+>
+> Commands like publish are git commands, like push to main or to origin
+>
+> Deploy to production is another git command like publish
+>
+> Take a look at the messages and make sure that we're grouping them together
+
+### Interpreted Intent
+
+The user wanted the Overview repeated-prompt grouping to treat short approval commands and short publish/deploy requests as operational families instead of showing them as standalone repeated prompts.
+
+### Response / Work Done
+
+- Grouped short approval commands such as `execute`, `do that`, and `execute the plan` under `Plan approvals`.
+- Grouped short publish/deploy commands such as `publish`, `publish to origin`, and `deploy to production` under `Git commands`.
+- Added `Plan approvals` to the native `View > Operational Messages` menu so approval prompts can be hidden with the other operational families across Browse, Search, and repeated prompts.
+- Updated usage docs and analytics tests for the expanded grouping rules.
+
+### Privacy Notes
+
+No raw logs or unsanitized session content were added. New tests use synthetic prompt fixtures based on the user-provided examples.
+
+### Verification
+
+- Ran `npm run test -w @codex-log-viewer/analytics`.
+- Ran `npm test`.
+- Ran `npm run lint`.
+- Ran `npm run build:mac`.
+- Ran `npm run check:mac-accessibility`.
+- Ran `npm run privacy:scan`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-ui`.
+- Relaunched the packaged macOS app.
+- Ran `npm test`.
+- Ran `npm run lint`.
+- Ran `npm run build:mac`.
+- Ran `npm run check:mac-accessibility`.
+- Ran `npm run privacy:scan`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-ui`.
+- Relaunched the packaged macOS app.
+
+## 2026-05-19 - Tighten Project Focus classifier accuracy
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> Well we have one major problem: 49.7% of my messages are not categorized at all. They got categorized as other. Obviously this is not acceptable. Can you take a step back and re-evaluate what the classifier is doing so we can classify this more correctly?
+
+### Interpreted Intent
+
+The user wanted the Project Focus classifier re-evaluated against real prompt patterns because the `Other` bucket was far too large to be useful.
+
+### Response / Work Done
+
+- Audited uncategorized prompt patterns locally using aggregate counts only.
+- Removed over-strict length limits that caused long prompts with clear intent to fall through to `Other`.
+- Added missing Project Focus categories for `Implementation`, `Planning/strategy`, `Content creation`, `Data/metrics`, and `Feedback/context`.
+- Expanded classifier rules for broad action requests, status/context notes, decision prompts, typo-tolerant Git checks, UI follow-ups, and approval variants.
+- Reduced the local all-project `Other` share from 49.7% to 0.2%, with residual conversational/status prompts now represented as `Feedback/context`.
+- Updated usage docs and regression tests for the expanded taxonomy.
+
+### Privacy Notes
+
+No raw logs or unsanitized session content were added. The local audit used aggregate category and pattern counts only.
+
+### Verification
+
+- Ran `npm run test -w @codex-log-viewer/analytics`.
+- Ran `npm run lint`.
+- Ran `npm test`.
+- Ran `npm run build:mac`.
+- Ran `npm run check:mac-accessibility`.
+- Ran `npm run package:mac`.
+- Relaunched the packaged macOS app.
+- Queried the running app menu and confirmed `View > Operational Messages` includes `Plan approvals`.
+- Ran `npm run privacy:scan`.
+
+## 2026-05-19 - Build Project Focus Summary
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> What is this plan called?
+
+> /goal execute project focus summary to its fullest. Make sure all test cases are done. Make sure the UI is beautifully designed and expertly coded. Make sure that our classifiers are accurate. Really really focus on accuracy and provide a way to visualize this maybe with text and pie charts.
+
+### Interpreted Intent
+
+The user wanted the Overview repeated-prompt card replaced with a polished Project Focus summary that accurately classifies submitted prompts by work type and visualizes the category mix.
+
+### Response / Work Done
+
+- Added a deterministic local prompt-intent classifier for `Feature design`, `Bug fixes`, `Git commands`, `Deploy/release`, `Run/build app`, `Code review/QA`, `Research`, `Documentation`, `Testing/verification`, `Refactor/cleanup`, `Plan approvals`, and `Other`.
+- Added `promptIntents` to project summaries with counts, percentages, session counts, projects, and representative local examples.
+- Redacted Project Focus examples in redacted exports and added Project Focus counts to CSV and CLI summary output.
+- Replaced the Overview repeated-prompt card with a native Project Focus card containing a donut chart, color-coded category rows, percentages, and representative examples.
+- Updated native help, usage docs, and accessibility checks for the new Project Focus view.
+- Added analytics tests that cover every classifier category, date-filter behavior, release-vs-git overlap, approval prompts, and redacted examples.
+
+### Privacy Notes
+
+No raw logs or unsanitized session content were added. Classifier tests use synthetic prompt fixtures, and redacted exports replace Project Focus examples with `[redacted]`.
+
+### Verification
+
+- Ran `npm run test -w @codex-log-viewer/analytics`.
