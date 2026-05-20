@@ -66,6 +66,7 @@ final class AppModel: ObservableObject {
   @Published var auditStatusMessage: String?
   @Published var isAuditLoading = false
 
+  private var exportDirectoryPath = ""
   private var api: LogEngineAPI?
   private var hasStarted = false
   private var refreshToken = 0
@@ -91,6 +92,21 @@ final class AppModel: ObservableObject {
 
   var browseMessages: [MessageSearchResult] {
     visibleBrowseMessages(in: browseMessagesSummary?.results ?? [])
+  }
+
+  var areBrowseMessagesHiddenByOperationalFilters: Bool {
+    guard let summary = browseMessagesSummary,
+      summary.totalMatches > 0,
+      !hiddenOperationalMessageCategories.isEmpty,
+      visibleBrowseMessages(in: summary.results).isEmpty
+    else {
+      return false
+    }
+
+    return summary.results.contains { result in
+      guard let category = result.category else { return false }
+      return hiddenOperationalMessageCategories.contains(category)
+    }
   }
 
   var searchResults: [MessageSearchResult] {
@@ -779,6 +795,7 @@ final class AppModel: ObservableObject {
     let panel = NSSavePanel()
     panel.canCreateDirectories = true
     panel.nameFieldStringValue = exportFilename(format)
+    panel.directoryURL = defaultExportDirectoryURL()
     if format == .json, !confirmJsonExport() {
       return
     }
@@ -791,6 +808,7 @@ final class AppModel: ObservableObject {
         status = .loading
         let data = try await api.exportSummary(format: format, project: project, filters: filters)
         try data.write(to: destinationURL)
+        rememberExportDirectory(destinationURL.deletingLastPathComponent())
         status = .ready
       } catch {
         status = .failed(error.localizedDescription)
@@ -808,11 +826,16 @@ final class AppModel: ObservableObject {
     panel.canCreateDirectories = false
 
     guard panel.runModal() == .OK, let url = panel.url else { return }
-    auditRepoPathDraft = url.path
-    clearAuditPreview()
+    setAuditRepoPathDraft(url.path)
   }
 
   func auditRepoPathChanged() {
+    clearAuditPreview()
+  }
+
+  func setAuditRepoPathDraft(_ path: String) {
+    guard auditRepoPathDraft != path else { return }
+    auditRepoPathDraft = path
     clearAuditPreview()
   }
 
@@ -1290,6 +1313,9 @@ final class AppModel: ObservableObject {
     selectedProject = AppConstants.allProjectsName
     clearSelectionState()
     refresh(force: true)
+    DispatchQueue.main.async {
+      Self.restoreViewerWindow(activate: true)
+    }
   }
 
   private func uniqueNonEmptyPaths(_ paths: [String]) -> [String] {
@@ -1324,6 +1350,7 @@ final class AppModel: ObservableObject {
     sourcePaths = Self.stringArray(forKey: DefaultsKeys.sourcePaths)
     recentSourcePaths = Self.stringArray(forKey: DefaultsKeys.recentSourcePaths)
     pathDraft = sourcePaths.joined(separator: "\n")
+    exportDirectoryPath = UserDefaults.standard.string(forKey: DefaultsKeys.exportDirectoryPath) ?? ""
     hasSinceFilter = UserDefaults.standard.bool(forKey: DefaultsKeys.hasSinceFilter)
     hasUntilFilter = UserDefaults.standard.bool(forKey: DefaultsKeys.hasUntilFilter)
     if let savedSinceDate = Self.date(forKey: DefaultsKeys.sinceDate) {
@@ -1376,6 +1403,7 @@ final class AppModel: ObservableObject {
     }
     UserDefaults.standard.set(sourcePaths, forKey: DefaultsKeys.sourcePaths)
     UserDefaults.standard.set(recentSourcePaths, forKey: DefaultsKeys.recentSourcePaths)
+    UserDefaults.standard.set(exportDirectoryPath, forKey: DefaultsKeys.exportDirectoryPath)
     UserDefaults.standard.set(hasSinceFilter, forKey: DefaultsKeys.hasSinceFilter)
     UserDefaults.standard.set(hasUntilFilter, forKey: DefaultsKeys.hasUntilFilter)
     UserDefaults.standard.set(Self.dateFormatter.string(from: sinceDate), forKey: DefaultsKeys.sinceDate)
@@ -1576,6 +1604,13 @@ final class AppModel: ObservableObject {
     guard hiddenOperationalSearch.totalMatches == 0 else {
       throw AppSmokeError.unexpected("The UI workflow operational-message filter did not hide all fixture prompts.")
     }
+    browseMessagesSummary = sentMessagesSearch
+    let previousHiddenOperationalCategories = hiddenOperationalMessageCategories
+    hiddenOperationalMessageCategories = ["Testing/verification"]
+    guard areBrowseMessagesHiddenByOperationalFilters, browseMessages.isEmpty else {
+      throw AppSmokeError.unexpected("The project browse empty state did not detect operationally hidden messages.")
+    }
+    hiddenOperationalMessageCategories = previousHiddenOperationalCategories
 
     copySearchResultSessionID(result)
     guard Self.pasteboardText() == result.sessionId else {
@@ -1677,6 +1712,24 @@ final class AppModel: ObservableObject {
     else {
       throw AppSmokeError.unexpected("The UI workflow export checks did not pass.")
     }
+
+    let previousExportDirectoryPath = exportDirectoryPath
+    if let fixturePath = filters.paths.first {
+      let fixtureDirectory = URL(fileURLWithPath: fixturePath).deletingLastPathComponent()
+      exportDirectoryPath = fixtureDirectory.path
+      guard defaultExportDirectoryURL().standardizedFileURL.path != fixtureDirectory.standardizedFileURL.path else {
+        throw AppSmokeError.unexpected("The export destination fallback still points at the selected log source.")
+      }
+    }
+    exportDirectoryPath = previousExportDirectoryPath
+
+    let previousAuditRepoPath = auditRepoPathDraft
+    setAuditRepoPathDraft(FileManager.default.temporaryDirectory.appendingPathComponent("codex-log-viewer-audit-smoke").path)
+    guard canGenerateAudit else {
+      throw AppSmokeError.unexpected("Manual Audit repository path entry did not enable preview generation.")
+    }
+    auditRepoPathDraft = previousAuditRepoPath
+    clearAuditPreview()
   }
 
   private func currentFilters(refreshToken: Int = 0, rebuildCache: Bool = false) -> LogFilters {
@@ -1687,6 +1740,59 @@ final class AppModel: ObservableObject {
       refreshToken: refreshToken,
       rebuildCache: rebuildCache
     )
+  }
+
+  private func defaultExportDirectoryURL() -> URL {
+    let savedURL = URL(fileURLWithPath: exportDirectoryPath, isDirectory: true)
+    if !exportDirectoryPath.isEmpty,
+      directoryExists(savedURL),
+      isSafeExportDirectory(savedURL) {
+      return savedURL
+    }
+
+    if let downloadsURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first,
+      directoryExists(downloadsURL),
+      isSafeExportDirectory(downloadsURL) {
+      return downloadsURL
+    }
+
+    return FileManager.default.homeDirectoryForCurrentUser
+  }
+
+  private func rememberExportDirectory(_ url: URL) {
+    let directoryURL = url.standardizedFileURL
+    exportDirectoryPath = directoryURL.path
+    guard !isEphemeralSettingsRun else { return }
+    UserDefaults.standard.set(exportDirectoryPath, forKey: DefaultsKeys.exportDirectoryPath)
+  }
+
+  private func directoryExists(_ url: URL) -> Bool {
+    var isDirectory: ObjCBool = false
+    return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) && isDirectory.boolValue
+  }
+
+  private func isSafeExportDirectory(_ url: URL) -> Bool {
+    let exportPath = Self.normalizedDirectoryPath(url.path)
+    guard !exportPath.isEmpty else { return false }
+    return !sourcePaths.contains { sourcePath in
+      let sourceURL = URL(fileURLWithPath: sourcePath)
+      let sourceDirectoryPath: String
+      if directoryExists(sourceURL) {
+        sourceDirectoryPath = Self.normalizedDirectoryPath(sourceURL.path)
+      } else {
+        sourceDirectoryPath = Self.normalizedDirectoryPath(sourceURL.deletingLastPathComponent().path)
+      }
+      guard !sourceDirectoryPath.isEmpty else { return false }
+      return exportPath == sourceDirectoryPath || exportPath.hasPrefix("\(sourceDirectoryPath)/")
+    }
+  }
+
+  private static func normalizedDirectoryPath(_ path: String) -> String {
+    let normalized = URL(fileURLWithPath: path, isDirectory: true).standardizedFileURL.path
+    guard normalized.count > 1, normalized.hasSuffix("/") else {
+      return normalized
+    }
+    return String(normalized.dropLast())
   }
 
   private func exportFilename(_ format: ExportFormat) -> String {
@@ -1921,6 +2027,8 @@ final class AppModel: ObservableObject {
     alert.addButton(withTitle: "Open Usage Guide")
     if alert.runModal() == .alertSecondButtonReturn {
       Self.openUsageGuide()
+    } else {
+      Self.restoreViewerWindow(activate: true)
     }
   }
 
@@ -1930,6 +2038,20 @@ final class AppModel: ObservableObject {
 
     if let usageGuideURL {
       NSWorkspace.shared.open(usageGuideURL)
+    }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+      Self.restoreViewerWindow(activate: false)
+    }
+  }
+
+  static func restoreViewerWindow(activate: Bool) {
+    if let appDelegate = NSApp.delegate as? AppDelegate {
+      appDelegate.ensureViewerWindowVisible(activate: activate)
+    } else if let window = NSApp.windows.first {
+      window.makeKeyAndOrderFront(nil)
+      if activate {
+        NSApp.activate(ignoringOtherApps: true)
+      }
     }
   }
 
@@ -1978,6 +2100,7 @@ private struct SearchResultSelectionTarget {
 private enum DefaultsKeys {
   static let sourcePaths = "sourcePaths"
   static let recentSourcePaths = "recentSourcePaths"
+  static let exportDirectoryPath = "exportDirectoryPath"
   static let hasSinceFilter = "hasSinceFilter"
   static let hasUntilFilter = "hasUntilFilter"
   static let sinceDate = "sinceDate"

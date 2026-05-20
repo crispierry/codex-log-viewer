@@ -14,6 +14,11 @@ struct CodexLogViewerApp: App {
         EmptyView()
       } else {
         AppWindowRootView()
+          .onAppear {
+            appDelegate.setMainWindowOpener {
+              openWindow(id: AppWindowID.main)
+            }
+          }
       }
     }
     .commands {
@@ -199,6 +204,26 @@ private extension FocusedValues {
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
   private var tabBarObservers: [NSObjectProtocol] = []
+  private var openMainWindow: (() -> Void)?
+  private var fallbackViewerWindow: NSWindow?
+
+  func setMainWindowOpener(_ opener: @escaping () -> Void) {
+    openMainWindow = opener
+  }
+
+  func ensureViewerWindowVisible(activate: Bool) {
+    if let window = preferredViewerWindow() {
+      window.makeKeyAndOrderFront(nil)
+      if activate {
+        NSApp.activate(ignoringOtherApps: true)
+      }
+      syncViewerTabBars()
+      return
+    }
+
+    openMainWindow?()
+    restoreViewerWindowAfterOpening(activate: activate, attemptsRemaining: 8)
+  }
 
   func openViewerTab(openWindow: @escaping () -> Void) {
     let sourceWindow = preferredViewerWindow()
@@ -238,6 +263,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   func applicationWillTerminate(_ notification: Notification) {
     removeTabBarVisibilityObservers()
     LocalLogEngineServer.shared.stop()
+  }
+
+  func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+    if !flag {
+      ensureViewerWindowVisible(activate: true)
+    }
+    return true
   }
 
   private func installTabBarVisibilityObservers() {
@@ -348,6 +380,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       }
       return window
     }.first ?? NSApp.windows.first(where: isViewerWindow)
+  }
+
+  private func restoreViewerWindowAfterOpening(activate: Bool, attemptsRemaining: Int) {
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+      guard let self else { return }
+      if let window = self.preferredViewerWindow() {
+        window.makeKeyAndOrderFront(nil)
+        if activate {
+          NSApp.activate(ignoringOtherApps: true)
+        }
+        self.syncViewerTabBars()
+        return
+      }
+
+      guard attemptsRemaining > 0 else {
+        self.openFallbackViewerWindow(activate: activate)
+        self.syncViewerTabBars()
+        return
+      }
+
+      self.restoreViewerWindowAfterOpening(
+        activate: activate,
+        attemptsRemaining: attemptsRemaining - 1
+      )
+    }
+  }
+
+  private func openFallbackViewerWindow(activate: Bool) {
+    let window = fallbackViewerWindow ?? NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 1040, height: 680),
+      styleMask: [.titled, .closable, .miniaturizable, .resizable],
+      backing: .buffered,
+      defer: false
+    )
+    fallbackViewerWindow = window
+    window.title = "Codex Logs"
+    window.minSize = NSSize(width: 760, height: 560)
+    window.tabbingMode = .preferred
+    window.contentView = NSHostingView(rootView: AppWindowRootView())
+    window.center()
+    window.makeKeyAndOrderFront(nil)
+    if activate {
+      NSApp.activate(ignoringOtherApps: true)
+    }
   }
 
   private func isViewerWindow(_ window: NSWindow) -> Bool {

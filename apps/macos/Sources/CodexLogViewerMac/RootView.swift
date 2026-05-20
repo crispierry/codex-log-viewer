@@ -641,9 +641,13 @@ struct SentMessagesBrowserColumn: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     } else if browseMessages.isEmpty {
       ContentUnavailableView(
-        "No Sent Messages",
+        model.areBrowseMessagesHiddenByOperationalFilters ? "No Visible Messages" : "No Sent Messages",
         systemImage: "paperplane",
-        description: Text("No submitted messages match the selected project and date filters.")
+        description: Text(
+          model.areBrowseMessagesHiddenByOperationalFilters
+            ? "Turn on at least one operational message family in the View menu."
+            : "No submitted messages match the selected project and date filters."
+        )
       )
       .frame(maxWidth: .infinity, maxHeight: .infinity)
     } else {
@@ -989,12 +993,15 @@ struct AuditControlBar: View {
       HStack(spacing: 10) {
         Image(systemName: "folder")
           .foregroundStyle(.secondary)
-        TextField("Repository path", text: $model.auditRepoPathDraft)
+        TextField(
+          "Repository path",
+          text: Binding(
+            get: { model.auditRepoPathDraft },
+            set: { model.setAuditRepoPathDraft($0) }
+          )
+        )
           .textFieldStyle(.roundedBorder)
           .accessibilityIdentifier("audit-repo-path-field")
-          .onChange(of: model.auditRepoPathDraft) { _, _ in
-            model.auditRepoPathChanged()
-          }
         Button {
           model.chooseAuditRepoPath()
         } label: {
