@@ -64,7 +64,9 @@ struct LogEngineAPI {
     dateKey: String? = nil,
     project: String,
     filters: LogFilters,
-    submittedOnly: Bool = false
+    submittedOnly: Bool = false,
+    hiddenCategories: [String] = [],
+    limit: Int = 100
   ) async throws -> MessageSearchSummary {
     try await searchMessagesWithMetadata(
       query: query,
@@ -75,7 +77,9 @@ struct LogEngineAPI {
       dateKey: dateKey,
       project: project,
       filters: filters,
-      submittedOnly: submittedOnly
+      submittedOnly: submittedOnly,
+      hiddenCategories: hiddenCategories,
+      limit: limit
     ).search
   }
 
@@ -88,12 +92,14 @@ struct LogEngineAPI {
     dateKey: String? = nil,
     project: String,
     filters: LogFilters,
-    submittedOnly: Bool = false
+    submittedOnly: Bool = false,
+    hiddenCategories: [String] = [],
+    limit: Int = 100
   ) async throws -> CachedSearch {
     var queryItems = [
       URLQueryItem(name: "q", value: query),
       URLQueryItem(name: "role", value: role.rawValue),
-      URLQueryItem(name: "limit", value: "100")
+      URLQueryItem(name: "limit", value: String(limit))
     ]
     if model != AppConstants.allModelsName {
       queryItems.append(URLQueryItem(name: "model", value: model))
@@ -110,6 +116,9 @@ struct LogEngineAPI {
     if submittedOnly {
       queryItems.append(URLQueryItem(name: "submittedOnly", value: "true"))
     }
+    for category in hiddenCategories {
+      queryItems.append(URLQueryItem(name: "hiddenCategory", value: category))
+    }
     queryItems.append(contentsOf: self.queryItems(project: project, filters: filters))
     let response: MessageSearchResponse = try await get("api/messages/search", query: queryItems)
     return CachedSearch(search: response.search, cache: response.cacheMetadata)
@@ -121,8 +130,50 @@ struct LogEngineAPI {
     return try await getData("api/export", query: queryItems)
   }
 
+  func auditPreview(
+    repoPath: String,
+    project: String,
+    filters: LogFilters,
+    includeResponses: Bool
+  ) async throws -> AuditPreview {
+    var queryItems = queryItems(project: project, filters: filters)
+    queryItems.append(URLQueryItem(name: "repoPath", value: repoPath))
+    queryItems.append(URLQueryItem(name: "includeResponses", value: includeResponses ? "true" : "false"))
+    let response: AuditPreviewResponse = try await get("api/audit", query: queryItems)
+    return response.audit
+  }
+
+  func writeAudit(repoPath: String, targetPath: String, markdown: String) async throws -> AuditWriteResult {
+    let response: AuditWriteResponse = try await postJson(
+      "api/audit",
+      body: [
+        "repoPath": repoPath,
+        "targetPath": targetPath,
+        "markdown": markdown
+      ]
+    )
+    return response.audit
+  }
+
   private func get<T: Decodable>(_ path: String, query: [URLQueryItem] = []) async throws -> T {
     let data = try await getData(path, query: query)
+    return try JSONDecoder().decode(T.self, from: data)
+  }
+
+  private func postJson<T: Decodable>(_ path: String, body: [String: String]) async throws -> T {
+    var request = URLRequest(url: baseURL.appending(path: path))
+    request.httpMethod = "POST"
+    request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+    request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
+    request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+    let (data, response) = try await URLSession.shared.data(for: request)
+    let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+    guard 200..<300 ~= statusCode else {
+      let body = String(data: data, encoding: .utf8)?
+        .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+      throw LogEngineAPIError.badStatus(path: path, statusCode: statusCode, body: body)
+    }
     return try JSONDecoder().decode(T.self, from: data)
   }
 

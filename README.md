@@ -27,6 +27,7 @@ This project has a working v0 implementation:
 - Track total, input, cached input, fresh input, output, and reasoning tokens
 - Break usage down by model
 - Export summaries as JSON and CSV
+- Generate, review, merge, and approve Markdown AI audit worklogs from local session history
 - Provide a macOS app with metrics, search, and session tables
 - Keep all parsing and analysis local by default
 
@@ -55,8 +56,8 @@ The app is the primary product experience. From the desktop UI you can:
 - scan default Codex logs
 - add custom files or directories from the native `Logs` menu
 - select projects or all projects
-- browse projects, sessions, sent messages, and Codex interactions in a four-column native layout
-- switch between Browse, Overview, and Search sections for the selected project
+- browse projects, submitted messages, and Codex interactions in a focused native layout, with an optional session browser
+- switch between Browse, Overview, Search, and Audit sections for the selected project
 - filter by all time, day, week, month, year, or custom date range from the workspace header
 - search messages across projects
 - list the prompts you typed and submitted for the selected project
@@ -65,6 +66,7 @@ The app is the primary product experience. From the desktop UI you can:
 - review repeated prompts for the current filters
 - refresh the scan
 - export redacted JSON or aggregate CSV
+- generate a smart-merged AI audit worklog preview and approve the reviewed Markdown into a repository
 - inspect session messages, turns, tokens, warnings, and unknown events, with file-scoped handling for copied logs that reuse a session id
 
 Run it with:
@@ -86,6 +88,7 @@ npm run cli -- projects
 npm run cli -- summary --project sample-app --since 2026-04-22 --until 2026-04-29
 npm run cli -- export --format csv --output usage.csv --project sample-app
 npm run cli -- export --format json --output usage.json --project sample-app
+npm run cli -- audit --repo /path/to/repo --output /path/to/repo/docs/ai-worklog.md
 ```
 
 Use `--path <file-or-dir>` to scan a specific fixture, export, or alternate Codex home:
@@ -133,6 +136,7 @@ npm run check:reference -- --reference fixtures/codex/sample-reference-summary.j
 - [Release notes template](docs/release-notes-template.md)
 - [Product requirements](docs/product-requirements.md)
 - [Architecture](docs/architecture.md)
+- [AI audit trail](docs/ai-audit-trail.md)
 - [Parser schema notes](docs/parser-schema-notes.md)
 - [Privacy and redaction](docs/privacy-and-redaction.md)
 - [Performance notes](docs/performance.md)

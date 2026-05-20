@@ -33,7 +33,10 @@ final class AppModel: ObservableObject {
   @Published var selectedSessionDetail: SessionDetail?
   @Published var selectedUserMessageIndex: Int?
   @Published var isDetailLoading = false
-  @Published var sessionQuery = ""
+  @Published var showSessionBrowser = false
+  @Published var browseMessagesSummary: MessageSearchSummary?
+  @Published var selectedBrowseMessageID: MessageSearchResult.ID?
+  @Published var isBrowseMessagesLoading = false
   @Published var messageQuery = ""
   @Published var messageRoleFilter: MessageRoleFilter = .user
   @Published var messageModelFilter = AppConstants.allModelsName
@@ -52,18 +55,30 @@ final class AppModel: ObservableObject {
   @Published var dateRangeMode: DateRangeMode = .all
   @Published var dateAnchorDate = Date()
   @Published var projectSortOption: ProjectSortOption = .mostUserMessages
+  @Published var hiddenOperationalMessageCategories: Set<String> = []
+  @Published var hiddenRepeatedPromptCategories: Set<String> = []
   @Published var messageSearchFocusRequest = 0
   @Published var cacheMetadata: CacheMetadata?
+  @Published var auditRepoPathDraft = ""
+  @Published var auditIncludeResponses = true
+  @Published var auditPreview: AuditPreview?
+  @Published var auditReviewMarkdown = ""
+  @Published var auditStatusMessage: String?
+  @Published var isAuditLoading = false
 
   private var api: LogEngineAPI?
   private var hasStarted = false
   private var refreshToken = 0
   private var reloadTask: Task<Void, Never>?
   private var detailTask: Task<Void, Never>?
+  private var browseMessagesTask: Task<Void, Never>?
   private var searchTask: Task<Void, Never>?
+  private var auditTask: Task<Void, Never>?
   private var reloadRequestID = 0
   private var detailRequestID = 0
+  private var browseMessagesRequestID = 0
   private var searchRequestID = 0
+  private var auditRequestID = 0
   private var pendingSearchResultTarget: SearchResultSelectionTarget?
   private let isEphemeralSettingsRun = ProcessInfo.processInfo.environment["CODEX_LOG_VIEWER_EPHEMERAL_SETTINGS"] == "1" ||
     ProcessInfo.processInfo.environment["CODEX_LOG_VIEWER_UI_TEST"] == "1"
@@ -73,25 +88,20 @@ final class AppModel: ObservableObject {
     loadSettings()
   }
 
-  var filteredSessions: [SessionSummary] {
-    let sessions = summary?.sessions ?? []
-    let query = sessionQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    guard !query.isEmpty else { return sessions }
+  var browseMessages: [MessageSearchResult] {
+    visibleBrowseMessages(in: browseMessagesSummary?.results ?? [])
+  }
 
-    return sessions.filter { session in
-      [
-        session.sessionId,
-        session.project,
-        session.cwd,
-        session.filePath,
-        session.dateKey,
-        session.models.joined(separator: " ")
-      ]
-      .compactMap { $0 }
-      .joined(separator: " ")
-      .lowercased()
-      .contains(query)
-    }
+  var searchResults: [MessageSearchResult] {
+    visibleSearchResults(in: searchSummary?.results ?? [])
+  }
+
+  var operationalMessageCategoryOptions: [String] {
+    Self.operationalPromptCategoryOrder
+  }
+
+  var areAllOperationalMessageCategoriesVisible: Bool {
+    hiddenOperationalMessageCategories.isDisjoint(with: Self.operationalPromptCategorySet)
   }
 
   var sortedProjects: [ProjectListItem] {
@@ -204,6 +214,28 @@ final class AppModel: ObservableObject {
     "Source: \(sourceSummaryText)"
   }
 
+  var auditTargetPathText: String {
+    auditPreview?.targetPath ?? targetWorklogPath(for: auditRepoPathDraft)
+  }
+
+  var auditMergeSummaryText: String {
+    guard let auditPreview else {
+      return "No audit preview generated."
+    }
+    let newText = "\(auditPreview.appendedSections.formatted()) new"
+    let skippedText = "\(auditPreview.skippedSections.formatted()) already present"
+    let generatedText = "\(auditPreview.generatedSections.formatted()) generated"
+    return "\(newText), \(skippedText), \(generatedText)"
+  }
+
+  var canGenerateAudit: Bool {
+    !auditRepoPathDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && api != nil && !isAuditLoading
+  }
+
+  var canApproveAudit: Bool {
+    auditPreview != nil && !auditReviewMarkdown.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isAuditLoading
+  }
+
   var dateRangeButtonTitle: String {
     switch dateRangeMode {
     case .all:
@@ -228,6 +260,10 @@ final class AppModel: ObservableObject {
     default:
       return "Showing \(Self.displayDateOnly(sinceDate)) through \(Self.displayDateOnly(untilDate))."
     }
+  }
+
+  var latestSelectableDate: Date {
+    Self.startOfToday()
   }
 
   func refresh(force: Bool = false, rebuildCache: Bool = false) {
@@ -264,6 +300,7 @@ final class AppModel: ObservableObject {
         self.projects = projectsResult.projects
         self.summary = summaryResult.summary
         self.cacheMetadata = summaryResult.cache ?? projectsResult.cache
+        updateAuditRepoPathSuggestion(force: auditRepoPathDraft.isEmpty)
         let summary = summaryResult.summary
         if messageModelFilter != AppConstants.allModelsName,
           !summary.models.contains(where: { $0.model == messageModelFilter }) {
@@ -277,7 +314,10 @@ final class AppModel: ObservableObject {
         if let selectedSessionID, !summary.sessions.contains(where: { $0.id == selectedSessionID }) {
           clearSelectedSession()
         }
-        selectLatestSessionIfNeeded(in: summary)
+        if showSessionBrowser {
+          selectLatestSessionIfNeeded(in: summary)
+        }
+        loadBrowseMessages(selectFirstIfNeeded: !showSessionBrowser)
         status = .ready
         scheduleUITestWorkflowIfNeeded(api: api, filters: filters)
       } catch is CancellationError {
@@ -304,6 +344,8 @@ final class AppModel: ObservableObject {
 
   func selectProject(_ project: String) {
     selectedProject = project
+    updateAuditRepoPathSuggestion(force: true)
+    clearAuditPreview()
     clearSelectionState()
     refresh()
   }
@@ -343,6 +385,7 @@ final class AppModel: ObservableObject {
 
   func filtersChanged() {
     saveSettings()
+    clearAuditPreview()
     clearSelectionState()
     refresh()
   }
@@ -359,8 +402,48 @@ final class AppModel: ObservableObject {
     saveSettings()
   }
 
+  func setRepeatedPromptCategory(_ category: String, isVisible: Bool) {
+    if isVisible {
+      hiddenRepeatedPromptCategories.remove(category)
+    } else {
+      hiddenRepeatedPromptCategories.insert(category)
+    }
+    saveSettings()
+  }
+
+  func setOperationalMessageCategory(_ category: String, isVisible: Bool) {
+    guard isOperationalPromptCategory(category) else { return }
+    if isVisible {
+      hiddenOperationalMessageCategories.remove(category)
+    } else {
+      hiddenOperationalMessageCategories.insert(category)
+    }
+    saveSettings()
+    reconcileOperationalMessageFilters()
+    refreshSearchForOperationalFilterChangeIfNeeded()
+  }
+
+  func setAllOperationalMessageCategoriesVisible(_ isVisible: Bool) {
+    if isVisible {
+      hiddenOperationalMessageCategories.subtract(Self.operationalPromptCategorySet)
+    } else {
+      hiddenOperationalMessageCategories.formUnion(Self.operationalPromptCategorySet)
+    }
+    saveSettings()
+    reconcileOperationalMessageFilters()
+    refreshSearchForOperationalFilterChangeIfNeeded()
+  }
+
+  func isOperationalPromptCategory(_ category: String) -> Bool {
+    Self.operationalPromptCategorySet.contains(category)
+  }
+
+  func isOperationalPromptCategoryVisible(_ category: String) -> Bool {
+    !hiddenOperationalMessageCategories.contains(category)
+  }
+
   func setDateAnchorDate(_ date: Date) {
-    dateAnchorDate = Calendar.current.startOfDay(for: date)
+    dateAnchorDate = Self.clampedToToday(date)
     guard dateRangeMode != .all, dateRangeMode != .custom else {
       saveSettings()
       return
@@ -370,7 +453,8 @@ final class AppModel: ObservableObject {
 
   func setCustomSinceDate(_ date: Date) {
     dateRangeMode = .custom
-    sinceDate = Calendar.current.startOfDay(for: date)
+    sinceDate = Self.clampedToToday(date)
+    untilDate = Self.clampedToToday(untilDate)
     if untilDate < sinceDate {
       untilDate = sinceDate
     }
@@ -379,7 +463,8 @@ final class AppModel: ObservableObject {
 
   func setCustomUntilDate(_ date: Date) {
     dateRangeMode = .custom
-    untilDate = Calendar.current.startOfDay(for: date)
+    sinceDate = Self.clampedToToday(sinceDate)
+    untilDate = Self.clampedToToday(date)
     if sinceDate > untilDate {
       sinceDate = untilDate
     }
@@ -392,9 +477,25 @@ final class AppModel: ObservableObject {
     applyDateRangeMode()
   }
 
+  func setSessionBrowserVisible(_ isVisible: Bool) {
+    guard showSessionBrowser != isVisible else { return }
+    showSessionBrowser = isVisible
+    saveSettings()
+    if isVisible {
+      if let summary {
+        selectLatestSessionIfNeeded(in: summary)
+      }
+    } else if selectedBrowseMessageID == nil {
+      loadBrowseMessages(selectFirstIfNeeded: true)
+    }
+  }
+
   func selectSession(_ sessionID: SessionSummary.ID?) {
     selectedSessionID = sessionID
     selectedUserMessageIndex = nil
+    if !selectedBrowseMessageBelongsToSession(sessionID) {
+      selectedBrowseMessageID = nil
+    }
     pendingSearchResultTarget = nil
     if !selectedSearchResultBelongsToSession(sessionID) {
       selectedSearchResultID = nil
@@ -441,8 +542,91 @@ final class AppModel: ObservableObject {
     }
   }
 
-  func searchMessages() {
-    selectedSection = .search
+  func loadBrowseMessages(selectFirstIfNeeded: Bool = false) {
+    guard let api else {
+      browseMessagesSummary = nil
+      selectedBrowseMessageID = nil
+      isBrowseMessagesLoading = false
+      return
+    }
+
+    browseMessagesTask?.cancel()
+    browseMessagesRequestID += 1
+    let requestID = browseMessagesRequestID
+    let filters = currentFilters()
+    let project = selectedProject
+    let limit = max(summary?.totals.userMessages ?? 100, 100)
+
+    browseMessagesTask = Task {
+      do {
+        isBrowseMessagesLoading = true
+        let searchResult = try await api.searchMessagesWithMetadata(
+          query: "",
+          role: .user,
+          model: AppConstants.allModelsName,
+          sessionID: nil,
+          project: project,
+          filters: filters,
+          submittedOnly: true,
+          limit: limit
+        )
+        guard !Task.isCancelled, requestID == browseMessagesRequestID else { return }
+        browseMessagesSummary = searchResult.search
+        cacheMetadata = searchResult.cache ?? cacheMetadata
+        isBrowseMessagesLoading = false
+        let visibleResults = visibleBrowseMessages(in: searchResult.search.results)
+
+        let currentSelectionIsVisible = selectedBrowseMessageID.map { selectedID in
+          visibleResults.contains { $0.id == selectedID }
+        } ?? false
+
+        if !currentSelectionIsVisible {
+          selectedBrowseMessageID = nil
+          if !showSessionBrowser {
+            clearSelectedSession()
+          }
+        }
+
+        if selectFirstIfNeeded, selectedBrowseMessageID == nil, let firstMessage = visibleResults.first {
+          selectBrowseMessage(firstMessage.id)
+        }
+      } catch is CancellationError {
+        return
+      } catch {
+        guard requestID == browseMessagesRequestID else { return }
+        isBrowseMessagesLoading = false
+        status = .failed(error.localizedDescription)
+      }
+    }
+  }
+
+  func selectBrowseMessage(_ messageID: MessageSearchResult.ID?) {
+    selectedBrowseMessageID = messageID
+    guard let messageID,
+      let result = browseMessagesSummary?.results.first(where: { $0.id == messageID })
+    else {
+      selectedUserMessageIndex = nil
+      selectedSessionID = nil
+      selectedSessionDetail = nil
+      return
+    }
+
+    selectedSearchResultID = nil
+    pendingSearchResultTarget = SearchResultSelectionTarget(result)
+    selectedUserMessageIndex = nil
+    selectedSessionID = sessionSelectionID(
+      sessionID: result.sessionId,
+      filePath: result.filePath,
+      dateKey: result.dateKey
+    ) ?? result.sessionId
+    selectedSessionDetail = nil
+    loadSelectedSession()
+  }
+
+  func searchMessages(activateSearch: Bool = true) {
+    if activateSearch {
+      selectedSection = .search
+    }
     let trimmedQuery = messageQuery.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmedQuery.isEmpty, let api else {
       clearSearchResults()
@@ -461,6 +645,7 @@ final class AppModel: ObservableObject {
     let filePath = messageSessionFilePathFilter
     let dateKey = messageSessionDateKeyFilter
     let submittedOnly = role == .user
+    let hiddenCategories = Array(hiddenOperationalMessageCategories).sorted()
 
     searchTask = Task {
       do {
@@ -474,10 +659,15 @@ final class AppModel: ObservableObject {
           dateKey: dateKey,
           project: project,
           filters: filters,
-          submittedOnly: submittedOnly
+          submittedOnly: submittedOnly,
+          hiddenCategories: hiddenCategories
         )
         guard !Task.isCancelled, requestID == searchRequestID else { return }
         searchSummary = searchResult.search
+        if let selectedSearchResultID,
+          !searchResult.search.results.contains(where: { $0.id == selectedSearchResultID }) {
+          self.selectedSearchResultID = nil
+        }
         cacheMetadata = searchResult.cache ?? cacheMetadata
         status = .ready
       } catch is CancellationError {
@@ -490,7 +680,7 @@ final class AppModel: ObservableObject {
   }
 
   func refreshMessageResults() {
-    searchMessages()
+    searchMessages(activateSearch: false)
   }
 
   func focusMessageSearch() {
@@ -501,7 +691,7 @@ final class AppModel: ObservableObject {
   func selectSearchResult(_ resultID: MessageSearchResult.ID?) {
     selectedSearchResultID = resultID
     guard let resultID,
-      let result = searchSummary?.results.first(where: { $0.id == resultID })
+      let result = searchResults.first(where: { $0.id == resultID })
     else {
       return
     }
@@ -573,8 +763,158 @@ final class AppModel: ObservableObject {
     }
   }
 
+  func chooseAuditRepoPath() {
+    let panel = NSOpenPanel()
+    panel.title = "Choose Repository"
+    panel.prompt = "Choose"
+    panel.canChooseFiles = false
+    panel.canChooseDirectories = true
+    panel.allowsMultipleSelection = false
+    panel.canCreateDirectories = false
+
+    guard panel.runModal() == .OK, let url = panel.url else { return }
+    auditRepoPathDraft = url.path
+    clearAuditPreview()
+  }
+
+  func auditRepoPathChanged() {
+    clearAuditPreview()
+  }
+
+  func generateAuditPreview() {
+    guard let api else { return }
+    let repoPath = auditRepoPathDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !repoPath.isEmpty else { return }
+
+    auditTask?.cancel()
+    auditRequestID += 1
+    let requestID = auditRequestID
+    let filters = currentFilters()
+    let includeResponses = auditIncludeResponses
+
+    auditTask = Task {
+      do {
+        isAuditLoading = true
+        auditStatusMessage = "Generating audit preview."
+        let preview = try await api.auditPreview(
+          repoPath: repoPath,
+          project: AppConstants.allProjectsName,
+          filters: filters,
+          includeResponses: includeResponses
+        )
+        guard !Task.isCancelled, requestID == auditRequestID else { return }
+        auditPreview = preview
+        auditReviewMarkdown = preview.mergedMarkdown
+        auditStatusMessage = auditStatusText(for: preview)
+        isAuditLoading = false
+      } catch is CancellationError {
+        return
+      } catch {
+        guard requestID == auditRequestID else { return }
+        isAuditLoading = false
+        status = .failed(error.localizedDescription)
+      }
+    }
+  }
+
+  func approveAuditMarkdown() {
+    guard let api,
+      let auditPreview,
+      !auditRepoPathDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+      confirmAuditWrite(targetPath: auditPreview.targetPath)
+    else {
+      return
+    }
+    let repoPath = auditRepoPathDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+    let markdown = auditReviewMarkdown
+
+    auditTask?.cancel()
+    auditRequestID += 1
+    let requestID = auditRequestID
+    auditTask = Task {
+      do {
+        isAuditLoading = true
+        auditStatusMessage = "Saving audit worklog."
+        let result = try await api.writeAudit(repoPath: repoPath, targetPath: auditPreview.targetPath, markdown: markdown)
+        guard !Task.isCancelled, requestID == auditRequestID else { return }
+        auditStatusMessage = "Saved \(result.bytesWritten.formatted()) bytes to \(URL(fileURLWithPath: result.targetPath).lastPathComponent)."
+        isAuditLoading = false
+      } catch is CancellationError {
+        return
+      } catch {
+        guard requestID == auditRequestID else { return }
+        isAuditLoading = false
+        status = .failed(error.localizedDescription)
+      }
+    }
+  }
+
+  func openAuditWorklog() {
+    guard let auditPreview else { return }
+    NSWorkspace.shared.open(URL(fileURLWithPath: auditPreview.targetPath))
+  }
+
+  func setAuditIncludeResponses(_ includeResponses: Bool) {
+    guard auditIncludeResponses != includeResponses else { return }
+    auditIncludeResponses = includeResponses
+    clearAuditPreview()
+  }
+
+  private func clearAuditPreview() {
+    auditTask?.cancel()
+    auditRequestID += 1
+    auditPreview = nil
+    auditReviewMarkdown = ""
+    auditStatusMessage = nil
+    isAuditLoading = false
+  }
+
+  private func updateAuditRepoPathSuggestion(force: Bool) {
+    guard selectedProject != AppConstants.allProjectsName,
+      let project = projects.first(where: { $0.project == selectedProject }),
+      let suggestedPath = project.cwdSamples.first
+    else {
+      if force {
+        auditRepoPathDraft = ""
+      }
+      return
+    }
+
+    if force || auditRepoPathDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+      auditRepoPathDraft = suggestedPath
+    }
+  }
+
+  private func auditStatusText(for preview: AuditPreview) -> String {
+    if preview.appendedSections == 0 {
+      return "No new generated sections. Existing worklog is up to date for this selection."
+    }
+    let sectionText = preview.appendedSections == 1 ? "section" : "sections"
+    return "Ready to review \(preview.appendedSections.formatted()) new \(sectionText)."
+  }
+
+  private func targetWorklogPath(for repoPath: String) -> String {
+    let trimmed = repoPath.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return "docs/ai-worklog.md" }
+    return URL(fileURLWithPath: trimmed)
+      .appendingPathComponent("docs")
+      .appendingPathComponent("ai-worklog.md")
+      .path
+  }
+
+  private func confirmAuditWrite(targetPath: String) -> Bool {
+    let alert = NSAlert()
+    alert.messageText = "Save Audit Worklog?"
+    alert.informativeText = "This writes the reviewed Markdown to \(targetPath). Review the preview for private content before saving."
+    alert.alertStyle = .informational
+    alert.addButton(withTitle: "Save")
+    alert.addButton(withTitle: "Cancel")
+    return alert.runModal() == .alertFirstButtonReturn
+  }
+
   private func clearSelectionState() {
     clearSelectedSession()
+    clearBrowseMessages()
     clearSearchResults()
   }
 
@@ -584,9 +924,17 @@ final class AppModel: ObservableObject {
     selectedSessionID = nil
     selectedSessionDetail = nil
     selectedUserMessageIndex = nil
+    selectedBrowseMessageID = nil
     pendingSearchResultTarget = nil
     isDetailLoading = false
-    sessionQuery = ""
+  }
+
+  private func clearBrowseMessages() {
+    browseMessagesTask?.cancel()
+    browseMessagesRequestID += 1
+    browseMessagesSummary = nil
+    selectedBrowseMessageID = nil
+    isBrowseMessagesLoading = false
   }
 
   private func clearSearchResults() {
@@ -627,12 +975,89 @@ final class AppModel: ObservableObject {
     return result.sessionId == sessionID
   }
 
+  private func selectedBrowseMessageBelongsToSession(_ sessionID: SessionSummary.ID?) -> Bool {
+    guard let sessionID,
+      let selectedBrowseMessageID,
+      let result = browseMessagesSummary?.results.first(where: { $0.id == selectedBrowseMessageID })
+    else {
+      return false
+    }
+    if let session = sessionForSelectionID(sessionID) {
+      return result.sessionId == session.sessionId &&
+        result.filePath == session.filePath &&
+        (result.dateKey == nil || result.dateKey == session.dateKey)
+    }
+    return result.sessionId == sessionID
+  }
+
+  private func visibleBrowseMessages(in messages: [MessageSearchResult]) -> [MessageSearchResult] {
+    return messages.filter(isBrowseMessageVisible)
+  }
+
+  private func visibleSearchResults(in messages: [MessageSearchResult]) -> [MessageSearchResult] {
+    return messages.filter(isSearchResultVisible)
+  }
+
+  private func isBrowseMessageVisible(_ message: MessageSearchResult) -> Bool {
+    isSearchResultVisible(message)
+  }
+
+  private func isSearchResultVisible(_ message: MessageSearchResult) -> Bool {
+    guard let category = message.category else { return true }
+    return !hiddenOperationalMessageCategories.contains(category)
+  }
+
+  func visibleUserMessageOffsets(in detail: SessionDetail, dateKey: String? = nil) -> [(offset: Int, element: MessageDetail)] {
+    SessionInteractionBuilder.userMessageOffsets(in: detail, dateKey: dateKey)
+      .filter { isMessageDetailVisible($0.element) }
+  }
+
+  func isMessageDetailVisible(_ message: MessageDetail) -> Bool {
+    guard let category = message.category else { return true }
+    return !hiddenOperationalMessageCategories.contains(category)
+  }
+
+  private func reconcileOperationalMessageFilters() {
+    if let browseMessagesSummary,
+      let selectedBrowseMessageID,
+      let selected = browseMessagesSummary.results.first(where: { $0.id == selectedBrowseMessageID }),
+      !isBrowseMessageVisible(selected) {
+      selectBrowseMessage(browseMessages.first?.id)
+    }
+
+    if let searchSummary,
+      let selectedSearchResultID,
+      let selected = searchSummary.results.first(where: { $0.id == selectedSearchResultID }),
+      !isSearchResultVisible(selected) {
+      self.selectedSearchResultID = searchResults.first?.id
+    }
+
+    if let detail = selectedSessionDetail,
+      let selectedUserMessageIndex,
+      let selectedMessage = detail.messages.indices.contains(selectedUserMessageIndex)
+        ? detail.messages[selectedUserMessageIndex]
+        : nil,
+      !isMessageDetailVisible(selectedMessage) {
+      self.selectedUserMessageIndex = visibleUserMessageOffsets(in: detail, dateKey: selectedSessionDateKey).last?.offset
+    }
+  }
+
+  private func refreshSearchForOperationalFilterChangeIfNeeded() {
+    guard searchSummary != nil else { return }
+    refreshMessageResults()
+  }
+
   private func detailTarget(for selectionID: SessionSummary.ID) -> (sessionID: String, filePath: String?, dateKey: String?) {
     if let session = sessionForSelectionID(selectionID) {
       return (session.sessionId, session.filePath, session.dateKey)
     }
     if let selectedSearchResultID,
       let result = searchSummary?.results.first(where: { $0.id == selectedSearchResultID && $0.sessionId == selectionID })
+    {
+      return (result.sessionId, result.filePath, result.dateKey)
+    }
+    if let selectedBrowseMessageID,
+      let result = browseMessagesSummary?.results.first(where: { $0.id == selectedBrowseMessageID && $0.sessionId == selectionID })
     {
       return (result.sessionId, result.filePath, result.dateKey)
     }
@@ -653,7 +1078,7 @@ final class AppModel: ObservableObject {
 
   private func applyPendingMessageSelection(to detail: SessionDetail) {
     guard let pendingSearchResultTarget else {
-      let userMessageOffsets = SessionInteractionBuilder.userMessageOffsets(in: detail, dateKey: selectedSessionDateKey)
+      let userMessageOffsets = visibleUserMessageOffsets(in: detail, dateKey: selectedSessionDateKey)
       if let selectedUserMessageIndex,
         userMessageOffsets.contains(where: { $0.offset == selectedUserMessageIndex }) {
         return
@@ -808,6 +1233,16 @@ final class AppModel: ObservableObject {
       let sortOption = ProjectSortOption(rawValue: savedProjectSort) {
       projectSortOption = sortOption
     }
+    let savedHiddenOperationalCategories = Set(Self.stringArray(forKey: DefaultsKeys.hiddenOperationalMessageCategories))
+    if savedHiddenOperationalCategories.isEmpty,
+      UserDefaults.standard.object(forKey: DefaultsKeys.showOperationalMessages) != nil,
+      !UserDefaults.standard.bool(forKey: DefaultsKeys.showOperationalMessages) {
+      hiddenOperationalMessageCategories = Self.operationalPromptCategorySet
+    } else {
+      hiddenOperationalMessageCategories = savedHiddenOperationalCategories
+    }
+    hiddenRepeatedPromptCategories = Set(Self.stringArray(forKey: DefaultsKeys.hiddenRepeatedPromptCategories))
+    showSessionBrowser = UserDefaults.standard.bool(forKey: DefaultsKeys.showSessionBrowser)
   }
 
   private func saveSettings() {
@@ -823,11 +1258,17 @@ final class AppModel: ObservableObject {
     UserDefaults.standard.set(dateRangeMode.rawValue, forKey: DefaultsKeys.dateRangeMode)
     UserDefaults.standard.set(Self.dateFormatter.string(from: dateAnchorDate), forKey: DefaultsKeys.dateAnchorDate)
     UserDefaults.standard.set(projectSortOption.rawValue, forKey: DefaultsKeys.projectSortOption)
+    UserDefaults.standard.set(Array(hiddenOperationalMessageCategories).sorted(), forKey: DefaultsKeys.hiddenOperationalMessageCategories)
+    UserDefaults.standard.removeObject(forKey: DefaultsKeys.showOperationalMessages)
+    UserDefaults.standard.set(Array(hiddenRepeatedPromptCategories).sorted(), forKey: DefaultsKeys.hiddenRepeatedPromptCategories)
+    UserDefaults.standard.set(showSessionBrowser, forKey: DefaultsKeys.showSessionBrowser)
   }
 
   private func applyDateRangeMode(save: Bool = true, reload: Bool = true) {
     let calendar = Calendar.current
-    dateAnchorDate = calendar.startOfDay(for: dateAnchorDate)
+    dateAnchorDate = Self.clampedToToday(dateAnchorDate, calendar: calendar)
+    sinceDate = Self.clampedToToday(sinceDate, calendar: calendar)
+    untilDate = Self.clampedToToday(untilDate, calendar: calendar)
 
     switch dateRangeMode {
     case .all:
@@ -859,6 +1300,7 @@ final class AppModel: ObservableObject {
       saveSettings()
     }
     if reload {
+      clearAuditPreview()
       clearSelectionState()
       refresh()
     }
@@ -867,10 +1309,15 @@ final class AppModel: ObservableObject {
   private func applyInterval(_ interval: DateInterval?) {
     let calendar = Calendar.current
     let interval = interval ?? DateInterval(start: dateAnchorDate, duration: 86_400)
+    let today = Self.startOfToday(calendar: calendar)
     hasSinceFilter = true
     hasUntilFilter = true
     sinceDate = calendar.startOfDay(for: interval.start)
-    untilDate = calendar.date(byAdding: .day, value: -1, to: interval.end) ?? sinceDate
+    let intervalEndDate = calendar.date(byAdding: .day, value: -1, to: interval.end) ?? sinceDate
+    untilDate = min(calendar.startOfDay(for: intervalEndDate), today)
+    if sinceDate > untilDate {
+      sinceDate = untilDate
+    }
   }
 
   private func scheduleUITestWorkflowIfNeeded(api: LogEngineAPI, filters: LogFilters) {
@@ -940,7 +1387,14 @@ final class AppModel: ObservableObject {
     else {
       throw AppSmokeError.unexpected("The sample project summary did not match the sanitized fixture.")
     }
+    guard projectSummary.promptIntents.totalMessages == 1,
+      projectSummary.promptIntents.buckets.first?.label == "Testing/verification",
+      projectSummary.promptIntents.buckets.first?.count == 1
+    else {
+      throw AppSmokeError.unexpected("The sample project focus summary did not classify the fixture prompt.")
+    }
     summary = projectSummary
+    selectedSection = .overview
 
     messageQuery = "parser test"
     messageRoleFilter = .all
@@ -977,6 +1431,7 @@ final class AppModel: ObservableObject {
     )
     guard sentMessagesSearch.totalMatches == 1,
       sentMessagesSearch.results.first?.role == MessageRoleFilter.user.rawValue,
+      sentMessagesSearch.results.first?.promptIntent == "Testing/verification",
       sentMessagesSearch.results.first?.snippet.contains("parser test") == true
     else {
       throw AppSmokeError.unexpected("The UI workflow sent-messages search did not return the fixture prompt.")
@@ -1007,6 +1462,9 @@ final class AppModel: ObservableObject {
     )
     guard detail.messages.contains(where: { $0.content.contains("parser test") }) else {
       throw AppSmokeError.unexpected("The selected search result did not load full session context.")
+    }
+    guard detail.messages.first(where: { $0.content.contains("parser test") })?.promptIntent == "Testing/verification" else {
+      throw AppSmokeError.unexpected("The selected session detail did not expose prompt intent labels.")
     }
     guard let firstUserMessage = SessionInteractionBuilder.userMessageOffsets(in: detail).first,
       let interaction = SessionInteractionBuilder.interaction(
@@ -1151,6 +1609,14 @@ final class AppModel: ObservableObject {
     displayYearFormatter.string(from: date)
   }
 
+  private static func startOfToday(calendar: Calendar = .current) -> Date {
+    calendar.startOfDay(for: Date())
+  }
+
+  private static func clampedToToday(_ date: Date, calendar: Calendar = .current) -> Date {
+    min(calendar.startOfDay(for: date), startOfToday(calendar: calendar))
+  }
+
   private static func displayDateTime(_ value: String?) -> String? {
     guard let value,
       let date = Self.isoDateFormatter.date(from: value) ?? Self.isoDateFormatterWithoutFractionalSeconds.date(from: value)
@@ -1201,6 +1667,14 @@ final class AppModel: ObservableObject {
       .trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
+  private static let operationalPromptCategoryOrder = [
+    "Code review",
+    "Git commands",
+    "Plan approvals",
+    "Run app"
+  ]
+  private static let operationalPromptCategorySet = Set(operationalPromptCategoryOrder)
+
   private static func writeStdout(_ message: String) {
     FileHandle.standardOutput.write(Data(message.utf8))
   }
@@ -1209,7 +1683,7 @@ final class AppModel: ObservableObject {
     FileHandle.standardError.write(Data(message.utf8))
   }
 
-  func showAboutBox() {
+  static func showAboutBox() {
     let credits = NSAttributedString(
       string: "A local-first native macOS viewer for Codex session logs.\n\nCodex logs stay on this Mac unless you explicitly export data.",
       attributes: [
@@ -1224,6 +1698,69 @@ final class AppModel: ObservableObject {
       .credits: credits
     ])
     NSApp.activate(ignoringOtherApps: true)
+  }
+
+  static func showHelpBox() {
+    let alert = NSAlert()
+    alert.messageText = "Codex Log Viewer Help"
+    alert.informativeText = """
+    Browse
+    Choose a project, pick a submitted message, and read the matching Codex interaction.
+
+    Overview
+    Project Focus shows the main types of work in the current project and date range.
+
+    Filters
+    Use the date control in the header. Use View > Operational Messages to hide Git, plan approval, run app, and code review prompts. Use View > Show Sessions only when you need the session column.
+
+    Search and Audit
+    Search finds messages across the current filters. Audit prepares a reviewed AI worklog for the selected repository.
+
+    Logs
+    Use Logs > Choose Codex Log Location to change sources. Exports are redacted by default, but still review them before sharing. Your Codex logs stay on this Mac unless you export them.
+    """
+    alert.alertStyle = .informational
+    alert.addButton(withTitle: "OK")
+    alert.addButton(withTitle: "Open Usage Guide")
+    if alert.runModal() == .alertSecondButtonReturn {
+      Self.openUsageGuide()
+    }
+  }
+
+  static func openUsageGuide() {
+    let usageGuideURL = Self.localUsageGuideURL() ??
+      URL(string: "https://github.com/crispierry/codex-log-viewer/blob/main/docs/usage.md")
+
+    if let usageGuideURL {
+      NSWorkspace.shared.open(usageGuideURL)
+    }
+  }
+
+  private static func localUsageGuideURL() -> URL? {
+    let fileManager = FileManager.default
+    let seeds = [
+      URL(fileURLWithPath: fileManager.currentDirectoryPath, isDirectory: true),
+      Bundle.main.bundleURL,
+      Bundle.main.executableURL?.deletingLastPathComponent()
+    ].compactMap { $0 }
+
+    for seed in seeds {
+      var directory = seed.standardizedFileURL
+      for _ in 0..<8 {
+        let candidate = directory.appendingPathComponent("docs").appendingPathComponent("usage.md")
+        if fileManager.fileExists(atPath: candidate.path) {
+          return candidate
+        }
+
+        let parent = directory.deletingLastPathComponent()
+        if parent.path == directory.path {
+          break
+        }
+        directory = parent
+      }
+    }
+
+    return nil
   }
 }
 
@@ -1251,4 +1788,8 @@ private enum DefaultsKeys {
   static let dateRangeMode = "dateRangeMode"
   static let dateAnchorDate = "dateAnchorDate"
   static let projectSortOption = "projectSortOption"
+  static let showOperationalMessages = "showOperationalMessages"
+  static let hiddenOperationalMessageCategories = "hiddenOperationalMessageCategories"
+  static let hiddenRepeatedPromptCategories = "hiddenRepeatedPromptCategories"
+  static let showSessionBrowser = "showSessionBrowser"
 }

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, unlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import test from "node:test";
@@ -143,6 +143,85 @@ test("message search can limit browse mode to submitted user messages through th
     assert.equal(submittedMessagesBody.search.results[0]?.snippet, "Typed prompt");
     assert.equal(submittedMessagesBody.search.results[0]?.content, "Typed prompt");
     assert.equal(submittedMessagesBody.search.results[0]?.snippet.includes("# In app browser:"), false);
+  } finally {
+    await server.close();
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("message search and session detail expose operational prompt categories", async () => {
+  const tempDir = await mkdtemp(`${tmpdir()}/codex-log-viewer-operational-categories-`);
+  const fixture = resolve(tempDir, "operational-categories.jsonl");
+
+  await writeFile(
+    fixture,
+    [
+      JSON.stringify({
+        timestamp: "2026-04-27T20:00:00.000Z",
+        type: "session_meta",
+        payload: {
+          id: "operational-categories-session",
+          timestamp: "2026-04-27T20:00:00.000Z",
+          cwd: "/Users/example/projects/sample-app"
+        }
+      }),
+      JSON.stringify({
+        timestamp: "2026-04-27T20:00:01.000Z",
+        type: "event_msg",
+        payload: {
+          type: "user_message",
+          message: "commit"
+        }
+      }),
+      JSON.stringify({
+        timestamp: "2026-04-27T20:00:02.000Z",
+        type: "event_msg",
+        payload: {
+          type: "user_message",
+          message: "make the sidebar clearer"
+        }
+      })
+    ].join("\n") + "\n",
+    "utf8"
+  );
+
+  const server = await startServer({ port: 0, authToken: "test-token", paths: [fixture] });
+  const headers = { authorization: "Bearer test-token" };
+
+  try {
+    const search = await fetch(`${server.url}/api/messages/search?role=user&submittedOnly=true`, { headers });
+    assert.equal(search.status, 200);
+    const searchBody = await search.json();
+    assert.equal(searchBody.search.results.find((message) => message.content === "commit")?.category, "Git commands");
+    assert.equal(searchBody.search.results.find((message) => message.content === "commit")?.promptIntent, "Git commands");
+    assert.equal(
+      searchBody.search.results.find((message) => message.content === "make the sidebar clearer")?.promptIntent,
+      "Implementation"
+    );
+
+    const filteredSearch = await fetch(
+      `${server.url}/api/messages/search?role=user&submittedOnly=true&hiddenCategory=${encodeURIComponent("Git commands")}`,
+      { headers }
+    );
+    assert.equal(filteredSearch.status, 200);
+    const filteredSearchBody = await filteredSearch.json();
+    assert.equal(filteredSearchBody.search.totalMatches, 1);
+    assert.equal(filteredSearchBody.search.results[0]?.content, "make the sidebar clearer");
+
+    const summary = await fetch(`${server.url}/api/summary?project=sample-app`, { headers });
+    assert.equal(summary.status, 200);
+    const summaryBody = await summary.json();
+    assert.equal(summaryBody.summary.promptIntents.totalMessages, 2);
+    assert.equal(
+      summaryBody.summary.promptIntents.buckets.find((bucket) => bucket.label === "Git commands")?.count,
+      1
+    );
+
+    const detail = await fetch(`${server.url}/api/session?sessionId=operational-categories-session`, { headers });
+    assert.equal(detail.status, 200);
+    const detailBody = await detail.json();
+    assert.equal(detailBody.messages.find((message) => message.content === "commit")?.category, "Git commands");
+    assert.equal(detailBody.messages.find((message) => message.content === "commit")?.promptIntent, "Git commands");
   } finally {
     await server.close();
     await rm(tempDir, { recursive: true, force: true });
@@ -465,6 +544,107 @@ test("server reports fixed-port conflicts and dynamic ports avoid them", async (
     }
   } finally {
     await first.close();
+  }
+});
+
+test("audit endpoints preview smart merges and write approved Markdown", async () => {
+  const tempDir = await mkdtemp(`${tmpdir()}/codex-log-viewer-audit-api-`);
+  const repoPath = resolve(tempDir, "sample-app");
+  const fixture = resolve(tempDir, "audit-session.jsonl");
+
+  await mkdir(repoPath, { recursive: true });
+  await writeFile(
+    fixture,
+    [
+      JSON.stringify({
+        timestamp: "2026-05-19T12:00:00.000Z",
+        type: "session_meta",
+        payload: {
+          id: "audit-api-session",
+          timestamp: "2026-05-19T12:00:00.000Z",
+          cwd: repoPath
+        }
+      }),
+      JSON.stringify({
+        timestamp: "2026-05-19T12:00:01.000Z",
+        type: "event_msg",
+        payload: {
+          type: "user_message",
+          message: "Generate the repo audit trail."
+        }
+      }),
+      JSON.stringify({
+        timestamp: "2026-05-19T12:00:02.000Z",
+        type: "response_item",
+        payload: {
+          type: "message",
+          role: "assistant",
+          content: [{ type: "output_text", text: "Prepared the audit preview." }]
+        }
+      })
+    ].join("\n") + "\n",
+    "utf8"
+  );
+
+  const server = await startServer({ port: 0, authToken: "test-token", paths: [fixture] });
+  const headers = { authorization: "Bearer test-token" };
+
+  try {
+    const preview = await fetch(`${server.url}/api/audit?repoPath=${encodeURIComponent(repoPath)}`, { headers });
+    assert.equal(preview.status, 200);
+    const previewBody = await preview.json();
+    assert.equal(previewBody.audit.appendedSections, 1);
+    assert.equal(previewBody.audit.targetPath, resolve(repoPath, "docs/ai-worklog.md"));
+    assert.match(previewBody.audit.mergedMarkdown, /Generate the repo audit trail/);
+    assert.match(previewBody.audit.mergedMarkdown, /Prepared the audit preview/);
+
+    const targetOverride = await fetch(
+      `${server.url}/api/audit?repoPath=${encodeURIComponent(repoPath)}&targetPath=${encodeURIComponent(resolve(tempDir, "elsewhere.md"))}`,
+      { headers }
+    );
+    assert.equal(targetOverride.status, 200);
+    const targetOverrideBody = await targetOverride.json();
+    assert.equal(targetOverrideBody.audit.targetPath, resolve(repoPath, "docs/ai-worklog.md"));
+
+    const approvedMarkdown = `${previewBody.audit.mergedMarkdown}\nReviewed: yes\n`;
+    const write = await fetch(`${server.url}/api/audit`, {
+      method: "POST",
+      headers: {
+        ...headers,
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        repoPath,
+        targetPath: previewBody.audit.targetPath,
+        markdown: approvedMarkdown
+      })
+    });
+    assert.equal(write.status, 200);
+    assert.equal(await readFile(previewBody.audit.targetPath, "utf8"), approvedMarkdown);
+
+    const duplicatePreview = await fetch(`${server.url}/api/audit?repoPath=${encodeURIComponent(repoPath)}`, { headers });
+    assert.equal(duplicatePreview.status, 200);
+    const duplicateBody = await duplicatePreview.json();
+    assert.equal(duplicateBody.audit.appendedSections, 0);
+    assert.equal(duplicateBody.audit.skippedSections, 1);
+    assert.match(duplicateBody.audit.mergedMarkdown, /Reviewed: yes/);
+
+    const outsideWrite = await fetch(`${server.url}/api/audit`, {
+      method: "POST",
+      headers: {
+        ...headers,
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        repoPath,
+        targetPath: resolve(tempDir, "outside.md"),
+        markdown: "outside"
+      })
+    });
+    assert.equal(outsideWrite.status, 400);
+  } finally {
+    await server.close();
+    await rm(tempDir, { recursive: true, force: true });
   }
 });
 

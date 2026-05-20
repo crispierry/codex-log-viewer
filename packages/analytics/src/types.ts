@@ -71,6 +71,30 @@ export interface RepeatedUserMessageVariant {
   lastSeen?: string;
 }
 
+export interface PromptIntentCategory {
+  key: string;
+  label: string;
+}
+
+export interface PromptIntentBucket {
+  key: string;
+  label: string;
+  count: number;
+  percentage: number;
+  sessionCount: number;
+  projects: string[];
+  examples: string[];
+  firstSeen?: string;
+  lastSeen?: string;
+}
+
+export interface PromptIntentSummary {
+  totalMessages: number;
+  classifiedMessages: number;
+  unclassifiedMessages: number;
+  buckets: PromptIntentBucket[];
+}
+
 export interface ProjectSummary {
   project: string;
   generatedAt: string;
@@ -100,6 +124,7 @@ export interface ProjectSummary {
   tokensByDay: DateBucket[];
   models: ModelBucket[];
   sessions: SessionSummary[];
+  promptIntents: PromptIntentSummary;
   repeatedUserMessages: RepeatedUserMessage[];
 }
 
@@ -111,6 +136,7 @@ export interface MessageSearchOptions extends SummaryOptions {
   filePath?: string;
   dateKey?: string;
   submittedOnly?: boolean;
+  hiddenCategories?: string[];
   limit?: number;
 }
 
@@ -127,6 +153,9 @@ export interface MessageSearchResult {
   timestamp?: string;
   role: MessageRole;
   sourceEvent: string;
+  category?: string;
+  promptIntentKey?: string;
+  promptIntent?: string;
   snippet: string;
   content: string;
 }

@@ -61,6 +61,24 @@ Default JSON still includes project names, timestamps, session IDs, model names,
 
 Raw JSON can be requested through the CLI with `--raw` or through the local API with `privacy=raw`. Raw JSON is for private local use only.
 
+## AI Worklog Audits
+
+Audit worklogs are detailed Markdown exports intended to preserve user intent. They can include every submitted user message for a project and captured Codex responses, so they are more sensitive than aggregate summaries.
+
+The app Audit section and audit command default to public mode. Public mode preserves message text while redacting obvious local home paths, email addresses, and token-like strings. This is a safety net, not a complete privacy review.
+
+The app writes an audit worklog only after the user approves the reviewed Markdown preview. Smart merge mode preserves existing reviewed entries and appends only generated sections that are not already present.
+
+Before committing `docs/ai-worklog.md`, review it for:
+
+- secrets, credentials, and cookies
+- private business or customer context
+- pasted proprietary source code
+- private document text
+- image references or local file paths that should stay private
+
+Use `--raw` only for local-only drafts, such as files under `.codex/audit/`.
+
 Future export modes should include:
 
 - aggregate-only export

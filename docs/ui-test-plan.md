@@ -78,7 +78,7 @@ npm run smoke:mac-ui
 
 Covers packaged native window launch through macOS accessibility automation using sanitized fixture paths and ephemeral settings. This is a smoke check, not a full replacement for deeper XCUITest coverage.
 
-`npm run check:mac-accessibility` verifies that release-critical native controls expose stable accessibility identifiers for menu-based source selection, header date filtering, message search, session search, exports, retry, and search-result copy actions.
+`npm run check:mac-accessibility` verifies that release-critical native controls expose stable accessibility identifiers for menu-based source selection, header date filtering, Browse message controls, message search, exports, retry, and search-result copy actions.
 
 The smoke workflow also drives the native app model through the release-critical path:
 

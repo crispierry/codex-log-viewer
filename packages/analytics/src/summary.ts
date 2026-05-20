@@ -8,6 +8,7 @@ import type {
   TurnRecord
 } from "@codex-log-viewer/parser";
 import { defaultCodexLogRoots } from "@codex-log-viewer/parser";
+import { classifyPromptIntent, promptIntentCategories } from "./prompt-intents.js";
 import { listProjects, projectContextForFile, projectNameForCwd } from "./project.js";
 import type {
   DateBucket,
@@ -16,6 +17,7 @@ import type {
   MessageSearchResult,
   MessageSearchSummary,
   ModelBucket,
+  PromptIntentSummary,
   ProjectAlias,
   ProjectListItem,
   ProjectSummary,
@@ -87,6 +89,7 @@ export function summarizeParsedCorpus(corpus: ParsedCodexCorpus, options: Summar
   const sessions = sessionSummaries(corpus, visibleFiles, aliases, range);
   const activity = activityRange(sessions);
   const repeatedUserMessages = repeatedUserMessageGroups(submittedUserMessages, corpus, aliases);
+  const promptIntents = promptIntentSummary(submittedUserMessages, corpus, aliases);
   const visibleSessionFilePaths = new Set(sessions.map((session) => session.filePath));
   const parseWarnings = corpus.warnings.filter((warning) => visibleSessionFilePaths.has(warning.filePath));
 
@@ -116,6 +119,7 @@ export function summarizeParsedCorpus(corpus: ParsedCodexCorpus, options: Summar
     tokensByDay,
     models,
     sessions,
+    promptIntents,
     repeatedUserMessages
   };
 }
@@ -150,6 +154,7 @@ export function searchMessages(corpus: ParsedCodexCorpus, options: MessageSearch
   const sessionFilter = options.sessionId?.trim();
   const filePathFilter = options.filePath?.trim();
   const dateKeyFilter = options.dateKey?.trim();
+  const hiddenCategories = new Set((options.hiddenCategories ?? []).map((category) => category.trim()).filter(Boolean));
 
   const range = dateRange(options);
   const sessionContexts = new Map<string, ReturnType<typeof projectContextForFile>>();
@@ -202,6 +207,16 @@ export function searchMessages(corpus: ParsedCodexCorpus, options: MessageSearch
       continue;
     }
 
+    const category = message.sourceEvent === "event_msg.user_message"
+      ? userMessageCategoryLabel(message.content)
+      : undefined;
+    if (category && hiddenCategories.has(category)) {
+      continue;
+    }
+    const promptIntent = message.sourceEvent === "event_msg.user_message"
+      ? classifyPromptIntent(message.content)
+      : undefined;
+
     matches.push({
       id: [
         message.filePath,
@@ -224,6 +239,9 @@ export function searchMessages(corpus: ParsedCodexCorpus, options: MessageSearch
       timestamp: message.timestamp,
       role: message.role,
       sourceEvent: message.sourceEvent,
+      category,
+      promptIntentKey: promptIntent?.key,
+      promptIntent: promptIntent?.label,
       snippet: snippetFor(message.content, query),
       content: message.content
     });
@@ -253,7 +271,7 @@ function clampLimit(limit: number | undefined): number {
   if (!limit || Number.isNaN(limit)) {
     return 100;
   }
-  return Math.max(1, Math.min(500, Math.trunc(limit)));
+  return Math.max(1, Math.min(10_000, Math.trunc(limit)));
 }
 
 function snippetFor(content: string, query: string): string {
@@ -475,9 +493,88 @@ function repeatedUserMessageGroups(
     .slice(0, 10);
 }
 
+function promptIntentSummary(
+  messages: MessageRecord[],
+  corpus: ParsedCodexCorpus,
+  aliases: ProjectAlias[]
+): PromptIntentSummary {
+  const groups = new Map<
+    string,
+    {
+      key: string;
+      label: string;
+      count: number;
+      sessionIds: Set<string>;
+      projects: Set<string>;
+      examples: Map<string, string>;
+      firstSeen?: string;
+      lastSeen?: string;
+    }
+  >();
+
+  for (const message of messages) {
+    const category = classifyPromptIntent(message.content);
+    const group = groups.get(category.key) ?? {
+      key: category.key,
+      label: category.label,
+      count: 0,
+      sessionIds: new Set<string>(),
+      projects: new Set<string>(),
+      examples: new Map<string, string>(),
+      firstSeen: message.timestamp,
+      lastSeen: message.timestamp
+    };
+    const sample = compactIntentExample(message.content);
+    const normalizedSample = normalizeLiteralMessage(sample);
+    const project = projectContextForFile(message, corpus, aliases).project;
+    group.count += 1;
+    group.sessionIds.add(sessionRecordKey(message.filePath, message.sessionId));
+    group.projects.add(project);
+    group.firstSeen = earlierTimestamp(group.firstSeen, message.timestamp);
+    group.lastSeen = laterTimestamp(group.lastSeen, message.timestamp);
+    if (sample && !group.examples.has(normalizedSample)) {
+      group.examples.set(normalizedSample, sample);
+    }
+    groups.set(category.key, group);
+  }
+
+  const totalMessages = messages.length;
+  const buckets = [...groups.values()]
+    .map((group) => ({
+      key: group.key,
+      label: group.label,
+      count: group.count,
+      percentage: totalMessages > 0 ? Math.round((group.count / totalMessages) * 1000) / 10 : 0,
+      sessionCount: group.sessionIds.size,
+      projects: [...group.projects].sort((a, b) => a.localeCompare(b)),
+      examples: [...group.examples.values()].slice(0, 3),
+      firstSeen: group.firstSeen,
+      lastSeen: group.lastSeen
+    }))
+    .sort(
+      (a, b) =>
+        b.count - a.count ||
+        (b.lastSeen ?? "").localeCompare(a.lastSeen ?? "") ||
+        a.label.localeCompare(b.label)
+    );
+
+  const unclassifiedMessages = groups.get(promptIntentCategories.other.key)?.count ?? 0;
+  return {
+    totalMessages,
+    classifiedMessages: totalMessages - unclassifiedMessages,
+    unclassifiedMessages,
+    buckets
+  };
+}
+
 function compactMessageSample(value: string): string {
   const compacted = value.trim().replace(/\s+/g, " ");
   return compacted.length > 240 ? `${compacted.slice(0, 237)}...` : compacted;
+}
+
+function compactIntentExample(value: string): string {
+  const compacted = value.trim().replace(/\s+/g, " ");
+  return compacted.length > 96 ? `${compacted.slice(0, 93)}...` : compacted;
 }
 
 function userMessageGroup(message: string): {
@@ -512,6 +609,10 @@ function normalizeLiteralMessage(message: string): string {
   return message.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
+export function userMessageCategoryLabel(message: string): string | undefined {
+  return userMessageCategory(normalizeLiteralMessage(message))?.label;
+}
+
 function userMessageCategory(normalized: string): { key: string; label: string } | undefined {
   if (isPlanApprovalMessage(normalized)) {
     return { key: "plan-approvals", label: "Plan approvals" };
@@ -524,6 +625,9 @@ function userMessageCategory(normalized: string): { key: string; label: string }
   if (isRunAppMessage(commandText)) {
     return { key: "run-app", label: "Run app" };
   }
+  if (isCodeReviewMessage(commandText)) {
+    return { key: "code-review", label: "Code review" };
+  }
   return undefined;
 }
 
@@ -535,11 +639,11 @@ function isPlanApprovalMessage(normalized: string): boolean {
     .replace(/[.!]+$/u, "")
     .replace(/\s*,\s*/gu, ", ")
     .trim();
-  const oneWordApproval = /^(yes|yeah|yep|yup|sure|ok|okay|approved|confirmed)$/u.test(value);
+  const oneWordApproval = /^(yes|yeah|yep|yup|sure|ok|okay|approved|confirmed|execute)$/u.test(value);
   const shortApproval =
     /^(yes|yeah|yep|yup|sure|ok|okay),? (please|go ahead|proceed|do it|sounds good|let's do it|lets do it)$/u.test(value);
   const phraseApproval =
-    /^(sounds good|looks good|that works|works for me|go ahead|please do|do it|proceed|approved|confirmed|ship it|let's do it|lets do it)( please)?$/u.test(value);
+    /^(sounds good|looks good|that works|works for me|go ahead|please do|do it|do that|proceed|approved|confirmed|ship it|let's do it|lets do it|execute it|execute that|execute this|execute the plan|execute the changes)( please)?$/u.test(value);
   return oneWordApproval || shortApproval || phraseApproval;
 }
 
@@ -564,6 +668,8 @@ function isGitCommandMessage(normalized: string): boolean {
   }
   const directGitCommand =
     /^(git )?(commit|push|merge|rebase|branch|checkout|switch|pull|fetch|stash|tag|open pr|create pr|close pr|merge pr)\b/.test(normalized);
+  const publishCommand =
+    /^(publish|deploy)( (it|this|the app|the build|the release|the site|the website|to (main|origin|github|production|prod|release)|production|prod))?$/u.test(normalized);
   const explicitGitInspection = /^git (status|diff|log)\b/.test(normalized);
   const gitObjectAction =
     /^(create|make|open|merge|close|delete|remove|clean|switch|checkout) ((a|the|current|new) )*(branch|commit|pull request|pr|worktree|work tree)\b/.test(normalized);
@@ -571,7 +677,7 @@ function isGitCommandMessage(normalized: string): boolean {
   const commitStateQuestion =
     /^(are|is|did|do|does|have|has)\b.*\b(all|everything|files?|changes?|work|worktree|work tree|repo|repository|anything|we)\b.*\b(committed|commit|pushed|push|staged|unstaged|uncommitted|dirty|clean)\b\??$/.test(normalized) ||
     /^(all|everything|files?|changes?|anything|repo|repository|worktree|work tree)\b.*\b(committed|pushed|staged|unstaged|uncommitted|dirty|clean)\b\??$/.test(normalized);
-  return directGitCommand || explicitGitInspection || gitObjectAction || worktreeCleanup || commitStateQuestion;
+  return directGitCommand || publishCommand || explicitGitInspection || gitObjectAction || worktreeCleanup || commitStateQuestion;
 }
 
 function isRunAppMessage(normalized: string): boolean {
@@ -582,6 +688,17 @@ function isRunAppMessage(normalized: string): boolean {
     /^(run|start|restart|launch|open) (the )?(app|application|desktop app|mac app|macos app|native app|packaged app|server|local server|dev server|development server)\b/.test(normalized);
   const devServerCommand = /^(run|start|restart) (npm run dev|dev|desktop|local app)\b/.test(normalized);
   return appLaunchCommand || devServerCommand;
+}
+
+function isCodeReviewMessage(normalized: string): boolean {
+  if (normalized.length > 160) {
+    return false;
+  }
+  const reviewCommand =
+    /^(code review|do a code review|run a code review|review code|review the code|review this code|review the diff|review the changes)\b/.test(normalized);
+  const reviewTarget =
+    /^(review|inspect|audit) (the )?(code|diff|changes|change set|pull request|pr)\b/.test(normalized);
+  return reviewCommand || reviewTarget;
 }
 
 function repeatedMessageId(normalized: string): string {

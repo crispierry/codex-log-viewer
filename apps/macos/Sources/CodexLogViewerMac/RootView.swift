@@ -7,9 +7,9 @@ struct RootView: View {
   var body: some View {
     HSplitView {
       SidebarView()
-        .frame(minWidth: 210, idealWidth: 230, maxWidth: 270)
+        .frame(minWidth: 170, idealWidth: 230, maxWidth: 270)
       ProjectWorkspaceView()
-        .frame(minWidth: 820)
+        .frame(minWidth: 540)
     }
     .toolbar {
       ToolbarItem(placement: .navigation) {
@@ -19,25 +19,6 @@ struct RootView: View {
           Label("Refresh", systemImage: "arrow.clockwise")
         }
         .accessibilityIdentifier("refresh-button")
-      }
-
-      ToolbarItemGroup(placement: .primaryAction) {
-        Button {
-          model.exportSummary(.json)
-        } label: {
-          Label("Export JSON", systemImage: "doc")
-        }
-        .accessibilityIdentifier("export-json-button")
-
-        Button {
-          model.exportSummary(.csv)
-        } label: {
-          Label("Export CSV", systemImage: "tablecells")
-        }
-        .accessibilityIdentifier("export-csv-button")
-
-        StatusPill(status: model.status)
-          .accessibilityIdentifier("status-pill")
       }
     }
   }
@@ -61,6 +42,8 @@ struct ProjectWorkspaceView: View {
           OverviewSectionView()
         case .search:
           SearchSectionView()
+        case .audit:
+          AuditSectionView()
         }
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -104,7 +87,7 @@ struct WorkspaceHeaderView: View {
       }
       .labelsHidden()
       .pickerStyle(.segmented)
-      .frame(width: 300)
+      .frame(minWidth: 260, idealWidth: 340, maxWidth: 380)
     }
   }
 }
@@ -132,68 +115,83 @@ struct DateRangeControlView: View {
 
 struct DateRangePopoverView: View {
   @EnvironmentObject private var model: AppModel
+  private let labelColumnWidth: CGFloat = 52
 
   var body: some View {
     VStack(alignment: .leading, spacing: 14) {
       Text("Activity Range")
         .font(.headline)
 
-      Picker(
-        "Range",
-        selection: Binding(
-          get: { model.dateRangeMode },
-          set: { model.setDateRangeMode($0) }
-        )
-      ) {
-        ForEach(DateRangeMode.allCases) { mode in
-          Text(mode.label).tag(mode)
+      formRow(label: "Range") {
+        Picker(
+          "Range",
+          selection: Binding(
+            get: { model.dateRangeMode },
+            set: { model.setDateRangeMode($0) }
+          )
+        ) {
+          ForEach(DateRangeMode.allCases) { mode in
+            Text(mode.label).tag(mode)
+          }
         }
+        .labelsHidden()
+        .pickerStyle(.segmented)
+        .accessibilityIdentifier("date-range-mode-picker")
       }
-      .pickerStyle(.segmented)
-      .accessibilityIdentifier("date-range-mode-picker")
 
       switch model.dateRangeMode {
       case .all:
-        Text("All local Codex activity is included.")
-          .font(.callout)
-          .foregroundStyle(.secondary)
+        detailText("All local Codex activity is included.")
       case .custom:
         VStack(alignment: .leading, spacing: 10) {
-          DatePicker(
-            "Start",
-            selection: Binding(
-              get: { model.sinceDate },
-              set: { model.setCustomSinceDate($0) }
-            ),
-            displayedComponents: .date
-          )
-          .accessibilityIdentifier("date-range-start-picker")
+          formRow(label: "Start") {
+            DatePicker(
+              "Start",
+              selection: Binding(
+                get: { model.sinceDate },
+                set: { model.setCustomSinceDate($0) }
+              ),
+              in: ...model.latestSelectableDate,
+              displayedComponents: .date
+            )
+            .labelsHidden()
+            .frame(width: 116, alignment: .leading)
+            .accessibilityIdentifier("date-range-start-picker")
+          }
 
-          DatePicker(
-            "End",
-            selection: Binding(
-              get: { model.untilDate },
-              set: { model.setCustomUntilDate($0) }
-            ),
-            displayedComponents: .date
-          )
-          .accessibilityIdentifier("date-range-end-picker")
+          formRow(label: "End") {
+            DatePicker(
+              "End",
+              selection: Binding(
+                get: { model.untilDate },
+                set: { model.setCustomUntilDate($0) }
+              ),
+              in: ...model.latestSelectableDate,
+              displayedComponents: .date
+            )
+            .labelsHidden()
+            .frame(width: 116, alignment: .leading)
+            .accessibilityIdentifier("date-range-end-picker")
+          }
         }
       default:
-        DatePicker(
-          model.dateRangeMode.anchorLabel,
-          selection: Binding(
-            get: { model.dateAnchorDate },
-            set: { model.setDateAnchorDate($0) }
-          ),
-          displayedComponents: .date
-        )
-        .accessibilityIdentifier("date-anchor-picker")
+        formRow(label: model.dateRangeMode.anchorLabel) {
+          DatePicker(
+            model.dateRangeMode.anchorLabel,
+            selection: Binding(
+              get: { model.dateAnchorDate },
+              set: { model.setDateAnchorDate($0) }
+            ),
+            in: ...model.latestSelectableDate,
+            displayedComponents: .date
+          )
+          .labelsHidden()
+          .frame(width: 116, alignment: .leading)
+          .accessibilityIdentifier("date-anchor-picker")
+        }
       }
 
-      Text(model.dateRangeDetailText)
-        .font(.caption)
-        .foregroundStyle(.secondary)
+      detailText(model.dateRangeDetailText)
         .accessibilityIdentifier("date-range-summary-label")
 
       HStack {
@@ -206,6 +204,26 @@ struct DateRangePopoverView: View {
     }
     .padding(16)
     .frame(width: 430)
+  }
+
+  private func formRow<Content: View>(
+    label: String,
+    @ViewBuilder content: () -> Content
+  ) -> some View {
+    HStack(alignment: .center, spacing: 10) {
+      Text(label)
+        .font(.callout)
+        .frame(width: labelColumnWidth, alignment: .leading)
+      content()
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+  }
+
+  private func detailText(_ text: String) -> some View {
+    Text(text)
+      .font(.caption)
+      .foregroundStyle(.secondary)
+      .padding(.leading, labelColumnWidth + 10)
   }
 }
 
@@ -296,24 +314,22 @@ struct ProjectListRow: View {
 
   var body: some View {
     Label {
-      HStack {
-        VStack(alignment: .leading, spacing: 2) {
-          Text(title)
-            .lineLimit(1)
-          Text(metadataText)
-            .font(.caption)
-            .foregroundStyle(.secondary)
-        }
-        Spacer()
-        Text(userMessages.formatted())
-          .font(.body.monospacedDigit())
-          .fontWeight(.semibold)
-          .foregroundStyle(.secondary)
+      HStack(spacing: 8) {
+        Text(title)
+          .fontWeight(.medium)
+          .lineLimit(1)
+          .truncationMode(.middle)
+          .frame(maxWidth: .infinity, alignment: .leading)
+
+        ProjectMessageCountBadge(count: userMessages)
       }
     } icon: {
       Image(systemName: systemImage)
+        .foregroundStyle(systemImage == "square.grid.2x2" ? Color.accentColor : Color.secondary)
     }
+    .padding(.vertical, 3)
     .help(helpText)
+    .accessibilityLabel(accessibilityText)
   }
 
   private var metadataText: String {
@@ -321,14 +337,35 @@ struct ProjectListRow: View {
   }
 
   private var helpText: String {
+    let details = "\(userMessages.formatted()) sent messages, \(metadataText)"
     if let lastSeen, !lastSeen.isEmpty {
-      return "\(title), last session \(formattedDate(lastSeen))"
+      return "\(title)\n\(details)\nLast session \(formattedDate(lastSeen))"
     }
-    return title
+    return "\(title)\n\(details)"
+  }
+
+  private var accessibilityText: String {
+    "\(title), \(userMessages.formatted()) sent messages, \(metadataText)"
   }
 
   private func countLabel(_ count: Int, singular: String, plural: String) -> String {
     "\(count.formatted()) \(count == 1 ? singular : plural)"
+  }
+}
+
+struct ProjectMessageCountBadge: View {
+  let count: Int
+
+  var body: some View {
+    Text(count.formatted())
+      .font(.callout.monospacedDigit())
+      .fontWeight(.semibold)
+      .foregroundStyle(.secondary)
+      .lineLimit(1)
+      .minimumScaleFactor(0.8)
+      .padding(.horizontal, 6)
+      .padding(.vertical, 2)
+      .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
   }
 }
 
@@ -345,18 +382,20 @@ struct BrowseWorkspaceView: View {
       }
 
       HSplitView {
-        SessionBrowserColumn()
-          .frame(minWidth: 300, idealWidth: 340, maxWidth: 440)
+        if model.showSessionBrowser {
+          SessionBrowserColumn()
+            .frame(minWidth: 190, idealWidth: 280, maxWidth: 380)
+        }
         SentMessagesBrowserColumn()
-          .frame(minWidth: 320, idealWidth: 380, maxWidth: 520)
+          .frame(minWidth: 230, idealWidth: model.showSessionBrowser ? 340 : 380, maxWidth: 560)
         InteractionBrowserColumn()
-          .frame(minWidth: 420, idealWidth: 580)
+          .frame(minWidth: 280, idealWidth: 520)
       }
     }
   }
 }
 
-struct BrowserColumnHeader: View {
+struct BrowserColumnStatusBar: View {
   let title: String
   let subtitle: String?
 
@@ -366,19 +405,23 @@ struct BrowserColumnHeader: View {
   }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 3) {
+    HStack(spacing: 8) {
       Text(title)
-        .font(.headline)
+        .font(.caption)
+        .fontWeight(.semibold)
+        .foregroundStyle(.primary)
       if let subtitle {
         Text(subtitle)
-          .font(.caption)
+          .font(.caption2)
           .foregroundStyle(.secondary)
-          .lineLimit(1)
       }
+      Spacer(minLength: 0)
     }
+    .lineLimit(1)
+    .padding(.horizontal, 10)
+    .frame(height: 24)
     .frame(maxWidth: .infinity, alignment: .leading)
-    .padding(.horizontal, 18)
-    .padding(.vertical, 12)
+    .background(Color.primary.opacity(0.045))
   }
 }
 
@@ -393,58 +436,53 @@ struct SessionBrowserColumn: View {
     if model.summary?.totals.sessions == 0 {
       return "Choose another source or return to the default Codex log locations."
     }
-    return "Clear the session search or adjust the current filters."
+    return "Adjust the current filters."
   }
 
   var body: some View {
-    VStack(spacing: 0) {
-      BrowserColumnHeader(
-        "Daily Sessions",
-        subtitle: "\(model.filteredSessions.count.formatted()) visible"
-      )
-      Divider()
-      HStack {
-        Image(systemName: "line.3.horizontal.decrease.circle")
-          .foregroundStyle(.secondary)
-        TextField("Search sessions", text: $model.sessionQuery)
-          .textFieldStyle(.plain)
-          .accessibilityIdentifier("session-search-field")
-      }
-      .padding(8)
-      .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
-      .padding(10)
+    let sessions = model.summary?.sessions ?? []
 
-      if model.summary != nil {
-        if model.filteredSessions.isEmpty {
-          ContentUnavailableView(
-            emptySessionsTitle,
-            systemImage: "tray",
-            description: Text(emptySessionsDescription)
-          )
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
-          .accessibilityIdentifier("sessions-empty-state")
-        } else {
-          List(model.filteredSessions) { session in
-            Button {
-              model.selectSession(session.id)
-            } label: {
-              SessionBrowserRow(
-                session: session,
-                isSelected: model.selectedSessionID == session.id
-              )
+    VStack(spacing: 0) {
+      Group {
+        if model.summary != nil {
+          if sessions.isEmpty {
+            ContentUnavailableView(
+              emptySessionsTitle,
+              systemImage: "tray",
+              description: Text(emptySessionsDescription)
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .accessibilityIdentifier("sessions-empty-state")
+          } else {
+            List(sessions) { session in
+              Button {
+                model.selectSession(session.id)
+              } label: {
+                SessionBrowserRow(
+                  session: session,
+                  isSelected: model.selectedSessionID == session.id
+                )
+              }
+              .frame(maxWidth: .infinity, alignment: .leading)
+              .contentShape(Rectangle())
+              .buttonStyle(.plain)
+              .listRowInsets(EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8))
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
-            .buttonStyle(.plain)
-            .listRowInsets(EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8))
+            .listStyle(.plain)
+            .accessibilityIdentifier("sessions-table")
           }
-          .listStyle(.plain)
-          .accessibilityIdentifier("sessions-table")
+        } else {
+          ProgressView("Scanning local logs")
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-      } else {
-        ProgressView("Scanning local logs")
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
       }
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+      Divider()
+      BrowserColumnStatusBar(
+        "Sessions",
+        subtitle: "\(sessions.count.formatted()) visible"
+      )
     }
     .background(.background)
   }
@@ -489,55 +527,155 @@ struct SessionBrowserRow: View {
 struct SentMessagesBrowserColumn: View {
   @EnvironmentObject private var model: AppModel
 
-  private var userMessages: [(offset: Int, element: MessageDetail)] {
+  private var sessionUserMessages: [(offset: Int, element: MessageDetail)] {
+    guard let detail = model.selectedSessionDetail else { return [] }
+    return model.visibleUserMessageOffsets(in: detail, dateKey: model.selectedSessionDateKey)
+  }
+
+  private var sessionAllUserMessages: [(offset: Int, element: MessageDetail)] {
     guard let detail = model.selectedSessionDetail else { return [] }
     return SessionInteractionBuilder.userMessageOffsets(in: detail, dateKey: model.selectedSessionDateKey)
   }
 
+  private var browseMessages: [MessageSearchResult] {
+    model.browseMessages
+  }
+
   var body: some View {
     VStack(spacing: 0) {
-      BrowserColumnHeader(
-        "Messages",
-        subtitle: model.selectedSessionID == nil ? "Select a session" : "\(userMessages.count.formatted()) sent"
-      )
-      Divider()
-
-      if model.isDetailLoading {
-        ProgressView("Loading messages")
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
-      } else if model.selectedSessionID == nil {
-        ContentUnavailableView(
-          "Select a Session",
-          systemImage: "list.bullet.rectangle",
-          description: Text("Choose a session to see sent messages.")
-        )
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-      } else if userMessages.isEmpty {
-        ContentUnavailableView(
-          "No Sent Messages",
-          systemImage: "paperplane",
-          description: Text("This session has no submitted user messages.")
-        )
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-      } else {
-        List(userMessages, id: \.offset) { item in
-          Button {
-            model.selectedUserMessageIndex = item.offset
-          } label: {
-            SentMessageBrowserRow(
-              message: item.element,
-              isSelected: model.selectedUserMessageIndex == item.offset
-            )
-          }
-          .frame(maxWidth: .infinity, alignment: .leading)
-          .contentShape(Rectangle())
-          .buttonStyle(.plain)
-          .listRowInsets(EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8))
-        }
-        .listStyle(.plain)
+      HStack {
+        Label("User Messages", systemImage: "paperplane")
+          .font(.title3)
+          .fontWeight(.semibold)
+        Spacer(minLength: 0)
       }
+      .padding(.horizontal, 16)
+      .padding(.top, 14)
+      .padding(.bottom, 8)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .accessibilityIdentifier("messages-column-title")
+
+      Group {
+        if model.showSessionBrowser {
+          sessionMessagesView
+        } else {
+          projectMessagesView
+        }
+      }
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+      Divider()
+      BrowserColumnStatusBar(
+        "User Messages",
+        subtitle: statusSubtitle
+      )
     }
     .background(.background)
+  }
+
+  @ViewBuilder
+  private var sessionMessagesView: some View {
+    if model.isDetailLoading {
+      ProgressView("Loading messages")
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    } else if model.selectedSessionID == nil {
+      ContentUnavailableView(
+        "Select a Session",
+        systemImage: "list.bullet.rectangle",
+        description: Text("Choose a session to see sent messages.")
+      )
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+    } else if sessionUserMessages.isEmpty {
+      ContentUnavailableView(
+        sessionAllUserMessages.isEmpty ? "No Sent Messages" : "No Visible Messages",
+        systemImage: "paperplane",
+        description: Text(
+          sessionAllUserMessages.isEmpty
+            ? "This session has no submitted user messages."
+            : "Turn on at least one operational message family in the View menu."
+        )
+      )
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+    } else {
+      List(sessionUserMessages, id: \.offset) { item in
+        Button {
+          model.selectedUserMessageIndex = item.offset
+        } label: {
+          SentMessageBrowserRow(
+            message: item.element,
+            isSelected: model.selectedUserMessageIndex == item.offset
+          )
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .buttonStyle(.plain)
+        .listRowInsets(EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8))
+      }
+      .listStyle(.plain)
+      .accessibilityIdentifier("browse-messages-list")
+    }
+  }
+
+  @ViewBuilder
+  private var projectMessagesView: some View {
+    projectMessagesContent
+  }
+
+  @ViewBuilder
+  private var projectMessagesContent: some View {
+    if model.isBrowseMessagesLoading && browseMessages.isEmpty {
+      ProgressView("Loading messages")
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    } else if browseMessages.isEmpty {
+      ContentUnavailableView(
+        "No Sent Messages",
+        systemImage: "paperplane",
+        description: Text("No submitted messages match the selected project and date filters.")
+      )
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+    } else {
+      List(browseMessages) { message in
+        Button {
+          model.selectBrowseMessage(message.id)
+        } label: {
+          SentMessageResultBrowserRow(
+            message: message,
+            isSelected: model.selectedBrowseMessageID == message.id
+          )
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .buttonStyle(.plain)
+        .listRowInsets(EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8))
+      }
+      .listStyle(.plain)
+      .accessibilityIdentifier("browse-messages-list")
+    }
+  }
+
+  private var statusSubtitle: String? {
+    if model.showSessionBrowser {
+      if model.selectedSessionID == nil {
+        return "Select a session"
+      }
+      if sessionUserMessages.count != sessionAllUserMessages.count {
+        return "\(sessionUserMessages.count.formatted()) visible of \(sessionAllUserMessages.count.formatted()) sent"
+      }
+      return "\(sessionUserMessages.count.formatted()) sent"
+    }
+    if model.isBrowseMessagesLoading && browseMessages.isEmpty {
+      return "Loading"
+    }
+    guard let summary = model.browseMessagesSummary else {
+      return nil
+    }
+    if browseMessages.count != summary.results.count {
+      return "\(browseMessages.count.formatted()) visible of \(summary.totalMatches.formatted()) sent"
+    }
+    if summary.totalMatches > summary.results.count {
+      return "\(summary.results.count.formatted()) of \(summary.totalMatches.formatted()) sent"
+    }
+    return "\(summary.totalMatches.formatted()) sent"
   }
 }
 
@@ -547,9 +685,13 @@ struct SentMessageBrowserRow: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
-      Text(formattedDate(message.timestamp))
-        .font(.caption.monospacedDigit())
-        .foregroundStyle(.secondary)
+      HStack(alignment: .firstTextBaseline, spacing: 8) {
+        PromptIntentBadge(key: message.promptIntentKey, label: message.promptIntent)
+        Text(formattedDate(message.timestamp))
+          .font(.caption.monospacedDigit())
+          .foregroundStyle(.secondary)
+        Spacer(minLength: 8)
+      }
       Text(messageDisplayText(message))
         .font(.body)
         .lineLimit(4)
@@ -557,11 +699,102 @@ struct SentMessageBrowserRow: View {
     }
     .padding(10)
     .frame(maxWidth: .infinity, alignment: .leading)
-    .background(
-      isSelected ? Color.accentColor.opacity(0.16) : Color.primary.opacity(0.04),
-      in: RoundedRectangle(cornerRadius: 8)
-    )
+    .promptIntentCardChrome(key: message.promptIntentKey, isSelected: isSelected)
     .contentShape(Rectangle())
+  }
+}
+
+struct SentMessageResultBrowserRow: View {
+  let message: MessageSearchResult
+  let isSelected: Bool
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 6) {
+      HStack(alignment: .firstTextBaseline, spacing: 8) {
+        PromptIntentBadge(key: message.promptIntentKey, label: message.promptIntent)
+        Label {
+          Text(message.project)
+            .lineLimit(1)
+            .truncationMode(.middle)
+        } icon: {
+          Image(systemName: "folder")
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+
+        Text(formattedDate(message.timestamp))
+          .font(.caption.monospacedDigit())
+          .foregroundStyle(.secondary)
+        Spacer(minLength: 8)
+        if let model = message.model, !model.isEmpty {
+          Text(model)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+        }
+      }
+      Text(message.content.trimmingCharacters(in: .whitespacesAndNewlines))
+        .font(.body)
+        .lineLimit(4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+    .padding(10)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .promptIntentCardChrome(key: message.promptIntentKey, isSelected: isSelected)
+    .contentShape(Rectangle())
+  }
+}
+
+struct PromptIntentBadge: View {
+  let key: String?
+  let label: String?
+
+  var body: some View {
+    if let label, !label.isEmpty {
+      Text(label)
+        .lineLimit(1)
+      .font(.caption)
+      .fontWeight(.semibold)
+      .foregroundStyle(projectFocusColor(for: key ?? ""))
+      .accessibilityLabel("Prompt category: \(label)")
+    }
+  }
+}
+
+private struct PromptIntentCardChrome: ViewModifier {
+  let key: String?
+  let isSelected: Bool
+  var isHighlighted = false
+
+  private var tint: Color {
+    projectFocusColor(for: key ?? "")
+  }
+
+  func body(content: Content) -> some View {
+    content
+      .background(
+        isSelected ? Color.accentColor.opacity(0.14) : Color.primary.opacity(0.045),
+        in: RoundedRectangle(cornerRadius: 8)
+      )
+      .overlay(alignment: .leading) {
+        Rectangle()
+          .fill(tint.opacity(0.75))
+          .frame(width: 3)
+      }
+      .overlay {
+        RoundedRectangle(cornerRadius: 8)
+          .stroke(
+            isSelected || isHighlighted ? Color.accentColor.opacity(0.45) : Color.primary.opacity(0.08),
+            lineWidth: 1
+          )
+      }
+      .clipShape(RoundedRectangle(cornerRadius: 8))
+  }
+}
+
+private extension View {
+  func promptIntentCardChrome(key: String?, isSelected: Bool = false, isHighlighted: Bool = false) -> some View {
+    modifier(PromptIntentCardChrome(key: key, isSelected: isSelected, isHighlighted: isHighlighted))
   }
 }
 
@@ -579,39 +812,46 @@ struct InteractionBrowserColumn: View {
 
   var body: some View {
     VStack(spacing: 0) {
-      BrowserColumnHeader("Codex Interaction", subtitle: interactionSubtitle)
-      Divider()
-
-      if model.isDetailLoading {
-        ProgressView("Loading interaction")
+      Group {
+        if model.isDetailLoading {
+          ProgressView("Loading interaction")
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if model.selectedSessionID == nil {
+          ContentUnavailableView(
+            model.showSessionBrowser ? "Select a Session" : "Select a Message",
+            systemImage: "sidebar.right",
+            description: Text(
+              model.showSessionBrowser
+                ? "Choose a session and sent message to inspect Codex's response."
+                : "Choose a sent message to inspect Codex's response."
+            )
+          )
           .frame(maxWidth: .infinity, maxHeight: .infinity)
-      } else if model.selectedSessionID == nil {
-        ContentUnavailableView(
-          "Select a Session",
-          systemImage: "sidebar.right",
-          description: Text("Choose a session and sent message to inspect Codex's response.")
-        )
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-      } else if model.selectedUserMessageIndex == nil {
-        ContentUnavailableView(
-          "Select a Message",
-          systemImage: "text.bubble",
-          description: Text("Choose a sent message to show the Codex interaction.")
-        )
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-      } else if let selectedInteraction {
-        ScrollView {
-          CodexInteractionView(interaction: selectedInteraction)
-            .padding(16)
+        } else if model.selectedUserMessageIndex == nil {
+          ContentUnavailableView(
+            "Select a Message",
+            systemImage: "text.bubble",
+            description: Text("Choose a sent message to show the Codex interaction.")
+          )
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if let selectedInteraction {
+          ScrollView {
+            CodexInteractionView(interaction: selectedInteraction)
+              .padding(16)
+          }
+        } else {
+          ContentUnavailableView(
+            "Interaction Not Found",
+            systemImage: "exclamationmark.triangle",
+            description: Text("This message could not be matched to a Codex response.")
+          )
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-      } else {
-        ContentUnavailableView(
-          "Interaction Not Found",
-          systemImage: "exclamationmark.triangle",
-          description: Text("This message could not be matched to a Codex response.")
-        )
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
       }
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+      Divider()
+      BrowserColumnStatusBar("Codex Interaction", subtitle: interactionSubtitle)
     }
     .background(.background)
   }
@@ -620,10 +860,12 @@ struct InteractionBrowserColumn: View {
     guard let selectedInteraction else { return nil }
     let responseCount = selectedInteraction.assistantMessages.count
     let toolCount = selectedInteraction.toolEvents.count
+    let responseLabel = "\(responseCount.formatted()) \(responseCount == 1 ? "response" : "responses")"
     if toolCount > 0 {
-      return "\(responseCount.formatted()) response, \(toolCount.formatted()) tools"
+      let toolLabel = "\(toolCount.formatted()) \(toolCount == 1 ? "tool" : "tools")"
+      return "\(responseLabel) · \(toolLabel)"
     }
-    return "\(responseCount.formatted()) response"
+    return responseLabel
   }
 }
 
@@ -645,8 +887,8 @@ struct OverviewSectionView: View {
 
         MetricsGrid(summary: model.summary)
         if let summary = model.summary, summary.totals.sessions > 0 {
+          ProjectFocusView(summary: summary.promptIntents)
           ChartsSection(summary: summary)
-          RepeatedPromptsView(messages: summary.repeatedUserMessages)
         }
       }
       .padding(20)
@@ -669,6 +911,160 @@ struct SearchSectionView: View {
       }
       .padding(20)
     }
+  }
+}
+
+struct AuditSectionView: View {
+  @EnvironmentObject private var model: AppModel
+
+  var body: some View {
+    VStack(spacing: 0) {
+      if case .failed(let message) = model.status {
+        ErrorBanner(message: message) {
+          model.retryAfterFailure()
+        }
+        .padding([.horizontal, .top], 16)
+      }
+
+      AuditControlBar()
+        .padding(.horizontal, 18)
+        .padding(.vertical, 14)
+      Divider()
+
+      if model.isAuditLoading && model.auditReviewMarkdown.isEmpty {
+        ProgressView("Generating audit preview")
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+      } else if model.auditReviewMarkdown.isEmpty {
+        ContentUnavailableView(
+          "No Audit Preview",
+          systemImage: "doc.badge.gearshape",
+          description: Text("Choose a repository and generate a preview.")
+        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+      } else {
+        VStack(spacing: 0) {
+          AuditPreviewHeader()
+          Divider()
+          TextEditor(text: $model.auditReviewMarkdown)
+            .font(.system(.body, design: .monospaced))
+            .scrollContentBackground(.hidden)
+            .background(.background)
+            .accessibilityIdentifier("audit-markdown-editor")
+        }
+      }
+    }
+    .background(.background)
+  }
+}
+
+struct AuditControlBar: View {
+  @EnvironmentObject private var model: AppModel
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      HStack(spacing: 10) {
+        Image(systemName: "folder")
+          .foregroundStyle(.secondary)
+        TextField("Repository path", text: $model.auditRepoPathDraft)
+          .textFieldStyle(.roundedBorder)
+          .accessibilityIdentifier("audit-repo-path-field")
+          .onChange(of: model.auditRepoPathDraft) { _, _ in
+            model.auditRepoPathChanged()
+          }
+        Button {
+          model.chooseAuditRepoPath()
+        } label: {
+          Label("Choose Repository", systemImage: "folder.badge.gearshape")
+            .labelStyle(.iconOnly)
+        }
+        .help("Choose repository")
+        .accessibilityIdentifier("audit-choose-repo-button")
+      }
+
+      HStack(spacing: 12) {
+        Toggle(
+          "Responses",
+          isOn: Binding(
+            get: { model.auditIncludeResponses },
+            set: { model.setAuditIncludeResponses($0) }
+          )
+        )
+        .toggleStyle(.switch)
+        .accessibilityIdentifier("audit-include-responses-toggle")
+
+        Text(model.auditTargetPathText)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+          .lineLimit(1)
+          .truncationMode(.middle)
+
+        Spacer()
+
+        if let message = model.auditStatusMessage {
+          Text(message)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+        }
+
+        Button {
+          model.generateAuditPreview()
+        } label: {
+          Label("Generate", systemImage: "wand.and.stars")
+        }
+        .disabled(!model.canGenerateAudit)
+        .accessibilityIdentifier("audit-generate-button")
+
+        Button {
+          model.approveAuditMarkdown()
+        } label: {
+          Label("Approve", systemImage: "checkmark.seal")
+        }
+        .buttonStyle(.borderedProminent)
+        .disabled(!model.canApproveAudit)
+        .accessibilityIdentifier("audit-approve-button")
+      }
+    }
+  }
+}
+
+struct AuditPreviewHeader: View {
+  @EnvironmentObject private var model: AppModel
+
+  var body: some View {
+    HStack(spacing: 12) {
+      VStack(alignment: .leading, spacing: 4) {
+        Text("Merged Worklog Preview")
+          .font(.headline)
+        Text(model.auditMergeSummaryText)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
+
+      Spacer()
+
+      if let preview = model.auditPreview {
+        Label("\(preview.generatedSections.formatted()) generated", systemImage: "doc.text")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+        Label("\(preview.appendedSections.formatted()) new", systemImage: "plus.circle")
+          .font(.caption)
+          .foregroundStyle(preview.appendedSections > 0 ? .primary : .secondary)
+        Label("\(preview.skippedSections.formatted()) present", systemImage: "checkmark.circle")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
+
+      Button {
+        model.openAuditWorklog()
+      } label: {
+        Label("Open Worklog", systemImage: "arrow.up.forward.app")
+      }
+      .disabled(model.auditPreview == nil)
+      .accessibilityIdentifier("audit-open-worklog-button")
+    }
+    .padding(.horizontal, 18)
+    .padding(.vertical, 12)
   }
 }
 
@@ -715,7 +1111,7 @@ struct MetricsGrid: View {
   var body: some View {
     Grid(horizontalSpacing: 12, verticalSpacing: 12) {
       GridRow {
-        MetricTile(label: "Daily Sessions", value: summary?.totals.sessions)
+        MetricTile(label: "Sessions", value: summary?.totals.sessions)
         MetricTile(label: "Sent Messages", value: summary?.totals.userMessages)
         MetricTile(label: "Automations", value: summary?.totals.automationMessages)
       }
@@ -993,8 +1389,261 @@ private enum BucketDateFormatters {
   }()
 }
 
+struct ProjectFocusView: View {
+  let summary: PromptIntentSummary
+  @State private var showsAllCategories = false
+
+  private var buckets: [PromptIntentBucket] {
+    summary.buckets.filter { $0.count > 0 }
+  }
+
+  private var visibleBuckets: [PromptIntentBucket] {
+    showsAllCategories ? buckets : Array(buckets.prefix(7))
+  }
+
+  private var leadingBucket: PromptIntentBucket? {
+    buckets.first
+  }
+
+  var body: some View {
+    GroupBox("Project Focus") {
+      if summary.totalMessages == 0 {
+        ContentUnavailableView(
+          "No Prompt Activity",
+          systemImage: "text.bubble",
+          description: Text("No submitted user messages are in the current filters.")
+        )
+        .frame(maxWidth: .infinity, minHeight: 160)
+      } else {
+        VStack(alignment: .leading, spacing: 16) {
+          projectFocusHeader
+
+          ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 22) {
+              ProjectFocusDonutChart(buckets: buckets, totalMessages: summary.totalMessages)
+                .frame(width: 220, height: 220)
+              projectFocusCategoryList
+            }
+
+            VStack(alignment: .leading, spacing: 16) {
+              ProjectFocusDonutChart(buckets: buckets, totalMessages: summary.totalMessages)
+                .frame(maxWidth: .infinity, minHeight: 220, maxHeight: 240)
+              projectFocusCategoryList
+            }
+          }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, 4)
+      }
+    }
+    .accessibilityIdentifier("project-focus-section")
+  }
+
+  private var projectFocusHeader: some View {
+    HStack(alignment: .firstTextBaseline) {
+      VStack(alignment: .leading, spacing: 4) {
+        Text("\(summary.totalMessages.formatted()) prompts analyzed")
+          .font(.headline)
+        Text(classificationSubtitle)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
+
+      Spacer(minLength: 16)
+
+      if let leadingBucket {
+        HStack(spacing: 6) {
+          Circle()
+            .fill(projectFocusColor(for: leadingBucket.key))
+            .frame(width: 8, height: 8)
+          Text("Top: \(leadingBucket.label)")
+            .font(.caption)
+            .fontWeight(.semibold)
+            .lineLimit(1)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(.quaternary, in: Capsule())
+      }
+    }
+  }
+
+  private var classificationSubtitle: String {
+    if summary.unclassifiedMessages == 0 {
+      return "\(summary.classifiedMessages.formatted()) classified by work type"
+    }
+    return "\(summary.classifiedMessages.formatted()) classified · \(summary.unclassifiedMessages.formatted()) other"
+  }
+
+  private var projectFocusCategoryList: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      ForEach(visibleBuckets) { bucket in
+        ProjectFocusCategoryRow(bucket: bucket, totalMessages: summary.totalMessages)
+      }
+
+      if buckets.count > 7 {
+        Button {
+          withAnimation(.snappy(duration: 0.18)) {
+            showsAllCategories.toggle()
+          }
+        } label: {
+          Label(
+            showsAllCategories
+              ? "Show fewer categories"
+              : "Show all \(buckets.count.formatted()) categories",
+            systemImage: showsAllCategories ? "chevron.up.circle" : "chevron.down.circle"
+          )
+        }
+        .buttonStyle(.plain)
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .accessibilityIdentifier("project-focus-toggle-all-categories")
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .accessibilityIdentifier("project-focus-category-list")
+  }
+}
+
+struct ProjectFocusDonutChart: View {
+  let buckets: [PromptIntentBucket]
+  let totalMessages: Int
+
+  var body: some View {
+    ZStack {
+      Chart(buckets) { bucket in
+        SectorMark(
+          angle: .value("Prompts", bucket.count),
+          innerRadius: .ratio(0.62),
+          angularInset: 1.2
+        )
+        .cornerRadius(4)
+        .foregroundStyle(projectFocusColor(for: bucket.key))
+      }
+      .chartLegend(.hidden)
+      .accessibilityIdentifier("project-focus-pie-chart")
+
+      VStack(spacing: 2) {
+        Text(totalMessages.formatted())
+          .font(.title3.monospacedDigit())
+          .fontWeight(.semibold)
+        Text("prompts")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
+      .accessibilityHidden(true)
+    }
+  }
+}
+
+struct ProjectFocusCategoryRow: View {
+  let bucket: PromptIntentBucket
+  let totalMessages: Int
+
+  private var percentageText: String {
+    "\(bucket.percentage.formatted(.number.precision(.fractionLength(1))))%"
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 6) {
+      HStack(alignment: .firstTextBaseline, spacing: 8) {
+        Circle()
+          .fill(projectFocusColor(for: bucket.key))
+          .frame(width: 8, height: 8)
+        Text(bucket.label)
+          .font(.subheadline)
+          .fontWeight(.semibold)
+          .lineLimit(1)
+        Spacer(minLength: 8)
+        Text("\(bucket.count.formatted()) · \(percentageText)")
+          .font(.caption.monospacedDigit())
+          .foregroundStyle(.secondary)
+      }
+
+      ProgressView(value: Double(bucket.count), total: Double(max(totalMessages, 1)))
+        .tint(projectFocusColor(for: bucket.key))
+        .frame(height: 6)
+
+      HStack(alignment: .firstTextBaseline, spacing: 8) {
+        Text("\(bucket.sessionCount.formatted()) \(bucket.sessionCount == 1 ? "session" : "sessions")")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+
+        if let example = bucket.examples.first {
+          Text(example)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .textSelection(.enabled)
+        }
+      }
+    }
+    .padding(.vertical, 2)
+  }
+}
+
+private func projectFocusColor(for key: String) -> Color {
+  switch key {
+  case "feature-design":
+    return .cyan
+  case "implementation":
+    return .accentColor
+  case "bug-fixes":
+    return .red
+  case "git-commands":
+    return .purple
+  case "deploy-release":
+    return .orange
+  case "run-build-app":
+    return .green
+  case "code-review-qa":
+    return .blue
+  case "planning-strategy":
+    return .orange
+  case "research":
+    return .mint
+  case "documentation":
+    return .brown
+  case "testing-verification":
+    return .indigo
+  case "refactor-cleanup":
+    return .pink
+  case "content-creation":
+    return .teal
+  case "data-analysis":
+    return .yellow
+  case "feedback-context":
+    return .secondary
+  case "plan-approvals":
+    return .gray
+  default:
+    return .secondary
+  }
+}
+
 struct RepeatedPromptsView: View {
+  @EnvironmentObject private var model: AppModel
+
   let messages: [RepeatedUserMessage]
+
+  private var categoryOptions: [(category: String, count: Int)] {
+    Dictionary(grouping: messages.compactMap(\.category), by: { $0 })
+      .map { category, values in (category: category, count: values.count) }
+      .sorted { lhs, rhs in
+        lhs.category.localizedCaseInsensitiveCompare(rhs.category) == .orderedAscending
+      }
+  }
+
+  private var visibleMessages: [RepeatedUserMessage] {
+    messages.filter { message in
+      guard let category = message.category else { return true }
+      if model.isOperationalPromptCategory(category), !model.isOperationalPromptCategoryVisible(category) {
+        return false
+      }
+      return !model.hiddenRepeatedPromptCategories.contains(category)
+    }
+  }
 
   private func sessionLabel(for message: RepeatedUserMessage) -> String {
     "\(message.sessionCount.formatted()) \(message.sessionCount == 1 ? "session" : "sessions")"
@@ -1011,7 +1660,20 @@ struct RepeatedPromptsView: View {
         .frame(maxWidth: .infinity, minHeight: 110)
       } else {
         VStack(alignment: .leading, spacing: 10) {
-          ForEach(messages.prefix(5)) { message in
+          if !categoryOptions.isEmpty {
+            repeatedPromptCategoryFilters
+          }
+
+          if visibleMessages.isEmpty {
+            ContentUnavailableView(
+              "No Visible Repeated Prompts",
+              systemImage: "line.3.horizontal.decrease.circle",
+              description: Text("Turn on at least one grouped prompt family to show repeated prompts.")
+            )
+            .frame(maxWidth: .infinity, minHeight: 110)
+          }
+
+          ForEach(visibleMessages.prefix(5)) { message in
             VStack(alignment: .leading, spacing: 4) {
               HStack(alignment: .firstTextBaseline) {
                 Text("\(message.count.formatted()) repeats")
@@ -1061,6 +1723,42 @@ struct RepeatedPromptsView: View {
       }
     }
   }
+
+  private var repeatedPromptCategoryFilters: some View {
+    HStack(alignment: .center, spacing: 12) {
+      Text("Show")
+        .font(.caption)
+        .foregroundStyle(.secondary)
+      ForEach(categoryOptions, id: \.category) { option in
+        Toggle(
+          isOn: Binding(
+            get: { categoryFilterIsVisible(option.category) },
+            set: { setCategoryFilter(option.category, isVisible: $0) }
+          )
+        ) {
+          Text(option.category)
+        }
+        .toggleStyle(.checkbox)
+        .font(.caption)
+        .accessibilityIdentifier("repeated-prompt-category-filter")
+      }
+    }
+  }
+
+  private func categoryFilterIsVisible(_ category: String) -> Bool {
+    if model.isOperationalPromptCategory(category) {
+      return model.isOperationalPromptCategoryVisible(category)
+    }
+    return !model.hiddenRepeatedPromptCategories.contains(category)
+  }
+
+  private func setCategoryFilter(_ category: String, isVisible: Bool) {
+    if model.isOperationalPromptCategory(category) {
+      model.setOperationalMessageCategory(category, isVisible: isVisible)
+    } else {
+      model.setRepeatedPromptCategory(category, isVisible: isVisible)
+    }
+  }
 }
 
 struct MetricTile: View {
@@ -1090,7 +1788,11 @@ struct MessageSearchView: View {
   @FocusState private var isSearchFocused: Bool
 
   private var selectedSearchResult: MessageSearchResult? {
-    model.searchSummary?.results.first { $0.id == model.selectedSearchResultID }
+    model.searchResults.first { $0.id == model.selectedSearchResultID }
+  }
+
+  private var searchResults: [MessageSearchResult] {
+    model.searchResults
   }
 
   var body: some View {
@@ -1145,7 +1847,7 @@ struct MessageSearchView: View {
           Spacer(minLength: 8)
 
           if let sessionLabel = model.messageSessionFilterLabel {
-            Label("Daily session \(sessionLabel)", systemImage: "scope")
+            Label("Session \(sessionLabel)", systemImage: "scope")
               .font(.caption)
               .foregroundStyle(.secondary)
             Button {
@@ -1167,20 +1869,20 @@ struct MessageSearchView: View {
         }
 
         if let search = model.searchSummary {
-          Text(searchSummaryLabel(search))
+          Text(searchSummaryLabel(search, visibleCount: searchResults.count))
             .font(.caption)
             .foregroundStyle(.secondary)
 
-          if search.results.isEmpty {
+          if searchResults.isEmpty {
             ContentUnavailableView(
               "No Matches",
               systemImage: "magnifyingglass",
-              description: Text("Try another phrase or broaden the current filters.")
+              description: Text(messageSearchEmptyDescription(search))
             )
             .frame(maxWidth: .infinity, minHeight: 220)
             .accessibilityIdentifier("message-search-empty-state")
           } else {
-            Table(search.results, selection: $model.selectedSearchResultID) {
+            Table(searchResults, selection: $model.selectedSearchResultID) {
               TableColumn("Date/Time") { result in
                 Text(compactFormattedDate(result.timestamp))
                   .lineLimit(1)
@@ -1188,12 +1890,18 @@ struct MessageSearchView: View {
               .width(min: 118, ideal: 132, max: 146)
 
               TableColumn("Message") { result in
-                HighlightedSearchText(
-                  text: result.snippet,
-                  query: model.messageQuery,
-                  lineLimit: 2,
-                  collapsesWhitespace: true
-                )
+                VStack(alignment: .leading, spacing: 4) {
+                  if let promptIntent = result.promptIntent, !promptIntent.isEmpty {
+                    PromptIntentBadge(key: result.promptIntentKey, label: promptIntent)
+                  }
+                  HighlightedSearchText(
+                    text: result.snippet,
+                    query: model.messageQuery,
+                    lineLimit: 2,
+                    collapsesWhitespace: true
+                  )
+                }
+                .padding(.vertical, 2)
               }
 
               TableColumn("Project") { result in
@@ -1225,9 +1933,20 @@ struct MessageSearchView: View {
     }
   }
 
-  private func searchSummaryLabel(_ search: MessageSearchSummary) -> String {
-    let count = search.totalMatches.formatted()
-    return "\(count) matches in \(search.project)"
+  private func searchSummaryLabel(_ search: MessageSearchSummary, visibleCount: Int) -> String {
+    if visibleCount != search.results.count {
+      return "\(visibleCount.formatted()) visible of \(search.totalMatches.formatted()) matches in \(search.project)"
+    }
+    return "\(search.totalMatches.formatted()) matches in \(search.project)"
+  }
+
+  private func messageSearchEmptyDescription(_ search: MessageSearchSummary) -> String {
+    if !model.areAllOperationalMessageCategoriesVisible && model.messageRoleFilter == .user {
+      return "Turn on at least one operational message family in the View menu."
+    }
+    return search.results.isEmpty
+      ? "Try another phrase or broaden the current filters."
+      : "Turn on at least one operational message family in the View menu."
   }
 }
 
@@ -1248,26 +1967,47 @@ struct SearchResultDetailView: View {
               .font(.headline)
 
             ScrollView {
-              HighlightedSearchText(
-                text: result.content,
-                query: model.messageQuery,
-                lineLimit: nil,
-                collapsesWhitespace: false
-              )
-                .font(.body)
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(8)
+              VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                  PromptIntentBadge(key: result.promptIntentKey, label: result.promptIntent)
+                  Label {
+                    Text(result.project)
+                      .lineLimit(1)
+                      .truncationMode(.middle)
+                  } icon: {
+                    Image(systemName: "folder")
+                  }
+                  .font(.caption)
+                  .foregroundStyle(.secondary)
+                  Spacer(minLength: 8)
+                  Text(formattedDate(result.timestamp))
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                }
+                HighlightedSearchText(
+                  text: result.content,
+                  query: model.messageQuery,
+                  lineLimit: nil,
+                  collapsesWhitespace: false
+                )
+                  .font(.body)
+                  .textSelection(.enabled)
+                  .frame(maxWidth: .infinity, alignment: .leading)
+              }
+              .padding(10)
+              .promptIntentCardChrome(key: result.promptIntentKey)
             }
             .frame(maxWidth: .infinity, minHeight: 96, maxHeight: 220, alignment: .leading)
-            .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
             .accessibilityIdentifier("selected-search-message-preview")
 
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), alignment: .leading)], alignment: .leading, spacing: 8) {
               SearchResultMetadataItem(label: "Date/Time", value: formattedDate(result.timestamp))
+              if let promptIntent = result.promptIntent, !promptIntent.isEmpty {
+                SearchResultMetadataItem(label: "Category", value: promptIntent)
+              }
               SearchResultMetadataItem(label: "Project", value: result.project)
               SearchResultMetadataItem(label: "Role", value: result.role.capitalized)
-              SearchResultMetadataItem(label: "Daily Session", value: result.dateKey ?? "")
+              SearchResultMetadataItem(label: "Session Day", value: result.dateKey ?? "")
               SearchResultMetadataItem(label: "Session ID", value: String(result.sessionId.prefix(8)))
             }
           }
@@ -1522,27 +2262,20 @@ struct SessionsTableView: View {
     if model.summary?.totals.sessions == 0 {
       return "Choose another source or return to the default Codex log locations."
     }
-    return "Clear the session search or adjust the current filters."
+    return "Adjust the current filters."
   }
 
   var body: some View {
-    GroupBox("Daily Sessions") {
+    let sessions = model.summary?.sessions ?? []
+
+    GroupBox("Sessions") {
       VStack(alignment: .leading, spacing: 10) {
-        HStack {
-          Image(systemName: "line.3.horizontal.decrease.circle")
-            .foregroundStyle(.secondary)
-          TextField("Search sessions", text: $model.sessionQuery)
-            .textFieldStyle(.plain)
-            .accessibilityIdentifier("session-search-field")
-          Text("\(model.filteredSessions.count.formatted())")
-            .font(.caption.monospacedDigit())
-            .foregroundStyle(.secondary)
-        }
-        .padding(8)
-        .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+        Text("\(sessions.count.formatted()) visible")
+          .font(.caption)
+          .foregroundStyle(.secondary)
 
         if model.summary != nil {
-          if model.filteredSessions.isEmpty {
+          if sessions.isEmpty {
             ContentUnavailableView(
               emptySessionsTitle,
               systemImage: "tray",
@@ -1551,7 +2284,7 @@ struct SessionsTableView: View {
             .frame(maxWidth: .infinity, minHeight: 280)
             .accessibilityIdentifier("sessions-empty-state")
           } else {
-            Table(model.filteredSessions, selection: $model.selectedSessionID) {
+            Table(sessions, selection: $model.selectedSessionID) {
               TableColumn("Date/Time") { session in
                 Text(formattedDate(session.lastSeen))
                   .lineLimit(1)
@@ -1594,7 +2327,7 @@ struct DetailPane: View {
   @EnvironmentObject private var model: AppModel
 
   private var selectedSearchResult: MessageSearchResult? {
-    model.searchSummary?.results.first { $0.id == model.selectedSearchResultID }
+    model.searchResults.first { $0.id == model.selectedSearchResultID }
   }
 
   var body: some View {
@@ -1669,6 +2402,9 @@ struct SearchResultInspector: View {
           .font(.title3)
           .fontWeight(.semibold)
         LabeledContent("Role", value: result.role.capitalized)
+        if let promptIntent = result.promptIntent, !promptIntent.isEmpty {
+          LabeledContent("Category", value: promptIntent)
+        }
         LabeledContent("Project", value: result.project)
         LabeledContent("Session", value: result.sessionId)
         LabeledContent("Time", value: formattedDate(result.timestamp))
@@ -1698,8 +2434,30 @@ struct SearchResultInspector: View {
         .buttonStyle(.bordered)
 
         Divider()
-        Text(result.content)
-          .textSelection(.enabled)
+        VStack(alignment: .leading, spacing: 8) {
+          HStack(alignment: .firstTextBaseline, spacing: 8) {
+            PromptIntentBadge(key: result.promptIntentKey, label: result.promptIntent)
+            Label {
+              Text(result.project)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            } icon: {
+              Image(systemName: "folder")
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            Spacer(minLength: 8)
+            Text(formattedDate(result.timestamp))
+              .font(.caption.monospacedDigit())
+              .foregroundStyle(.secondary)
+          }
+          Text(result.content)
+            .textSelection(.enabled)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .promptIntentCardChrome(key: result.promptIntentKey)
 
         Divider()
         InspectorSectionTitle("Session Context")
@@ -1720,6 +2478,8 @@ struct SearchResultInspector: View {
 }
 
 struct SessionUserMessagesInspector: View {
+  @EnvironmentObject private var model: AppModel
+
   let detail: SessionDetail
   var highlightedMessageIndex: Int?
   @State private var selectedUserMessageIndex: Int?
@@ -1729,6 +2489,10 @@ struct SessionUserMessagesInspector: View {
   }
 
   private var userMessages: [(offset: Int, element: MessageDetail)] {
+    model.visibleUserMessageOffsets(in: detail)
+  }
+
+  private var allUserMessages: [(offset: Int, element: MessageDetail)] {
     SessionInteractionBuilder.userMessageOffsets(in: detail)
   }
 
@@ -1754,13 +2518,9 @@ struct SessionUserMessagesInspector: View {
 
         if userMessages.isEmpty {
           ContentUnavailableView(
-            automationMessages.isEmpty ? "No User Messages" : "No Sent Messages",
+            emptyUserMessagesTitle,
             systemImage: "text.bubble",
-            description: Text(
-              automationMessages.isEmpty
-                ? "This session has no submitted user messages."
-                : "This session was started by automation."
-            )
+            description: Text(emptyUserMessagesDescription)
           )
           .frame(maxWidth: .infinity, minHeight: 220)
         } else {
@@ -1817,18 +2577,41 @@ struct SessionUserMessagesInspector: View {
 
   private var sessionMessageCountLabel: String {
     let sent = "\(userMessages.count.formatted()) sent"
+    let visiblePrefix = userMessages.count == allUserMessages.count
+      ? sent
+      : "\(userMessages.count.formatted()) visible of \(allUserMessages.count.formatted()) sent"
     guard !automationMessages.isEmpty else {
-      return "\(sent) in this session"
+      return "\(visiblePrefix) in this session"
     }
     let automationLabel = automationMessages.count == 1 ? "automation" : "automations"
-    return "\(sent), \(automationMessages.count.formatted()) \(automationLabel) in this session"
+    return "\(visiblePrefix), \(automationMessages.count.formatted()) \(automationLabel) in this session"
+  }
+
+  private var emptyUserMessagesTitle: String {
+    if allUserMessages.isEmpty {
+      return automationMessages.isEmpty ? "No User Messages" : "No Sent Messages"
+    }
+    return "No Visible Messages"
+  }
+
+  private var emptyUserMessagesDescription: String {
+    if allUserMessages.isEmpty {
+      return automationMessages.isEmpty
+        ? "This session has no submitted user messages."
+        : "This session was started by automation."
+    }
+    return "Turn on at least one operational message family in the View menu."
   }
 
   private func userMessageRow(message: MessageDetail, isSelected: Bool) -> some View {
     VStack(alignment: .leading, spacing: 6) {
-      Text(formattedDate(message.timestamp))
-        .font(.caption.monospacedDigit())
-        .foregroundStyle(.secondary)
+      HStack(alignment: .firstTextBaseline, spacing: 8) {
+        PromptIntentBadge(key: message.promptIntentKey, label: message.promptIntent)
+        Text(formattedDate(message.timestamp))
+          .font(.caption.monospacedDigit())
+          .foregroundStyle(.secondary)
+        Spacer(minLength: 8)
+      }
       Text(messageDisplayText(message))
         .font(.body)
         .lineLimit(4)
@@ -1836,18 +2619,10 @@ struct SessionUserMessagesInspector: View {
     }
     .padding(10)
     .frame(maxWidth: .infinity, alignment: .leading)
-    .background(
-      rowBackground(isSelected: isSelected),
-      in: RoundedRectangle(cornerRadius: 8)
-    )
-    .overlay(
-      RoundedRectangle(cornerRadius: 8)
-        .stroke(
-          isSelected || highlightedMessageIndex == messageIndex(message)
-            ? Color.accentColor.opacity(0.45)
-            : Color.clear,
-          lineWidth: 1
-        )
+    .promptIntentCardChrome(
+      key: message.promptIntentKey,
+      isSelected: isSelected,
+      isHighlighted: highlightedMessageIndex == messageIndex(message)
     )
   }
 
@@ -1865,10 +2640,6 @@ struct SessionUserMessagesInspector: View {
     .padding(10)
     .frame(maxWidth: .infinity, alignment: .leading)
     .background(Color.green.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
-  }
-
-  private func rowBackground(isSelected: Bool) -> Color {
-    isSelected ? Color.accentColor.opacity(0.16) : Color.primary.opacity(0.05)
   }
 
   private func messageIndex(_ message: MessageDetail) -> Int? {
@@ -1889,7 +2660,9 @@ struct CodexInteractionView: View {
         title: "User Message",
         subtitle: formattedDate(interaction.userMessage.timestamp),
         text: messageDisplayText(interaction.userMessage),
-        tint: .green
+        tint: .green,
+        promptIntentKey: interaction.userMessage.promptIntentKey,
+        promptIntent: interaction.userMessage.promptIntent
       )
 
       InspectorSectionTitle("Codex Response")
@@ -1979,6 +2752,8 @@ struct InteractionMessageCard: View {
   let subtitle: String
   let text: String
   let tint: Color
+  var promptIntentKey: String?
+  var promptIntent: String?
   var monospaced = false
 
   private var bodyFont: Font {
@@ -1992,6 +2767,7 @@ struct InteractionMessageCard: View {
           .font(.caption)
           .fontWeight(.semibold)
           .foregroundStyle(tint)
+        PromptIntentBadge(key: promptIntentKey, label: promptIntent)
         Spacer()
         Text(subtitle)
           .font(.caption.monospacedDigit())
@@ -2140,38 +2916,6 @@ struct CompactDurationStat: View {
       return "\(String(format: "%.1f", milliseconds / 1000)) s"
     }
     return "\(Int(milliseconds).formatted()) ms"
-  }
-}
-
-struct StatusPill: View {
-  let status: AppModel.Status
-
-  var body: some View {
-    Label(status.label, systemImage: icon)
-      .labelStyle(.titleAndIcon)
-      .foregroundStyle(color)
-  }
-
-  private var icon: String {
-    switch status {
-    case .starting, .loading:
-      return "arrow.triangle.2.circlepath"
-    case .ready:
-      return "checkmark.circle"
-    case .failed:
-      return "exclamationmark.triangle"
-    }
-  }
-
-  private var color: Color {
-    switch status {
-    case .failed:
-      return .red
-    case .ready:
-      return .green
-    default:
-      return .secondary
-    }
   }
 }
 
