@@ -7,9 +7,9 @@ struct RootView: View {
   var body: some View {
     HSplitView {
       SidebarView()
-        .frame(minWidth: 210, idealWidth: 230, maxWidth: 270)
+        .frame(minWidth: 170, idealWidth: 230, maxWidth: 270)
       ProjectWorkspaceView()
-        .frame(minWidth: 820)
+        .frame(minWidth: 540)
     }
     .toolbar {
       ToolbarItem(placement: .navigation) {
@@ -87,7 +87,7 @@ struct WorkspaceHeaderView: View {
       }
       .labelsHidden()
       .pickerStyle(.segmented)
-      .frame(width: 380)
+      .frame(minWidth: 260, idealWidth: 340, maxWidth: 380)
     }
   }
 }
@@ -384,12 +384,12 @@ struct BrowseWorkspaceView: View {
       HSplitView {
         if model.showSessionBrowser {
           SessionBrowserColumn()
-            .frame(minWidth: 280, idealWidth: 320, maxWidth: 400)
+            .frame(minWidth: 190, idealWidth: 280, maxWidth: 380)
         }
         SentMessagesBrowserColumn()
-          .frame(minWidth: 340, idealWidth: model.showSessionBrowser ? 380 : 440, maxWidth: 560)
+          .frame(minWidth: 230, idealWidth: model.showSessionBrowser ? 340 : 380, maxWidth: 560)
         InteractionBrowserColumn()
-          .frame(minWidth: 420, idealWidth: 580)
+          .frame(minWidth: 280, idealWidth: 520)
       }
     }
   }
@@ -543,6 +543,18 @@ struct SentMessagesBrowserColumn: View {
 
   var body: some View {
     VStack(spacing: 0) {
+      HStack {
+        Label("User Messages", systemImage: "paperplane")
+          .font(.title3)
+          .fontWeight(.semibold)
+        Spacer(minLength: 0)
+      }
+      .padding(.horizontal, 16)
+      .padding(.top, 14)
+      .padding(.bottom, 8)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .accessibilityIdentifier("messages-column-title")
+
       Group {
         if model.showSessionBrowser {
           sessionMessagesView
@@ -554,7 +566,7 @@ struct SentMessagesBrowserColumn: View {
 
       Divider()
       BrowserColumnStatusBar(
-        "Messages",
+        "User Messages",
         subtitle: statusSubtitle
       )
     }
@@ -739,23 +751,11 @@ struct PromptIntentBadge: View {
 
   var body: some View {
     if let label, !label.isEmpty {
-      HStack(spacing: 5) {
-        Circle()
-          .fill(projectFocusColor(for: key ?? ""))
-          .frame(width: 6, height: 6)
-        Text(label)
-          .lineLimit(1)
-      }
+      Text(label)
+        .lineLimit(1)
       .font(.caption)
-      .fontWeight(.medium)
-      .foregroundStyle(.primary)
-      .padding(.horizontal, 7)
-      .padding(.vertical, 3)
-      .background(projectFocusColor(for: key ?? "").opacity(0.14), in: Capsule())
-      .overlay(
-        Capsule()
-          .stroke(projectFocusColor(for: key ?? "").opacity(0.25), lineWidth: 1)
-      )
+      .fontWeight(.semibold)
+      .foregroundStyle(projectFocusColor(for: key ?? ""))
       .accessibilityLabel("Prompt category: \(label)")
     }
   }
@@ -772,16 +772,19 @@ private struct PromptIntentCardChrome: ViewModifier {
 
   func body(content: Content) -> some View {
     content
-      .background(tint.opacity(isSelected ? 0.16 : 0.10), in: RoundedRectangle(cornerRadius: 8))
+      .background(
+        isSelected ? Color.accentColor.opacity(0.14) : Color.primary.opacity(0.045),
+        in: RoundedRectangle(cornerRadius: 8)
+      )
       .overlay(alignment: .leading) {
         Rectangle()
-          .fill(tint.opacity(0.65))
+          .fill(tint.opacity(0.75))
           .frame(width: 3)
       }
       .overlay {
         RoundedRectangle(cornerRadius: 8)
           .stroke(
-            isSelected || isHighlighted ? Color.accentColor.opacity(0.45) : tint.opacity(0.18),
+            isSelected || isHighlighted ? Color.accentColor.opacity(0.45) : Color.primary.opacity(0.08),
             lineWidth: 1
           )
       }

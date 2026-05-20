@@ -2,6 +2,184 @@
 
 Sanitized audit trail of AI-assisted work on this project.
 
+## 2026-05-19 - Rename Messages Column Label
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> And the label "messages" should be user messages
+
+### Interpreted Intent
+
+The user wanted the middle Browse column label to be more precise about showing submitted user messages.
+
+### Response / Work Done
+
+- Renamed the middle column header from `Messages` to `User Messages`.
+- Renamed the lower middle-column status title to `User Messages` for consistency.
+- Rebuilt, packaged, smoke-tested, and relaunched the native app.
+
+### Privacy Notes
+
+No raw logs or unsanitized session content were added. This was a native copy change.
+
+### Verification
+
+- Ran `swift build --package-path apps/macos`.
+- Ran `git diff --check`.
+- Ran `npm run check:mac-accessibility`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`.
+- Ran `npm run smoke:mac-ui`.
+- Relaunched the packaged macOS app at build 91.
+- Ran `npm run privacy:scan`.
+
+## 2026-05-19 - Color Message Category Titles
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> I think we can color code the title of each rectangle as well, of each message
+
+### Interpreted Intent
+
+The user wanted the message category label itself to carry the category color, while keeping the card surface restrained.
+
+### Response / Work Done
+
+- Changed prompt category labels to render in their Project Focus category color.
+- Kept the card background neutral and preserved the category-colored left rail.
+- Rebuilt, packaged, and relaunched the native app for review.
+
+### Privacy Notes
+
+No raw logs or unsanitized session content were added. This was a native UI styling change.
+
+### Verification
+
+- Ran `swift build --package-path apps/macos`.
+- Ran `git diff --check`.
+- Ran `npm run check:mac-accessibility`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`.
+- Ran `npm run smoke:mac-ui`.
+- Relaunched the packaged macOS app at build 90.
+- Ran `npm run privacy:scan`.
+
+## 2026-05-19 - Tone Down Message Category Color
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> For the areas of the messages I don't want to color code the whole rectangle. Let's just color code the bracket on the left
+>
+> Voice is looking too childish
+
+### Interpreted Intent
+
+The user wanted the submitted-message category treatment to feel calmer and more professional by removing full-card category color.
+
+### Response / Work Done
+
+- Removed category-colored fills from submitted-message cards and previews.
+- Kept category color only on the left rail of message cards.
+- Simplified prompt category labels to neutral text without colored pills or dots.
+- Preserved selected/highlighted states with subtle neutral/accent treatment.
+
+### Privacy Notes
+
+No raw logs or unsanitized session content were added. This was a native UI styling change.
+
+### Verification
+
+- Ran `swift build --package-path apps/macos`.
+- Ran `git diff --check`.
+- Ran `npm run check:mac-accessibility`.
+- Ran `npm run build:mac`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`.
+- Ran `npm run smoke:mac-ui`.
+- Relaunched the packaged macOS app at build 89.
+- Ran `npm run privacy:scan`.
+
+## 2026-05-19 - Lower Native Window Minimum Width
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> I'm also noticing a weird behavior when I grab the window on the right side and I try to reduce it. There is a minimum width that seems too high. Can you adjust our responsive design? We should be able to resize the window to a much smaller size than what we have right now
+
+### Interpreted Intent
+
+The user wanted the native app to stop enforcing an overly wide minimum window size and allow the Browse layout to compress more naturally.
+
+### Response / Work Done
+
+- Reduced the root window minimum width from the old wide desktop default to a compact size.
+- Lowered sidebar, workspace, message-column, session-column, and interaction-column minimum widths.
+- Relaxed the fixed segmented section picker width so the header can compress more gracefully.
+- Rebuilt, packaged, relaunched, and verified the running app can resize to 820x620.
+
+### Privacy Notes
+
+No raw logs or unsanitized session content were added. This was a native layout/responsiveness change.
+
+### Verification
+
+- Ran `swift build --package-path apps/macos`.
+- Ran `git diff --check`.
+- Ran `npm run check:mac-accessibility`.
+- Ran `npm run build:mac`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`.
+- Ran `npm run smoke:mac-ui`.
+- Relaunched the packaged macOS app at build 87.
+- Confirmed the running window can be resized to 820x620.
+- Ran `npm run privacy:scan`.
+
+## 2026-05-19 - Add Messages Column Header
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> Notice how we have a label on the third column but we don't have a label on the middle column .  I also have a label on the left column so let's be consistent and add a label to the middle column.
+
+### Interpreted Intent
+
+The user wanted the Browse layout to label all major columns consistently, with the middle message list receiving a visible top header like the surrounding columns.
+
+### Response / Work Done
+
+- Added a compact top-level `Messages` header with a paper-plane icon to the middle browse column.
+- Kept the lower gray status bar as the compact count/status area.
+- Rebuilt, packaged, and relaunched the native app for review.
+
+### Privacy Notes
+
+No raw logs or unsanitized session content were added. This was a native UI layout change.
+
+### Verification
+
+- Ran `swift build --package-path apps/macos`.
+- Ran `git diff --check`.
+- Ran `npm run check:mac-accessibility`.
+- Ran `npm run build:mac`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`.
+- Ran `npm run smoke:mac-ui`.
+- Relaunched the packaged macOS app at build 85.
+- Ran `npm run privacy:scan`.
+
 ## 2026-05-19 - Refine Prompt Category Cards
 
 Status: Completed

@@ -181,7 +181,7 @@ private struct AppWindowRootView: View {
       .task {
         model.startIfNeeded()
       }
-      .frame(minWidth: 1360, minHeight: 760)
+      .frame(minWidth: 760, minHeight: 560)
   }
 }
 
