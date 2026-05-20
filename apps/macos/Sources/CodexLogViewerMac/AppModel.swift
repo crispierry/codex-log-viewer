@@ -80,6 +80,7 @@ final class AppModel: ObservableObject {
   private var searchRequestID = 0
   private var auditRequestID = 0
   private var pendingSearchResultTarget: SearchResultSelectionTarget?
+  private var pendingSearchConversationResult: MessageSearchResult?
   private let isEphemeralSettingsRun = ProcessInfo.processInfo.environment["CODEX_LOG_VIEWER_EPHEMERAL_SETTINGS"] == "1" ||
     ProcessInfo.processInfo.environment["CODEX_LOG_VIEWER_UI_TEST"] == "1"
   private var hasScheduledUITestQuit = false
@@ -314,10 +315,10 @@ final class AppModel: ObservableObject {
         if let selectedSessionID, !summary.sessions.contains(where: { $0.id == selectedSessionID }) {
           clearSelectedSession()
         }
-        if showSessionBrowser {
+        if showSessionBrowser && pendingSearchConversationResult == nil {
           selectLatestSessionIfNeeded(in: summary)
         }
-        loadBrowseMessages(selectFirstIfNeeded: !showSessionBrowser)
+        loadBrowseMessages(selectFirstIfNeeded: !showSessionBrowser && pendingSearchConversationResult == nil)
         status = .ready
         scheduleUITestWorkflowIfNeeded(api: api, filters: filters)
       } catch is CancellationError {
@@ -343,6 +344,7 @@ final class AppModel: ObservableObject {
   }
 
   func selectProject(_ project: String) {
+    guard selectedProject != project else { return }
     selectedProject = project
     updateAuditRepoPathSuggestion(force: true)
     clearAuditPreview()
@@ -403,32 +405,38 @@ final class AppModel: ObservableObject {
   }
 
   func setRepeatedPromptCategory(_ category: String, isVisible: Bool) {
+    var updatedCategories = hiddenRepeatedPromptCategories
     if isVisible {
-      hiddenRepeatedPromptCategories.remove(category)
+      updatedCategories.remove(category)
     } else {
-      hiddenRepeatedPromptCategories.insert(category)
+      updatedCategories.insert(category)
     }
+    hiddenRepeatedPromptCategories = updatedCategories
     saveSettings()
   }
 
   func setOperationalMessageCategory(_ category: String, isVisible: Bool) {
     guard isOperationalPromptCategory(category) else { return }
+    var updatedCategories = hiddenOperationalMessageCategories
     if isVisible {
-      hiddenOperationalMessageCategories.remove(category)
+      updatedCategories.remove(category)
     } else {
-      hiddenOperationalMessageCategories.insert(category)
+      updatedCategories.insert(category)
     }
+    hiddenOperationalMessageCategories = updatedCategories
     saveSettings()
     reconcileOperationalMessageFilters()
     refreshSearchForOperationalFilterChangeIfNeeded()
   }
 
   func setAllOperationalMessageCategoriesVisible(_ isVisible: Bool) {
+    var updatedCategories = hiddenOperationalMessageCategories
     if isVisible {
-      hiddenOperationalMessageCategories.subtract(Self.operationalPromptCategorySet)
+      updatedCategories.subtract(Self.operationalPromptCategorySet)
     } else {
-      hiddenOperationalMessageCategories.formUnion(Self.operationalPromptCategorySet)
+      updatedCategories.formUnion(Self.operationalPromptCategorySet)
     }
+    hiddenOperationalMessageCategories = updatedCategories
     saveSettings()
     reconcileOperationalMessageFilters()
     refreshSearchForOperationalFilterChangeIfNeeded()
@@ -590,6 +598,13 @@ final class AppModel: ObservableObject {
         if selectFirstIfNeeded, selectedBrowseMessageID == nil, let firstMessage = visibleResults.first {
           selectBrowseMessage(firstMessage.id)
         }
+        if let pendingSearchConversationResult {
+          self.pendingSearchConversationResult = nil
+          showConversation(for: pendingSearchConversationResult)
+        } else if selectedBrowseMessageID == nil,
+          let detail = selectedSessionDetail {
+          syncBrowseSelectionToSelectedUserMessage(in: detail)
+        }
       } catch is CancellationError {
         return
       } catch {
@@ -695,7 +710,27 @@ final class AppModel: ObservableObject {
     else {
       return
     }
+
+    let targetProject = projectScopeForSearchConversation(result)
+    if selectedProject != targetProject {
+      pendingSearchConversationResult = result
+      selectProject(targetProject)
+      return
+    }
+
+    showConversation(for: result)
+  }
+
+  private func projectScopeForSearchConversation(_ result: MessageSearchResult) -> String {
+    if selectedProject == AppConstants.allProjectsName {
+      return AppConstants.allProjectsName
+    }
+    return result.project.isEmpty ? selectedProject : result.project
+  }
+
+  private func showConversation(for result: MessageSearchResult) {
     selectedSection = .browse
+    selectedBrowseMessageID = browseMessageID(for: result)
     pendingSearchResultTarget = SearchResultSelectionTarget(result)
     selectedUserMessageIndex = nil
     selectedSessionID = sessionSelectionID(
@@ -1087,7 +1122,88 @@ final class AppModel: ObservableObject {
       return
     }
     selectedUserMessageIndex = userMessageIndex(for: pendingSearchResultTarget, in: detail)
+    syncBrowseSelectionToSelectedUserMessage(in: detail)
     self.pendingSearchResultTarget = nil
+  }
+
+  private func syncBrowseSelectionToSelectedUserMessage(in detail: SessionDetail) {
+    guard let selectedUserMessageIndex,
+      detail.messages.indices.contains(selectedUserMessageIndex)
+    else {
+      selectedBrowseMessageID = nil
+      return
+    }
+
+    selectedBrowseMessageID = browseMessageID(
+      for: detail.messages[selectedUserMessageIndex],
+      in: detail
+    )
+  }
+
+  private func browseMessageID(for result: MessageSearchResult) -> MessageSearchResult.ID? {
+    guard result.sourceEvent == "event_msg.user_message" else { return nil }
+    return visibleBrowseMessages(in: browseMessagesSummary?.results ?? [])
+      .first { browseResultRepresentsSameUserMessage($0, as: result) }?
+      .id
+  }
+
+  private func browseMessageID(
+    for message: MessageDetail,
+    in detail: SessionDetail
+  ) -> MessageSearchResult.ID? {
+    guard message.sourceEvent == "event_msg.user_message" else { return nil }
+    return visibleBrowseMessages(in: browseMessagesSummary?.results ?? [])
+      .first { result in
+        browseResultRepresentsUserMessage(result, message: message, detail: detail)
+      }?
+      .id
+  }
+
+  private func browseResultRepresentsSameUserMessage(
+    _ browseResult: MessageSearchResult,
+    as target: MessageSearchResult
+  ) -> Bool {
+    guard browseResult.sourceEvent == "event_msg.user_message",
+      browseResult.sessionId == target.sessionId,
+      browseResult.filePath == target.filePath,
+      browseResult.dateKey == target.dateKey,
+      browseResult.role == target.role,
+      browseResult.sourceEvent == target.sourceEvent
+    else {
+      return false
+    }
+
+    if let lineNumber = target.lineNumber {
+      return browseResult.lineNumber == lineNumber
+    }
+    if let turnId = target.turnId {
+      return browseResult.turnId == turnId && browseResult.content == target.content
+    }
+    return browseResult.timestamp == target.timestamp && browseResult.content == target.content
+  }
+
+  private func browseResultRepresentsUserMessage(
+    _ result: MessageSearchResult,
+    message: MessageDetail,
+    detail: SessionDetail
+  ) -> Bool {
+    guard result.sourceEvent == "event_msg.user_message",
+      result.sessionId == detail.file.sessionId,
+      result.filePath == detail.file.filePath,
+      result.dateKey == codexLocalDateKey(message.timestamp),
+      result.role == message.role,
+      result.sourceEvent == message.sourceEvent
+    else {
+      return false
+    }
+
+    if let lineNumber = message.lineNumber {
+      return result.lineNumber == lineNumber
+    }
+    if let turnId = message.turnId {
+      return result.turnId == turnId && result.content == message.content
+    }
+    return result.timestamp == message.timestamp && result.content == message.content
   }
 
   private func userMessageIndex(for target: SearchResultSelectionTarget, in detail: SessionDetail) -> Int? {
@@ -1234,14 +1350,23 @@ final class AppModel: ObservableObject {
       projectSortOption = sortOption
     }
     let savedHiddenOperationalCategories = Set(Self.stringArray(forKey: DefaultsKeys.hiddenOperationalMessageCategories))
+    let savedOperationalCategoryVersion = UserDefaults.standard.integer(
+      forKey: DefaultsKeys.operationalMessageCategoriesVersion
+    )
     if savedHiddenOperationalCategories.isEmpty,
       UserDefaults.standard.object(forKey: DefaultsKeys.showOperationalMessages) != nil,
       !UserDefaults.standard.bool(forKey: DefaultsKeys.showOperationalMessages) {
       hiddenOperationalMessageCategories = Self.operationalPromptCategorySet
     } else {
-      hiddenOperationalMessageCategories = savedHiddenOperationalCategories
+      hiddenOperationalMessageCategories = Self.migratedOperationalCategories(
+        savedHiddenOperationalCategories,
+        settingsVersion: savedOperationalCategoryVersion
+      )
     }
-    hiddenRepeatedPromptCategories = Set(Self.stringArray(forKey: DefaultsKeys.hiddenRepeatedPromptCategories))
+    hiddenRepeatedPromptCategories = Self.migratedRepeatedPromptCategories(
+      Set(Self.stringArray(forKey: DefaultsKeys.hiddenRepeatedPromptCategories)),
+      settingsVersion: savedOperationalCategoryVersion
+    )
     showSessionBrowser = UserDefaults.standard.bool(forKey: DefaultsKeys.showSessionBrowser)
   }
 
@@ -1259,6 +1384,7 @@ final class AppModel: ObservableObject {
     UserDefaults.standard.set(Self.dateFormatter.string(from: dateAnchorDate), forKey: DefaultsKeys.dateAnchorDate)
     UserDefaults.standard.set(projectSortOption.rawValue, forKey: DefaultsKeys.projectSortOption)
     UserDefaults.standard.set(Array(hiddenOperationalMessageCategories).sorted(), forKey: DefaultsKeys.hiddenOperationalMessageCategories)
+    UserDefaults.standard.set(Self.operationalMessageCategoriesVersion, forKey: DefaultsKeys.operationalMessageCategoriesVersion)
     UserDefaults.standard.removeObject(forKey: DefaultsKeys.showOperationalMessages)
     UserDefaults.standard.set(Array(hiddenRepeatedPromptCategories).sorted(), forKey: DefaultsKeys.hiddenRepeatedPromptCategories)
     UserDefaults.standard.set(showSessionBrowser, forKey: DefaultsKeys.showSessionBrowser)
@@ -1431,10 +1557,24 @@ final class AppModel: ObservableObject {
     )
     guard sentMessagesSearch.totalMatches == 1,
       sentMessagesSearch.results.first?.role == MessageRoleFilter.user.rawValue,
+      sentMessagesSearch.results.first?.category == "Testing/verification",
       sentMessagesSearch.results.first?.promptIntent == "Testing/verification",
       sentMessagesSearch.results.first?.snippet.contains("parser test") == true
     else {
       throw AppSmokeError.unexpected("The UI workflow sent-messages search did not return the fixture prompt.")
+    }
+    let hiddenOperationalSearch = try await api.searchMessages(
+      query: "",
+      role: .user,
+      model: AppConstants.allModelsName,
+      sessionID: nil,
+      project: selectedProject,
+      filters: dateFilters,
+      submittedOnly: true,
+      hiddenCategories: Self.operationalPromptCategoryOrder
+    )
+    guard hiddenOperationalSearch.totalMatches == 0 else {
+      throw AppSmokeError.unexpected("The UI workflow operational-message filter did not hide all fixture prompts.")
     }
 
     copySearchResultSessionID(result)
@@ -1488,6 +1628,15 @@ final class AppModel: ObservableObject {
       userMessageIndex(for: SearchResultSelectionTarget(assistantResult), in: detail) == firstUserMessage.offset
     else {
       throw AppSmokeError.unexpected("Assistant search results did not map back to their user-message interaction.")
+    }
+    browseMessagesSummary = sentMessagesSearch
+    pendingSearchResultTarget = SearchResultSelectionTarget(assistantResult)
+    selectedUserMessageIndex = nil
+    applyPendingMessageSelection(to: detail)
+    guard selectedUserMessageIndex == firstUserMessage.offset,
+      selectedBrowseMessageID == sentMessagesSearch.results.first?.id
+    else {
+      throw AppSmokeError.unexpected("Search result conversation navigation did not sync the highlighted user message.")
     }
     selectedSessionDetail = detail
 
@@ -1668,12 +1817,60 @@ final class AppModel: ObservableObject {
   }
 
   private static let operationalPromptCategoryOrder = [
+    "Code review/QA",
+    "Deploy/release",
+    "Git commands",
+    "Plan approvals",
+    "Run/build app",
+    "Testing/verification"
+  ]
+  private static let operationalPromptCategorySet = Set(operationalPromptCategoryOrder)
+  private static let legacyOperationalPromptCategorySet: Set<String> = [
     "Code review",
     "Git commands",
     "Plan approvals",
     "Run app"
   ]
-  private static let operationalPromptCategorySet = Set(operationalPromptCategoryOrder)
+  private static let operationalMessageCategoriesVersion = 2
+
+  private static func migratedOperationalCategories(
+    _ categories: Set<String>,
+    settingsVersion: Int
+  ) -> Set<String> {
+    migratedCategoryLabels(categories, settingsVersion: settingsVersion)
+      .intersection(operationalPromptCategorySet)
+  }
+
+  private static func migratedRepeatedPromptCategories(
+    _ categories: Set<String>,
+    settingsVersion: Int
+  ) -> Set<String> {
+    migratedCategoryLabels(categories, settingsVersion: settingsVersion)
+  }
+
+  private static func migratedCategoryLabels(
+    _ categories: Set<String>,
+    settingsVersion: Int
+  ) -> Set<String> {
+    guard settingsVersion < operationalMessageCategoriesVersion else {
+      return categories
+    }
+
+    var migrated = categories
+    if migrated.remove("Code review") != nil {
+      migrated.insert("Code review/QA")
+    }
+    if migrated.remove("Run app") != nil {
+      migrated.insert("Run/build app")
+    }
+    if categories.contains("Git commands") {
+      migrated.insert("Deploy/release")
+    }
+    if legacyOperationalPromptCategorySet.isSubset(of: categories) {
+      migrated.formUnion(operationalPromptCategorySet)
+    }
+    return migrated
+  }
 
   private static func writeStdout(_ message: String) {
     FileHandle.standardOutput.write(Data(message.utf8))
@@ -1711,7 +1908,7 @@ final class AppModel: ObservableObject {
     Project Focus shows the main types of work in the current project and date range.
 
     Filters
-    Use the date control in the header. Use View > Operational Messages to hide Git, plan approval, run app, and code review prompts. Use View > Show Sessions only when you need the session column.
+    Use the date control in the header. In View > Operational Messages, All shows every message in the current scope; unchecking it hides approvals, Git, release, run/build, testing, and review prompts. Use View > Show Sessions only when you need the session column.
 
     Search and Audit
     Search finds messages across the current filters. Audit prepares a reviewed AI worklog for the selected repository.
@@ -1790,6 +1987,7 @@ private enum DefaultsKeys {
   static let projectSortOption = "projectSortOption"
   static let showOperationalMessages = "showOperationalMessages"
   static let hiddenOperationalMessageCategories = "hiddenOperationalMessageCategories"
+  static let operationalMessageCategoriesVersion = "operationalMessageCategoriesVersion"
   static let hiddenRepeatedPromptCategories = "hiddenRepeatedPromptCategories"
   static let showSessionBrowser = "showSessionBrowser"
 }

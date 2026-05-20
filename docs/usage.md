@@ -54,7 +54,9 @@ Browse lists prompts you typed and submitted for the selected project without re
 
 In Browse, the sidebar selects the project, the main Messages column lists submitted prompts for the current project and date filters, and the Codex Interaction column shows the selected message split into user message, Codex response, tool activity, system/developer context, and token/timing sections. User messages show their Project Focus category label anywhere they appear. Use `View > Show Sessions` when you want an extra session column before the message list.
 
-Use `View > Operational Messages` to hide or show all operational prompt families at once, or control families independently: `Code review`, `Git commands`, `Plan approvals`, and `Run app`. The same operational filters apply in Browse, optional session-message lists, Search results, and repeated prompts.
+Use `View > Operational Messages` to hide or show all operational prompt families at once, or control families independently: `Code review/QA`, `Deploy/release`, `Git commands`, `Plan approvals`, `Run/build app`, and `Testing/verification`. The same operational filters apply in Browse, optional session-message lists, Search results, and repeated prompts.
+
+When `All` is checked, no operational family is hidden, so the app shows all messages that match the current project, date, role, model, session, and search filters. Unchecking `All` hides only the operational families listed in that menu; non-operational Project Focus categories remain visible.
 
 The native macOS tab bar is hidden while there is only one viewer tab. Use `File > New Tab` when you want another app tab; each tab keeps its own project, date, filter, search, and selection state, and the tab bar appears once multiple tabs are open.
 
@@ -133,13 +135,15 @@ You can pass multiple `--path` values.
 
 - User-message counts come from `event_msg.user_message`.
 - Unique user messages are trimmed, whitespace-collapsed, and lowercased.
-- Project Focus classifies submitted user messages into deterministic local categories such as `Feature design`, `Implementation`, `Bug fixes`, `Git commands`, `Deploy/release`, `Planning/strategy`, `Research`, `Content creation`, `Data/metrics`, `Documentation`, and `Feedback/context`.
+- Project Focus classifies submitted user messages into deterministic local categories such as `Feature design`, `Implementation`, `Bug fixes`, `Git commands`, `Deploy/release`, `Run/build app`, `Code review/QA`, `Planning/strategy`, `Research`, `Testing/verification`, `Content creation`, `Data/metrics`, `Documentation`, and `Feedback/context`.
 - Project Focus percentages are based on the current project and date filters, with representative examples shown only inside the local app or non-redacted exports.
 - Repeated prompts are still grouped from normalized user messages in the analytics API and shown only for groups with more than one submission.
 - Short approvals such as `yes`, `go ahead`, `execute`, `do that`, or `sounds good` are grouped as `Plan approvals`.
-- Short Git workflow requests such as commit, push, publish, deploy to production, branch, PR, worktree, or repo-cleanliness checks are grouped as `Git commands`.
-- Short app launch requests such as run, start, restart, launch, or open the app/server are grouped as `Run app`.
-- Short review requests such as `do a code review`, `review the diff`, or `inspect the changes` are grouped as `Code review`.
+- Git workflow requests such as commit, push, branch, PR, worktree, or repo-cleanliness checks are grouped as `Git commands`.
+- Deploy, publish, release, notarization, and production-shipping requests are grouped as `Deploy/release`.
+- App launch, local server, build, package, rebuild, relaunch, and restart requests are grouped as `Run/build app`.
+- Code review, diff review, implementation audit, and QA-finding prompts are grouped as `Code review/QA`.
+- Test, lint, typecheck, smoke test, accessibility, Playwright, screenshot check, and verification prompts are grouped as `Testing/verification`.
 - Browse, Search, and operational prompt groups can hide or show grouped prompt families from the `View > Operational Messages` menu.
 - Token totals sum `token_count.info.last_token_usage` records.
 - `token_count` events with `info: null` are ignored for token totals.

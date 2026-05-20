@@ -177,6 +177,7 @@ private struct AppWindowRootView: View {
   var body: some View {
     RootView()
       .environmentObject(model)
+      .focusedSceneValue(\.appModel, model)
       .focusedValue(\.appModel, model)
       .task {
         model.startIfNeeded()

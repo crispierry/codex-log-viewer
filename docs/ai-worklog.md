@@ -2,6 +2,206 @@
 
 Sanitized audit trail of AI-assisted work on this project.
 
+## 2026-05-20 - Sync Search Conversation Navigation
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> When we go from search results and I click Show message, we go back to the other page and we show the right message. However the conversation column is highlighting the wrong conversation. You need to move that to put me in the correct conversation and then show the conversation on the right. Do you understand what I'm saying?
+
+> Make sure that the project is also showing the right scene. Now either go to all projects or go to the relevant project in question
+
+### Interpreted Intent
+
+The user wanted Search's `Show Conversation` action to navigate the whole Browse scene consistently: project scope, message-list highlight, scroll position, and right-hand conversation detail should all point to the same conversation.
+
+### Response / Work Done
+
+- Changed Search result navigation to keep `All Projects` when that is the active scope, or switch to the result's project when Browse is scoped to another project.
+- Added pending conversation navigation so project changes wait for the destination project's summary and message list before selecting the conversation.
+- Synchronized the Browse user-message row to the user prompt that owns the selected search result, including assistant-result hits that resolve to their containing user interaction.
+- Added automatic scrolling in the Browse user-message list so the selected conversation row is brought into view after navigation.
+- Converted the project sidebar selection to route through `AppModel.selectProject` directly instead of a separate `onChange`, so programmatic project navigation does not trigger a second reset.
+- Extended the native UI smoke workflow to assert assistant search-result navigation resolves to the expected user-message highlight.
+- Rebuilt and packaged the macOS app as build 96, then relaunched the packaged app for review.
+
+### Privacy Notes
+
+No raw Codex logs, unsanitized session files, screenshots, recordings, or real local paths were added. Verification uses sanitized fixtures only.
+
+### Verification
+
+- Ran `swift build --package-path apps/macos`.
+- Ran `npm run check:mac-accessibility`.
+- Ran `git diff --check`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`.
+- Ran `npm run smoke:mac-ui`.
+- Relaunched `dist/macos/Codex Log Viewer.app`.
+
+## 2026-05-20 - Keep Show Sessions Toggle Enabled
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> Also I'm not able to turn off show sessions once the sessions are being displayed
+
+### Interpreted Intent
+
+The user wanted the `View > Show Sessions` menu toggle to remain enabled after the session browser column is displayed, so the column can be turned off from the same menu.
+
+### Response / Work Done
+
+- Confirmed the menu item was falling back to the disabled command state when the command layer did not have a focused app model.
+- Published each window's `AppModel` as a scene-level focused value in addition to the existing view-level focused value, so transient focus changes inside the split view do not disable the View menu commands.
+- Rebuilt and packaged the macOS app as build 95, then relaunched the packaged app for review.
+
+### Privacy Notes
+
+No raw Codex logs, unsanitized session files, screenshots, recordings, or real local paths were added.
+
+### Verification
+
+- Ran `swift build --package-path apps/macos`.
+- Ran `npm run check:mac-accessibility`.
+- Ran `git diff --check`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`.
+- Ran `npm run smoke:mac-ui`.
+- Relaunched `dist/macos/Codex Log Viewer.app`.
+- Activated the relaunched app with System Events, toggled `View > Show Sessions` on and off, and confirmed the menu item remained enabled after each toggle.
+
+## 2026-05-20 - Clarify Operational All Toggle
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> I should be able to select all and see all the check marks right away. Also the list of categories you showed is only a subset. I want to make sure when I'm selecting all you're including all messages. Is that right
+
+### Interpreted Intent
+
+The user wanted the operational `All` toggle to visibly update every category checkbox immediately and wanted confirmation that selecting `All` restores the full in-scope message list, not only a subset of operational categories.
+
+### Response / Work Done
+
+- Updated repeated-prompt and operational filter setters to assign fresh category sets after changes, giving SwiftUI a direct state update for immediate menu checkmark refresh.
+- Clarified the native help text and usage guide: checked `All` hides no operational category, so all messages matching the current app filters are visible; unchecked `All` hides only the operational families listed in the menu.
+- Rebuilt and packaged the macOS app as build 94, then relaunched the packaged app for review.
+
+### Privacy Notes
+
+No raw Codex logs, unsanitized session files, screenshots, recordings, or real local paths were added.
+
+### Verification
+
+- Ran `swift build --package-path apps/macos`.
+- Ran `npm run check:mac-accessibility`.
+- Ran `git diff --check`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`.
+- Ran `npm run smoke:mac-ui`.
+- Relaunched `dist/macos/Codex Log Viewer.app`.
+
+## 2026-05-20 - Align Operational Filters With Project Focus Categories
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> I just ran into a bug when I said "view operational messages" and all is not working anymore so we need to address that
+>
+> Can you figure out what happened? I believe our new content classification messed that up so see if that's still appropriate and what categories we need to include
+>
+> It's something where we need to include or exclude some of those categories
+
+### Interpreted Intent
+
+The user wanted the `View > Operational Messages` menu fixed after the newer Project Focus classifier introduced category labels that the older operational filter did not know how to hide.
+
+### Response / Work Done
+
+- Traced operational filtering across analytics, the local API, Browse/Search/session detail visibility, repeated prompt groups, and the native View menu.
+- Replaced the older narrow operational classifier with an explicit operational subset of Project Focus categories: `Code review/QA`, `Deploy/release`, `Git commands`, `Plan approvals`, `Run/build app`, and `Testing/verification`.
+- Updated the native View menu to expose those categories and made the `All` toggle hide every operational category.
+- Added settings migration for older saved labels such as `Code review` and `Run app`, including the previous deploy-as-Git behavior for legacy saved filters.
+- Expanded analytics and native smoke coverage so all operational categories can be hidden together.
+- Updated the usage guide and native help text to document the revised include/exclude behavior.
+- Rebuilt and packaged the macOS app as build 93, then relaunched the packaged app for review.
+
+### Privacy Notes
+
+No raw Codex logs, unsanitized session files, screenshots, recordings, or real local paths were added. New coverage uses synthetic fixture messages only.
+
+### Verification
+
+- Ran `npm run test -w @codex-log-viewer/analytics`.
+- Ran `npm run build -w @codex-log-viewer/analytics`.
+- Ran `npm test`.
+- Ran `npm run lint`.
+- Ran `npm run privacy:scan`.
+- Ran `npm run check:mac-accessibility`.
+- Ran `git diff --check`.
+- Ran `npm run check:reference -- --reference fixtures/codex/sample-reference-summary.json --path fixtures/codex/sample-session.jsonl --project sample-app`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`.
+- Ran `npm run smoke:mac-ui`.
+- Relaunched `dist/macos/Codex Log Viewer.app`.
+
+## 2026-05-20 - Final Open Source Readiness Pass
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> I'm pretty happy with all the changes. The app looks good. I'm getting ready to open source this effort. I need you to do a final complete pass of all the documentation and all the source code make sure this is ready for open source.
+
+### Interpreted Intent
+
+The user wanted a final public-readiness audit across documentation, source code, packaging, privacy posture, and verification before opening the repository.
+
+### Response / Work Done
+
+- Reviewed the repository instructions, public docs, fixtures, TypeScript parser/analytics/server/CLI code, native macOS app code, packaging scripts, workflows, and release materials.
+- Added `.codex/` to `.gitignore` so local audit drafts and raw transcripts match the documented local-only workflow.
+- Updated the fixture README to list the visual image-evidence fixture.
+- Clarified the privacy scan scope as tracked and non-ignored untracked files.
+- Removed a branch-specific PR reference from the first public release plan and refreshed its review date.
+- Updated CLI help so the `sessions` command documents `--path`.
+- Changed the packaging script so required notarization settings are validated before the app build number is bumped.
+- Scoped the native session inspector's submitted and automation messages to the selected daily session slice when a date-scoped session is selected.
+- Rebuilt and packaged the macOS app as build 92, then relaunched the packaged app for review.
+
+### Privacy Notes
+
+No raw Codex logs, private session files, screenshots, recordings, or real local paths were added. The new ignore rule reduces the chance of local audit material being accidentally committed.
+
+### Verification
+
+- Ran `wt bootstrap`.
+- Ran `npm run privacy:scan`.
+- Ran `npm run lint`.
+- Ran `npm test`.
+- Ran `npm run check:mac-accessibility`.
+- Ran `npm audit --audit-level=moderate`.
+- Ran a local Markdown link-resolution check.
+- Ran `npm run benchmark:search`.
+- Ran `npm run check:reference -- --reference fixtures/codex/sample-reference-summary.json --path fixtures/codex/sample-session.jsonl --project sample-app`.
+- Ran `git diff --check`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package` after closing a pre-existing packaged app instance.
+- Ran `npm run smoke:mac-ui`.
+- Ran `npm run release:notes -- --tag v0.1.0 --output dist/macos/release-notes.md`.
+- Ran checksum verification for the packaged macOS archives, including build 92.
+- Relaunched `dist/macos/Codex Log Viewer.app`.
+
 ## 2026-05-19 - Rename Messages Column Label
 
 Status: Completed

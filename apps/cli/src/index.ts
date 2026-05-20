@@ -256,7 +256,7 @@ function printHelp(): void {
 Usage:
   codex-log-viewer projects [--path <file-or-dir>] [--json]
   codex-log-viewer summary [--project <name>] [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--path <file-or-dir>] [--json]
-  codex-log-viewer sessions [--project <name>] [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--json]
+  codex-log-viewer sessions [--project <name>] [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--path <file-or-dir>] [--json]
   codex-log-viewer export [--format json|csv] [--output <file>] [summary options]
   codex-log-viewer export --format json --raw [summary options]
   codex-log-viewer audit [--repo <path>] [--project <name>] [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--output <file>] [--raw] [--no-responses]

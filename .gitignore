@@ -21,6 +21,7 @@ coverage/
 .vscode/
 
 # Local Codex/private log material
+.codex/
 fixtures/private/
 *.local.jsonl
 *.secret.jsonl

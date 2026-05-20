@@ -17,6 +17,7 @@ import type {
   MessageSearchResult,
   MessageSearchSummary,
   ModelBucket,
+  PromptIntentCategory,
   PromptIntentSummary,
   ProjectAlias,
   ProjectListItem,
@@ -26,6 +27,15 @@ import type {
   SummaryOptions
 } from "./types.js";
 import { addUsage, emptyUsage } from "./usage.js";
+
+const operationalPromptIntentCategoryKeys = new Set<string>([
+  promptIntentCategories.codeReviewQa.key,
+  promptIntentCategories.deployRelease.key,
+  promptIntentCategories.gitCommands.key,
+  promptIntentCategories.planApprovals.key,
+  promptIntentCategories.runBuildApp.key,
+  promptIntentCategories.testingVerification.key
+]);
 
 export async function loadCorpus(options: SummaryOptions = {}): Promise<LoadedCorpus> {
   if (options.cacheDir) {
@@ -613,92 +623,9 @@ export function userMessageCategoryLabel(message: string): string | undefined {
   return userMessageCategory(normalizeLiteralMessage(message))?.label;
 }
 
-function userMessageCategory(normalized: string): { key: string; label: string } | undefined {
-  if (isPlanApprovalMessage(normalized)) {
-    return { key: "plan-approvals", label: "Plan approvals" };
-  }
-
-  const commandText = normalizedCommandText(normalized);
-  if (isGitCommandMessage(commandText)) {
-    return { key: "git-commands", label: "Git commands" };
-  }
-  if (isRunAppMessage(commandText)) {
-    return { key: "run-app", label: "Run app" };
-  }
-  if (isCodeReviewMessage(commandText)) {
-    return { key: "code-review", label: "Code review" };
-  }
-  return undefined;
-}
-
-function isPlanApprovalMessage(normalized: string): boolean {
-  if (normalized.length > 70) {
-    return false;
-  }
-  const value = normalized
-    .replace(/[.!]+$/u, "")
-    .replace(/\s*,\s*/gu, ", ")
-    .trim();
-  const oneWordApproval = /^(yes|yeah|yep|yup|sure|ok|okay|approved|confirmed|execute)$/u.test(value);
-  const shortApproval =
-    /^(yes|yeah|yep|yup|sure|ok|okay),? (please|go ahead|proceed|do it|sounds good|let's do it|lets do it)$/u.test(value);
-  const phraseApproval =
-    /^(sounds good|looks good|that works|works for me|go ahead|please do|do it|do that|proceed|approved|confirmed|ship it|let's do it|lets do it|execute it|execute that|execute this|execute the plan|execute the changes)( please)?$/u.test(value);
-  return oneWordApproval || shortApproval || phraseApproval;
-}
-
-function normalizedCommandText(normalized: string): string {
-  let value = normalized;
-  let changed = true;
-  while (changed) {
-    const previous = value;
-    value = value
-      .replace(/^(ok|okay)[, ]+/, "")
-      .replace(/^(please|pls)[, ]+/, "")
-      .replace(/^(can|could|would) you\s+/, "")
-      .replace(/^let'?s\s+/, "");
-    changed = value !== previous;
-  }
-  return value.replace(/\s+(please|for me)$/u, "").trim();
-}
-
-function isGitCommandMessage(normalized: string): boolean {
-  if (normalized.length > 120) {
-    return false;
-  }
-  const directGitCommand =
-    /^(git )?(commit|push|merge|rebase|branch|checkout|switch|pull|fetch|stash|tag|open pr|create pr|close pr|merge pr)\b/.test(normalized);
-  const publishCommand =
-    /^(publish|deploy)( (it|this|the app|the build|the release|the site|the website|to (main|origin|github|production|prod|release)|production|prod))?$/u.test(normalized);
-  const explicitGitInspection = /^git (status|diff|log)\b/.test(normalized);
-  const gitObjectAction =
-    /^(create|make|open|merge|close|delete|remove|clean|switch|checkout) ((a|the|current|new) )*(branch|commit|pull request|pr|worktree|work tree)\b/.test(normalized);
-  const worktreeCleanup = /^(close|delete|remove|clean) ((the|current) )*(worktree|work tree)\b/.test(normalized);
-  const commitStateQuestion =
-    /^(are|is|did|do|does|have|has)\b.*\b(all|everything|files?|changes?|work|worktree|work tree|repo|repository|anything|we)\b.*\b(committed|commit|pushed|push|staged|unstaged|uncommitted|dirty|clean)\b\??$/.test(normalized) ||
-    /^(all|everything|files?|changes?|anything|repo|repository|worktree|work tree)\b.*\b(committed|pushed|staged|unstaged|uncommitted|dirty|clean)\b\??$/.test(normalized);
-  return directGitCommand || publishCommand || explicitGitInspection || gitObjectAction || worktreeCleanup || commitStateQuestion;
-}
-
-function isRunAppMessage(normalized: string): boolean {
-  if (normalized.length > 140) {
-    return false;
-  }
-  const appLaunchCommand =
-    /^(run|start|restart|launch|open) (the )?(app|application|desktop app|mac app|macos app|native app|packaged app|server|local server|dev server|development server)\b/.test(normalized);
-  const devServerCommand = /^(run|start|restart) (npm run dev|dev|desktop|local app)\b/.test(normalized);
-  return appLaunchCommand || devServerCommand;
-}
-
-function isCodeReviewMessage(normalized: string): boolean {
-  if (normalized.length > 160) {
-    return false;
-  }
-  const reviewCommand =
-    /^(code review|do a code review|run a code review|review code|review the code|review this code|review the diff|review the changes)\b/.test(normalized);
-  const reviewTarget =
-    /^(review|inspect|audit) (the )?(code|diff|changes|change set|pull request|pr)\b/.test(normalized);
-  return reviewCommand || reviewTarget;
+function userMessageCategory(normalized: string): PromptIntentCategory | undefined {
+  const promptIntent = classifyPromptIntent(normalized);
+  return operationalPromptIntentCategoryKeys.has(promptIntent.key) ? promptIntent : undefined;
 }
 
 function repeatedMessageId(normalized: string): string {

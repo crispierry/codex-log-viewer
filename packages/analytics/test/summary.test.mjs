@@ -235,7 +235,11 @@ test("summarizeParsedCorpus groups command-style prompt families", () => {
     message({ content: "anything uncommitted?", timestamp: "2026-01-01T00:15:00.000Z" }, 16),
     message({ content: "do a code review", timestamp: "2026-01-01T00:16:00.000Z" }, 17),
     message({ content: "review the diff", timestamp: "2026-01-01T00:17:00.000Z" }, 18),
-    message({ content: "inspect the changes", timestamp: "2026-01-01T00:18:00.000Z" }, 19)
+    message({ content: "inspect the changes", timestamp: "2026-01-01T00:18:00.000Z" }, 19),
+    message({ content: "build the app", timestamp: "2026-01-01T00:19:00.000Z" }, 20),
+    message({ content: "relaunch the packaged app", timestamp: "2026-01-01T00:20:00.000Z" }, 21),
+    message({ content: "run the accessibility check", timestamp: "2026-01-01T00:21:00.000Z" }, 22),
+    message({ content: "rerun smoke test", timestamp: "2026-01-01T00:22:00.000Z" }, 23)
   ];
   const corpus = {
     files: messages.map((item) => ({
@@ -267,12 +271,12 @@ test("summarizeParsedCorpus groups command-style prompt families", () => {
   };
 
   const summary = summarizeParsedCorpus(corpus, { project: "sample-app" });
-  assert.equal(summary.totals.userMessages, 19);
-  assert.equal(summary.totals.uniqueUserMessages, 3);
-  assert.equal(summary.messagesByDay[0]?.uniqueCount, 3);
+  assert.equal(summary.totals.userMessages, 23);
+  assert.equal(summary.totals.uniqueUserMessages, 5);
+  assert.equal(summary.messagesByDay[0]?.uniqueCount, 5);
 
   const gitGroup = summary.repeatedUserMessages.find((group) => group.sample === "Git commands");
-  assert.equal(gitGroup?.count, 13);
+  assert.equal(gitGroup?.count, 10);
   assert.deepEqual(
     gitGroup?.variants.map((variant) => variant.sample),
     [
@@ -280,9 +284,6 @@ test("summarizeParsedCorpus groups command-style prompt families", () => {
       "is repo clean?",
       "Have all changes been pushed?",
       "Are all files committed?",
-      "publish to origin",
-      "Deploy to production",
-      "publish",
       "Can you make a commit please",
       "create a new branch",
       "close work tree",
@@ -292,34 +293,72 @@ test("summarizeParsedCorpus groups command-style prompt families", () => {
     ]
   );
 
-  const runAppGroup = summary.repeatedUserMessages.find((group) => group.sample === "Run app");
-  assert.equal(runAppGroup?.count, 3);
+  const deployGroup = summary.repeatedUserMessages.find((group) => group.sample === "Deploy/release");
+  assert.equal(deployGroup?.count, 3);
   assert.deepEqual(
-    runAppGroup?.variants.map((variant) => variant.sample),
-    ["OK open the app for me", "start the server", "run the app"]
+    deployGroup?.variants.map((variant) => variant.sample),
+    ["publish to origin", "Deploy to production", "publish"]
   );
 
-  const codeReviewGroup = summary.repeatedUserMessages.find((group) => group.sample === "Code review");
+  const runAppGroup = summary.repeatedUserMessages.find((group) => group.sample === "Run/build app");
+  assert.equal(runAppGroup?.count, 5);
+  assert.deepEqual(
+    runAppGroup?.variants.map((variant) => variant.sample),
+    [
+      "relaunch the packaged app",
+      "build the app",
+      "OK open the app for me",
+      "start the server",
+      "run the app"
+    ]
+  );
+
+  const codeReviewGroup = summary.repeatedUserMessages.find((group) => group.sample === "Code review/QA");
   assert.equal(codeReviewGroup?.count, 3);
   assert.deepEqual(
     codeReviewGroup?.variants.map((variant) => variant.sample),
     ["inspect the changes", "review the diff", "do a code review"]
   );
 
+  const testingGroup = summary.repeatedUserMessages.find((group) => group.sample === "Testing/verification");
+  assert.equal(testingGroup?.count, 2);
+  assert.deepEqual(
+    testingGroup?.variants.map((variant) => variant.sample),
+    ["rerun smoke test", "run the accessibility check"]
+  );
+
   const search = searchMessages(corpus, { query: "", role: "user", submittedOnly: true });
-  assert.equal(search.results.find((result) => result.content === "do a code review")?.category, "Code review");
+  assert.equal(search.results.find((result) => result.content === "do a code review")?.category, "Code review/QA");
   assert.equal(search.results.find((result) => result.content === "do a code review")?.promptIntent, "Code review/QA");
+  assert.equal(search.results.find((result) => result.content === "publish")?.category, "Deploy/release");
   assert.equal(search.results.find((result) => result.content === "publish")?.promptIntent, "Deploy/release");
+  assert.equal(search.results.find((result) => result.content === "build the app")?.category, "Run/build app");
+  assert.equal(search.results.find((result) => result.content === "run the accessibility check")?.category, "Testing/verification");
 
   const filteredSearch = searchMessages(corpus, {
     query: "",
     role: "user",
     submittedOnly: true,
-    hiddenCategories: ["Code review", "Run app"]
+    hiddenCategories: ["Code review/QA", "Run/build app"]
   });
-  assert.equal(filteredSearch.totalMatches, 13);
-  assert.equal(filteredSearch.results.some((result) => result.category === "Code review"), false);
-  assert.equal(filteredSearch.results.some((result) => result.category === "Run app"), false);
+  assert.equal(filteredSearch.totalMatches, 15);
+  assert.equal(filteredSearch.results.some((result) => result.category === "Code review/QA"), false);
+  assert.equal(filteredSearch.results.some((result) => result.category === "Run/build app"), false);
+
+  const allOperationalFilteredSearch = searchMessages(corpus, {
+    query: "",
+    role: "user",
+    submittedOnly: true,
+    hiddenCategories: [
+      "Code review/QA",
+      "Deploy/release",
+      "Git commands",
+      "Plan approvals",
+      "Run/build app",
+      "Testing/verification"
+    ]
+  });
+  assert.equal(allOperationalFilteredSearch.totalMatches, 0);
 });
 
 test("summarizeParsedCorpus groups short plan approval prompt families", () => {
