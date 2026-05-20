@@ -2,7 +2,7 @@
 
 This plan tracks the remaining work before Codex Log Viewer is ready for a first public version. It assumes the first public version is a native macOS release, not a web app, and that local Codex logs stay on the user's machine by default.
 
-Last reviewed: 2026-05-19
+Last reviewed: 2026-05-20
 
 ## Release Definition
 
@@ -49,7 +49,7 @@ External release prerequisites:
 
 - Developer ID certificate and notarytool keychain profile are required to produce a notarized public macOS artifact.
 - A maintainer should run the private-log parity check locally with a private reference report, without committing private inputs or outputs.
-- PR #8 is blocked only on the configured review requirement before merge/tag.
+- The release branch still needs the configured human review before merge/tag.
 
 ## Current Completion Audit
 

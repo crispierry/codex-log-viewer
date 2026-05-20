@@ -2,6 +2,363 @@
 
 Sanitized audit trail of AI-assisted work on this project.
 
+## 2026-05-20 - Execute Manual QA Fix Plan
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> /goal execute the Manual QA Fixed Plan make sure that it's properly tested and everything is working to a full regression pass and verify that the app is working as intended
+
+> do we have much more to go?
+
+> i think we are done
+
+### Interpreted Intent
+
+The user wanted the documented manual QA issues fixed, regression-tested, packaged, and verified in the native macOS app, then stopped once they indicated the pass was complete enough.
+
+### Response / Work Done
+
+- Implemented native smoke cleanup so the packaged app and child parser engine are quit and leak-checked after UI smoke runs.
+- Restored the viewer window after source picker, Help, usage-guide, and app-reopen lifecycle paths.
+- Added a fallback AppKit viewer window path when SwiftUI window reopening cannot recover a visible viewer.
+- Clarified Browse empty-state copy when operational filters hide every visible submitted message.
+- Changed export save panels to default to a safe directory such as Downloads instead of the selected log source.
+- Fixed Audit repository path typing so manual entry clears stale preview state and enables Generate.
+- Expanded the native UI smoke workflow to cover operational hidden-message behavior, safe export defaults, Audit path entry, and process cleanup.
+- Rebuilt and repackaged the macOS app for desktop review.
+
+### Privacy Notes
+
+No raw Codex logs, unsanitized session files, private prompts, screenshots, recordings, export payloads, or secrets were added. Manual verification used the sanitized fixture session and temporary local QA directories.
+
+### Verification
+
+- Ran `wt bootstrap`.
+- Ran `node --check scripts/smoke-native-ui.mjs`.
+- Ran `git diff --check`.
+- Ran `npm run check:mac-accessibility`.
+- Ran `swift build --package-path apps/macos`.
+- Ran `npm test`.
+- Ran `npm run lint`.
+- Ran `npm run privacy:scan`.
+- Ran `npm run check:reference -- --reference fixtures/codex/sample-reference-summary.json --path fixtures/codex/sample-session.jsonl --project sample-app`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`.
+- Ran `npm run smoke:mac-ui` before the final Usage Guide fallback patch; did not start another UI smoke after the user indicated the pass was done.
+- Manually verified source picker restoration, Browse, Overview, Search role/model/date filters, operational filter empty state, JSON/CSV export save destinations, Audit manual path entry, and Help dialog behavior in the packaged app.
+
+## 2026-05-20 - Manual QA Issue Fix Plan
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> All right create a plan to fix all the issues
+
+### Interpreted Intent
+
+The user wanted the manual QA findings converted into an actionable implementation plan that can be used to fix every documented issue in a later coding pass.
+
+### Response / Work Done
+
+- Reviewed the manual QA report and the relevant native app and smoke-test code paths.
+- Created `docs/manual-qa-fix-plan-2026-05-20.md` with ordered phases, likely files to touch, implementation steps, acceptance criteria, and final verification.
+- Sequenced the plan to address process/window lifecycle defects first, then Browse empty-state copy, export destination safety, Audit manual path entry, and expanded regression coverage.
+
+### Privacy Notes
+
+No raw Codex logs, private sessions, screenshots, recordings, export payloads, or secrets were added. The plan references sanitized fixture workflows and code paths only.
+
+### Verification
+
+- Documentation-only change; no app rebuild or relaunch was needed.
+
+## 2026-05-20 - Manual macOS Power-User QA Pass
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> I want you to create a detailed plan to test our application. I want you to open the app on my desktop and I want you to use every feature of it and make sure that it's working as intended. Click on every menu item. Click on every aspect of the UI. Do all the filters. Act as a power user would. Test everything that's in there and make sure you document any issues that come up.
+>
+> If there are any issues found, create an implementation plan or create an issues ticket document with all the issues found so that later we can create an implementation plan to address every single one of them. Do you understand what I'm asking for? I want you to drive my application on my desktop. I want you to use every feature and capability of it and I want you to verify that it's working as intended, including every menu item and all the capabilities available. Then I want you to document any and every issue found and then we're going to create a plan to fix them.
+
+### Interpreted Intent
+
+The user wanted a hands-on native macOS QA pass that treated the app like a power-user would, exercised the menu and UI surface, verified filters and workflows, and produced a ticket-style issue document plus a follow-up implementation plan.
+
+### Response / Work Done
+
+- Bootstrapped the worktree before verification.
+- Launched and drove the packaged native macOS app on the desktop.
+- Used sanitized fixture data for source selection, Browse, Overview, Search, date filtering, operational filters, refresh/rebuild, exports, and Audit workflows.
+- Tested app menus including About, New Tab, View toggles, Logs commands, exports, Help, usage guide opening, default source, and recent source restoration.
+- Created `docs/manual-qa-report-2026-05-20.md` with a detailed test plan, verification results, issue tickets, and a follow-up implementation plan.
+- Cleaned generated export artifacts from tracked fixture locations after verification.
+
+### Issues Found
+
+- Native UI smoke can leave the packaged app and child engine running.
+- Source picker and Help usage-guide flows can leave the app process running with no viewer windows.
+- Browse's empty state is misleading when operational filters hide all visible messages.
+- Export save panels can default into the selected log source location.
+- Audit manual path entry did not reliably enable Generate during the accessibility-driven pass.
+
+### Privacy Notes
+
+No raw Codex logs, unsanitized session files, screenshots, recordings, private prompts, export payloads, or secrets were added. The QA report uses sanitized fixture references and redacted path placeholders.
+
+### Verification
+
+- Ran `wt bootstrap`.
+- Ran `npm run check:mac-accessibility`.
+- Ran `npm run smoke:mac-ui` and documented its process-leak failure.
+- Ran fixture CLI summary and project checks.
+- Manually exercised the packaged macOS app with sanitized fixture data.
+
+## 2026-05-20 - Draft LinkedIn Article About Codex Log Viewer
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> Now I wanna write an article about the creation of this log viewer
+>
+> Let's talk about the user needs: why did we need to create it? Let's talk about the whole iteration process. Let's talk about its capabilities and I want to reference why I believe this is important. I believe the user messages represent their overall user intent and they become a critical item on the other trail for how a program is operating
+>
+> This is going to be a LinkedIn article. It needs to be written in a professional manner. It needs to reflect my position. It needs to sound like it came from me as a person
+>
+> It needs to be the right size and I need it to be in paragraphs not bullets
+>
+> Understand the goal:
+> - Outline what the user needed
+> - Outline why we think it's important
+> - Describe how the app was created and its capabilities and how it will be used in the future
+
+### Interpreted Intent
+
+The user wanted a professional LinkedIn article draft that explains why Codex Log Viewer was needed, how it evolved, what it can do, and why user messages should be treated as an important audit trail for AI-assisted software work.
+
+### Response / Work Done
+
+- Reviewed the repository README, product requirements, audit-trail documentation, usage guide, macOS app plan, changelog, and existing worklog entries to ground the article in the actual project.
+- Drafted `docs/linkedin-log-viewer-article.md` as a paragraph-based LinkedIn article in first person.
+- Framed the article around local-first privacy, user intent, auditability, iteration through real usage, Project Focus classification, and future use.
+
+### Privacy Notes
+
+No raw Codex logs, private session content, local file paths, screenshots, recordings, or customer data were added. The article uses public project concepts and sanitized implementation descriptions.
+
+### Verification
+
+- Documentation-only change; no app rebuild or relaunch was needed.
+
+## 2026-05-20 - Sync Search Conversation Navigation
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> When we go from search results and I click Show message, we go back to the other page and we show the right message. However the conversation column is highlighting the wrong conversation. You need to move that to put me in the correct conversation and then show the conversation on the right. Do you understand what I'm saying?
+
+> Make sure that the project is also showing the right scene. Now either go to all projects or go to the relevant project in question
+
+### Interpreted Intent
+
+The user wanted Search's `Show Conversation` action to navigate the whole Browse scene consistently: project scope, message-list highlight, scroll position, and right-hand conversation detail should all point to the same conversation.
+
+### Response / Work Done
+
+- Changed Search result navigation to keep `All Projects` when that is the active scope, or switch to the result's project when Browse is scoped to another project.
+- Added pending conversation navigation so project changes wait for the destination project's summary and message list before selecting the conversation.
+- Synchronized the Browse user-message row to the user prompt that owns the selected search result, including assistant-result hits that resolve to their containing user interaction.
+- Added automatic scrolling in the Browse user-message list so the selected conversation row is brought into view after navigation.
+- Converted the project sidebar selection to route through `AppModel.selectProject` directly instead of a separate `onChange`, so programmatic project navigation does not trigger a second reset.
+- Extended the native UI smoke workflow to assert assistant search-result navigation resolves to the expected user-message highlight.
+- Rebuilt and packaged the macOS app as build 96, then relaunched the packaged app for review.
+
+### Privacy Notes
+
+No raw Codex logs, unsanitized session files, screenshots, recordings, or real local paths were added. Verification uses sanitized fixtures only.
+
+### Verification
+
+- Ran `swift build --package-path apps/macos`.
+- Ran `npm run check:mac-accessibility`.
+- Ran `git diff --check`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`.
+- Ran `npm run smoke:mac-ui`.
+- Relaunched `dist/macos/Codex Log Viewer.app`.
+
+## 2026-05-20 - Keep Show Sessions Toggle Enabled
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> Also I'm not able to turn off show sessions once the sessions are being displayed
+
+### Interpreted Intent
+
+The user wanted the `View > Show Sessions` menu toggle to remain enabled after the session browser column is displayed, so the column can be turned off from the same menu.
+
+### Response / Work Done
+
+- Confirmed the menu item was falling back to the disabled command state when the command layer did not have a focused app model.
+- Published each window's `AppModel` as a scene-level focused value in addition to the existing view-level focused value, so transient focus changes inside the split view do not disable the View menu commands.
+- Rebuilt and packaged the macOS app as build 95, then relaunched the packaged app for review.
+
+### Privacy Notes
+
+No raw Codex logs, unsanitized session files, screenshots, recordings, or real local paths were added.
+
+### Verification
+
+- Ran `swift build --package-path apps/macos`.
+- Ran `npm run check:mac-accessibility`.
+- Ran `git diff --check`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`.
+- Ran `npm run smoke:mac-ui`.
+- Relaunched `dist/macos/Codex Log Viewer.app`.
+- Activated the relaunched app with System Events, toggled `View > Show Sessions` on and off, and confirmed the menu item remained enabled after each toggle.
+
+## 2026-05-20 - Clarify Operational All Toggle
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> I should be able to select all and see all the check marks right away. Also the list of categories you showed is only a subset. I want to make sure when I'm selecting all you're including all messages. Is that right
+
+### Interpreted Intent
+
+The user wanted the operational `All` toggle to visibly update every category checkbox immediately and wanted confirmation that selecting `All` restores the full in-scope message list, not only a subset of operational categories.
+
+### Response / Work Done
+
+- Updated repeated-prompt and operational filter setters to assign fresh category sets after changes, giving SwiftUI a direct state update for immediate menu checkmark refresh.
+- Clarified the native help text and usage guide: checked `All` hides no operational category, so all messages matching the current app filters are visible; unchecked `All` hides only the operational families listed in the menu.
+- Rebuilt and packaged the macOS app as build 94, then relaunched the packaged app for review.
+
+### Privacy Notes
+
+No raw Codex logs, unsanitized session files, screenshots, recordings, or real local paths were added.
+
+### Verification
+
+- Ran `swift build --package-path apps/macos`.
+- Ran `npm run check:mac-accessibility`.
+- Ran `git diff --check`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`.
+- Ran `npm run smoke:mac-ui`.
+- Relaunched `dist/macos/Codex Log Viewer.app`.
+
+## 2026-05-20 - Align Operational Filters With Project Focus Categories
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> I just ran into a bug when I said "view operational messages" and all is not working anymore so we need to address that
+>
+> Can you figure out what happened? I believe our new content classification messed that up so see if that's still appropriate and what categories we need to include
+>
+> It's something where we need to include or exclude some of those categories
+
+### Interpreted Intent
+
+The user wanted the `View > Operational Messages` menu fixed after the newer Project Focus classifier introduced category labels that the older operational filter did not know how to hide.
+
+### Response / Work Done
+
+- Traced operational filtering across analytics, the local API, Browse/Search/session detail visibility, repeated prompt groups, and the native View menu.
+- Replaced the older narrow operational classifier with an explicit operational subset of Project Focus categories: `Code review/QA`, `Deploy/release`, `Git commands`, `Plan approvals`, `Run/build app`, and `Testing/verification`.
+- Updated the native View menu to expose those categories and made the `All` toggle hide every operational category.
+- Added settings migration for older saved labels such as `Code review` and `Run app`, including the previous deploy-as-Git behavior for legacy saved filters.
+- Expanded analytics and native smoke coverage so all operational categories can be hidden together.
+- Updated the usage guide and native help text to document the revised include/exclude behavior.
+- Rebuilt and packaged the macOS app as build 93, then relaunched the packaged app for review.
+
+### Privacy Notes
+
+No raw Codex logs, unsanitized session files, screenshots, recordings, or real local paths were added. New coverage uses synthetic fixture messages only.
+
+### Verification
+
+- Ran `npm run test -w @codex-log-viewer/analytics`.
+- Ran `npm run build -w @codex-log-viewer/analytics`.
+- Ran `npm test`.
+- Ran `npm run lint`.
+- Ran `npm run privacy:scan`.
+- Ran `npm run check:mac-accessibility`.
+- Ran `git diff --check`.
+- Ran `npm run check:reference -- --reference fixtures/codex/sample-reference-summary.json --path fixtures/codex/sample-session.jsonl --project sample-app`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`.
+- Ran `npm run smoke:mac-ui`.
+- Relaunched `dist/macos/Codex Log Viewer.app`.
+
+## 2026-05-20 - Final Open Source Readiness Pass
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> I'm pretty happy with all the changes. The app looks good. I'm getting ready to open source this effort. I need you to do a final complete pass of all the documentation and all the source code make sure this is ready for open source.
+
+### Interpreted Intent
+
+The user wanted a final public-readiness audit across documentation, source code, packaging, privacy posture, and verification before opening the repository.
+
+### Response / Work Done
+
+- Reviewed the repository instructions, public docs, fixtures, TypeScript parser/analytics/server/CLI code, native macOS app code, packaging scripts, workflows, and release materials.
+- Added `.codex/` to `.gitignore` so local audit drafts and raw transcripts match the documented local-only workflow.
+- Updated the fixture README to list the visual image-evidence fixture.
+- Clarified the privacy scan scope as tracked and non-ignored untracked files.
+- Removed a branch-specific PR reference from the first public release plan and refreshed its review date.
+- Updated CLI help so the `sessions` command documents `--path`.
+- Changed the packaging script so required notarization settings are validated before the app build number is bumped.
+- Scoped the native session inspector's submitted and automation messages to the selected daily session slice when a date-scoped session is selected.
+- Rebuilt and packaged the macOS app as build 92, then relaunched the packaged app for review.
+
+### Privacy Notes
+
+No raw Codex logs, private session files, screenshots, recordings, or real local paths were added. The new ignore rule reduces the chance of local audit material being accidentally committed.
+
+### Verification
+
+- Ran `wt bootstrap`.
+- Ran `npm run privacy:scan`.
+- Ran `npm run lint`.
+- Ran `npm test`.
+- Ran `npm run check:mac-accessibility`.
+- Ran `npm audit --audit-level=moderate`.
+- Ran a local Markdown link-resolution check.
+- Ran `npm run benchmark:search`.
+- Ran `npm run check:reference -- --reference fixtures/codex/sample-reference-summary.json --path fixtures/codex/sample-session.jsonl --project sample-app`.
+- Ran `git diff --check`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package` after closing a pre-existing packaged app instance.
+- Ran `npm run smoke:mac-ui`.
+- Ran `npm run release:notes -- --tag v0.1.0 --output dist/macos/release-notes.md`.
+- Ran checksum verification for the packaged macOS archives, including build 92.
+- Relaunched `dist/macos/Codex Log Viewer.app`.
+
 ## 2026-05-19 - Rename Messages Column Label
 
 Status: Completed
@@ -843,3 +1200,31 @@ No raw logs or unsanitized session content were added. Classifier tests use synt
 ### Verification
 
 - Ran `npm run test -w @codex-log-viewer/analytics`.
+
+## 2026-05-20 - Prepare Repository Sharing Details
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> Give me the details so I can share the GitHub repository as part of my open source
+
+### Interpreted Intent
+
+The user wanted concise, public-facing repository details that can be used to share Codex Log Viewer as an open source project.
+
+### Response / Work Done
+
+- Reviewed the local README, package metadata, license, security policy, contributing guide, changelog, and open source readiness notes.
+- Verified the GitHub repository URL, visibility, description, default branch, license, and topics through the GitHub CLI.
+- Prepared share-ready repository details and short announcement copy without exposing private logs or local session data.
+
+### Privacy Notes
+
+No raw logs, private session content, secrets, or unsanitized local Codex data were read or added.
+
+### Verification
+
+- Confirmed the repository is public at `https://github.com/crispierry/codex-log-viewer`.
+- Confirmed the repository uses the MIT License and has privacy/security contribution guidance.

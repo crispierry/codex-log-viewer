@@ -9,14 +9,15 @@ const repoRoot = resolve(scriptDir, "..");
 const appName = "Codex Log Viewer";
 const executableName = "CodexLogViewerMac";
 const bundleIdentifier = "com.crispierry.codex-log-viewer";
-const appVersion = bumpAppBuildVersion();
-const version = appVersion.marketingVersion;
-const buildVersion = appVersion.bundleVersion;
 const configuration = process.env.CONFIGURATION ?? "release";
 const codeSignIdentity = process.env.CODEX_LOG_VIEWER_CODESIGN_IDENTITY?.trim() || "-";
 const notaryProfile = process.env.CODEX_LOG_VIEWER_NOTARY_PROFILE?.trim();
 const notaryKeychain = process.env.CODEX_LOG_VIEWER_NOTARY_KEYCHAIN?.trim();
 const requireNotarization = process.env.CODEX_LOG_VIEWER_REQUIRE_NOTARIZATION === "1";
+verifyReleaseSigningConfiguration();
+const appVersion = bumpAppBuildVersion();
+const version = appVersion.marketingVersion;
+const buildVersion = appVersion.bundleVersion;
 const buildDir = resolve(repoRoot, "dist/macos");
 const appDir = join(buildDir, `${appName}.app`);
 const contentsDir = join(appDir, "Contents");
@@ -27,7 +28,6 @@ const nodeDir = join(resourcesDir, "node/bin");
 const nodeLibDir = join(resourcesDir, "node/lib");
 let didSignBundle = false;
 
-verifyReleaseSigningConfiguration();
 run("npm", ["run", "build:native-engine"]);
 run("swift", ["build", "--package-path", "apps/macos", "-c", configuration]);
 

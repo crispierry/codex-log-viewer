@@ -12,3 +12,4 @@ See [Fixture Guidelines](../../docs/fixture-guidelines.md).
 - `event-shapes.jsonl`: synthetic coverage for response items, tool events, generated browser context, automation messages, token usage, and unknown events.
 - `interaction-detail.jsonl`: synthetic coverage for reconstructing a selected user prompt with Codex response, tool activity, context messages, tokens, and timing.
 - `visual-comment-wrapper.jsonl`: synthetic coverage for extracting real visual review comments while ignoring generated image-caption wrapper text.
+- `visual-comment-image-evidence.jsonl`: synthetic coverage for extracting visual review comments when generated image-evidence text follows the request marker.

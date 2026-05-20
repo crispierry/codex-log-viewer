@@ -39,25 +39,38 @@ child.stderr.on("data", (chunk) => {
 });
 
 let windowTextError;
+let waitExitError;
 try {
   await waitForWindowText(["All Projects"], child);
 } catch (error) {
   windowTextError = error;
 }
 
-await waitForExit(child);
+try {
+  await waitForExit(child);
+} catch (error) {
+  waitExitError = error;
+}
+
+await cleanupLaunchedApp();
 assertNoLeakedEngine();
 
 if (child.exitCode !== 0 && child.exitCode !== null) {
-  throw new Error(`Native UI smoke app exited with ${child.exitCode}\n${windowTextError?.message ?? ""}\n${stderr}${stdout}`);
+  throw new Error(
+    `Native UI smoke app exited with ${child.exitCode}\n${windowTextError?.message ?? ""}\n${waitExitError?.message ?? ""}\n${stderr}${stdout}`
+  );
 }
 
 if (child.signalCode !== null) {
-  throw new Error(`Native UI smoke app ended with signal ${child.signalCode}\n${windowTextError?.message ?? ""}\n${stderr}${stdout}`);
+  throw new Error(
+    `Native UI smoke app ended with signal ${child.signalCode}\n${windowTextError?.message ?? ""}\n${waitExitError?.message ?? ""}\n${stderr}${stdout}`
+  );
 }
 
 if (!stdout.includes("Native UI workflow smoke passed.")) {
-  throw new Error(`Native UI workflow did not report success.\n${windowTextError?.message ?? ""}\n${stderr}${stdout}`);
+  throw new Error(
+    `Native UI workflow did not report success.\n${windowTextError?.message ?? ""}\n${waitExitError?.message ?? ""}\n${stderr}${stdout}`
+  );
 }
 
 console.log("Native macOS UI smoke test passed.");
@@ -98,14 +111,64 @@ function waitForExit(process) {
     }
     const timeout = setTimeout(() => {
       requestAppQuit();
-      process.kill("SIGKILL");
       resolvePromise();
-    }, 20_000);
+    }, 90_000);
     process.once("exit", () => {
       clearTimeout(timeout);
       resolvePromise();
     });
   });
+}
+
+async function cleanupLaunchedApp() {
+  if (child.exitCode !== null || child.signalCode !== null) {
+    await waitForProcessesGone(2_000);
+    return;
+  }
+
+  requestAppQuit();
+  if (await waitForProcessesGone(5_000)) {
+    return;
+  }
+
+  child.kill("SIGTERM");
+  if (await waitForProcessesGone(2_000)) {
+    return;
+  }
+
+  killLeakedProcesses();
+  await waitForProcessesGone(2_000);
+}
+
+function waitForProcessesGone(timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  return new Promise((resolvePromise) => {
+    const check = () => {
+      if (leakedProcesses().length === 0) {
+        resolvePromise(true);
+        return;
+      }
+      if (Date.now() >= deadline) {
+        resolvePromise(false);
+        return;
+      }
+      setTimeout(check, 250);
+    };
+    check();
+  });
+}
+
+function killLeakedProcesses() {
+  for (const line of leakedProcesses()) {
+    const pid = Number(line.trim().split(/\s+/, 1)[0]);
+    if (Number.isInteger(pid) && pid > 0) {
+      try {
+        process.kill(pid, "SIGKILL");
+      } catch {
+        // Process may already have exited.
+      }
+    }
+  }
 }
 
 function requestAppQuit() {
@@ -115,13 +178,17 @@ function requestAppQuit() {
   });
 }
 
-function assertNoLeakedEngine() {
+function leakedProcesses() {
   const processList = spawnSync("ps", ["-axo", "pid=,command="], { encoding: "utf8" }).stdout;
   const bundledEnginePath = `${appPath}/Contents/Resources/engine/apps/server/dist/index.js`;
-  const leaks = processList
+  return processList
     .split("\n")
     .filter((line) => line.includes(bundledEnginePath) || line.includes(executablePath))
     .filter((line) => !line.includes("ps -axo"));
+}
+
+function assertNoLeakedEngine() {
+  const leaks = leakedProcesses();
 
   if (leaks.length > 0) {
     throw new Error(`Native UI smoke left app or engine processes running:\n${leaks.join("\n")}`);

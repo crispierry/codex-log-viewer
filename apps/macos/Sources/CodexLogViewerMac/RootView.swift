@@ -231,7 +231,12 @@ struct SidebarView: View {
   @EnvironmentObject private var model: AppModel
 
   var body: some View {
-    List(selection: $model.selectedProject) {
+    List(
+      selection: Binding(
+        get: { model.selectedProject },
+        set: { model.selectProject($0) }
+      )
+    ) {
       Section("Library") {
         ProjectListRow(
           title: AppConstants.allProjectsName,
@@ -263,9 +268,6 @@ struct SidebarView: View {
     .listStyle(.sidebar)
     .navigationTitle("Codex Logs")
     .accessibilityIdentifier("project-sidebar")
-    .onChange(of: model.selectedProject) { _, newValue in
-      model.selectProject(newValue)
-    }
   }
 
   private func countLabel(_ count: Int, singular: String, plural: String) -> String {
@@ -597,22 +599,33 @@ struct SentMessagesBrowserColumn: View {
       )
       .frame(maxWidth: .infinity, maxHeight: .infinity)
     } else {
-      List(sessionUserMessages, id: \.offset) { item in
-        Button {
-          model.selectedUserMessageIndex = item.offset
-        } label: {
-          SentMessageBrowserRow(
-            message: item.element,
-            isSelected: model.selectedUserMessageIndex == item.offset
-          )
+      ScrollViewReader { proxy in
+        List(sessionUserMessages, id: \.offset) { item in
+          Button {
+            model.selectedUserMessageIndex = item.offset
+          } label: {
+            SentMessageBrowserRow(
+              message: item.element,
+              isSelected: model.selectedUserMessageIndex == item.offset
+            )
+          }
+          .id(item.offset)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .contentShape(Rectangle())
+          .buttonStyle(.plain)
+          .listRowInsets(EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8))
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .contentShape(Rectangle())
-        .buttonStyle(.plain)
-        .listRowInsets(EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8))
+        .listStyle(.plain)
+        .accessibilityIdentifier("browse-messages-list")
+        .onChange(of: model.selectedUserMessageIndex) { _, newValue in
+          guard let newValue else { return }
+          proxy.scrollTo(newValue, anchor: .center)
+        }
+        .onAppear {
+          guard let selectedUserMessageIndex = model.selectedUserMessageIndex else { return }
+          proxy.scrollTo(selectedUserMessageIndex, anchor: .center)
+        }
       }
-      .listStyle(.plain)
-      .accessibilityIdentifier("browse-messages-list")
     }
   }
 
@@ -628,28 +641,43 @@ struct SentMessagesBrowserColumn: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     } else if browseMessages.isEmpty {
       ContentUnavailableView(
-        "No Sent Messages",
+        model.areBrowseMessagesHiddenByOperationalFilters ? "No Visible Messages" : "No Sent Messages",
         systemImage: "paperplane",
-        description: Text("No submitted messages match the selected project and date filters.")
+        description: Text(
+          model.areBrowseMessagesHiddenByOperationalFilters
+            ? "Turn on at least one operational message family in the View menu."
+            : "No submitted messages match the selected project and date filters."
+        )
       )
       .frame(maxWidth: .infinity, maxHeight: .infinity)
     } else {
-      List(browseMessages) { message in
-        Button {
-          model.selectBrowseMessage(message.id)
-        } label: {
-          SentMessageResultBrowserRow(
-            message: message,
-            isSelected: model.selectedBrowseMessageID == message.id
-          )
+      ScrollViewReader { proxy in
+        List(browseMessages) { message in
+          Button {
+            model.selectBrowseMessage(message.id)
+          } label: {
+            SentMessageResultBrowserRow(
+              message: message,
+              isSelected: model.selectedBrowseMessageID == message.id
+            )
+          }
+          .id(message.id)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .contentShape(Rectangle())
+          .buttonStyle(.plain)
+          .listRowInsets(EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8))
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .contentShape(Rectangle())
-        .buttonStyle(.plain)
-        .listRowInsets(EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8))
+        .listStyle(.plain)
+        .accessibilityIdentifier("browse-messages-list")
+        .onChange(of: model.selectedBrowseMessageID) { _, newValue in
+          guard let newValue else { return }
+          proxy.scrollTo(newValue, anchor: .center)
+        }
+        .onAppear {
+          guard let selectedBrowseMessageID = model.selectedBrowseMessageID else { return }
+          proxy.scrollTo(selectedBrowseMessageID, anchor: .center)
+        }
       }
-      .listStyle(.plain)
-      .accessibilityIdentifier("browse-messages-list")
     }
   }
 
@@ -965,12 +993,15 @@ struct AuditControlBar: View {
       HStack(spacing: 10) {
         Image(systemName: "folder")
           .foregroundStyle(.secondary)
-        TextField("Repository path", text: $model.auditRepoPathDraft)
+        TextField(
+          "Repository path",
+          text: Binding(
+            get: { model.auditRepoPathDraft },
+            set: { model.setAuditRepoPathDraft($0) }
+          )
+        )
           .textFieldStyle(.roundedBorder)
           .accessibilityIdentifier("audit-repo-path-field")
-          .onChange(of: model.auditRepoPathDraft) { _, _ in
-            model.auditRepoPathChanged()
-          }
         Button {
           model.chooseAuditRepoPath()
         } label: {
@@ -2489,16 +2520,19 @@ struct SessionUserMessagesInspector: View {
   }
 
   private var userMessages: [(offset: Int, element: MessageDetail)] {
-    model.visibleUserMessageOffsets(in: detail)
+    model.visibleUserMessageOffsets(in: detail, dateKey: model.selectedSessionDateKey)
   }
 
   private var allUserMessages: [(offset: Int, element: MessageDetail)] {
-    SessionInteractionBuilder.userMessageOffsets(in: detail)
+    SessionInteractionBuilder.userMessageOffsets(in: detail, dateKey: model.selectedSessionDateKey)
   }
 
   private var automationMessages: [(offset: Int, element: MessageDetail)] {
     Array(detail.messages.enumerated())
-      .filter { $0.element.sourceEvent == "event_msg.automation_message" }
+      .filter {
+        $0.element.sourceEvent == "event_msg.automation_message" &&
+          (model.selectedSessionDateKey == nil || codexLocalDateKey($0.element.timestamp) == model.selectedSessionDateKey)
+      }
   }
 
   private var selectedInteraction: SessionInteraction? {
