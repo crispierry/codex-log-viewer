@@ -7,13 +7,18 @@ struct CodexLogViewerApp: App {
   @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
   @Environment(\.openWindow) private var openWindow
   @FocusedValue(\.appModel) private var focusedModel
+  private var commandModel: AppModel? {
+    focusedModel ?? appDelegate.commandModel
+  }
 
   var body: some Scene {
     WindowGroup("Codex Log Viewer", id: AppWindowID.main) {
       if AppRuntime.isSmokeMode {
         EmptyView()
       } else {
-        AppWindowRootView()
+        AppWindowRootView(onModelReady: { model in
+          appDelegate.setCommandModel(model)
+        })
           .onAppear {
             appDelegate.setMainWindowOpener {
               openWindow(id: AppWindowID.main)
@@ -40,7 +45,7 @@ struct CodexLogViewerApp: App {
       }
 
       CommandGroup(after: .sidebar) {
-        if let model = focusedModel {
+        if let model = commandModel {
           Toggle(
             "Show Sessions",
             isOn: Binding(
@@ -83,7 +88,7 @@ struct CodexLogViewerApp: App {
       }
 
       CommandMenu("Logs") {
-        if let model = focusedModel {
+        if let model = commandModel {
           Button("Status: \(model.status.label)") {}
             .disabled(true)
             .accessibilityIdentifier("status-menu-item")
@@ -178,12 +183,16 @@ struct CodexLogViewerApp: App {
 
 private struct AppWindowRootView: View {
   @StateObject private var model = AppModel()
+  var onModelReady: (AppModel) -> Void = { _ in }
 
   var body: some View {
     RootView()
       .environmentObject(model)
       .focusedSceneValue(\.appModel, model)
       .focusedValue(\.appModel, model)
+      .onAppear {
+        onModelReady(model)
+      }
       .task {
         model.startIfNeeded()
       }
@@ -202,13 +211,21 @@ private extension FocusedValues {
   }
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
+  @Published private(set) var commandModel: AppModel?
   private var tabBarObservers: [NSObjectProtocol] = []
   private var openMainWindow: (() -> Void)?
   private var fallbackViewerWindow: NSWindow?
 
   func setMainWindowOpener(_ opener: @escaping () -> Void) {
     openMainWindow = opener
+  }
+
+  func setCommandModel(_ model: AppModel) {
+    guard commandModel !== model else {
+      return
+    }
+    commandModel = model
   }
 
   func ensureViewerWindowVisible(activate: Bool) {
@@ -418,7 +435,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     window.title = "Codex Logs"
     window.minSize = NSSize(width: 760, height: 560)
     window.tabbingMode = .preferred
-    window.contentView = NSHostingView(rootView: AppWindowRootView())
+    window.contentView = NSHostingView(rootView: AppWindowRootView(onModelReady: { [weak self] model in
+      self?.setCommandModel(model)
+    }))
     window.center()
     window.makeKeyAndOrderFront(nil)
     if activate {

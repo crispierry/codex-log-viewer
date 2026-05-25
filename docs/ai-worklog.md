@@ -2,6 +2,151 @@
 
 Sanitized audit trail of AI-assisted work on this project.
 
+## 2026-05-25 - Restore Operational Messages Menu Toggles
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> I'm using the app. I'm going to the View menu, Operational Messages. I'm not able to check and uncheck the different operational messages
+>
+> Pretty sure this was working before. I don't know what's wrong now
+
+### Interpreted Intent
+
+The user reported that the native macOS View menu's Operational Messages checkboxes no longer toggled correctly and wanted the regression fixed in the running app.
+
+### Response / Work Done
+
+- Reproduced that the running packaged app could be in the fallback `Codex Logs` window path where focus-based command menu lookup did not provide a live `AppModel`.
+- Updated the app delegate to keep a command-menu model fallback supplied by both normal SwiftUI windows and the fallback native window.
+- Changed the View and Logs command menus to use the focused model when available, or the app delegate's command model otherwise.
+- Rebuilt and repackaged the native macOS app, relaunching the packaged app for immediate review.
+- Verified the View menu contains `Operational Messages` and that toggling `Testing/verification` writes and then restores the expected hidden-category preference.
+
+### Privacy Notes
+
+No raw Codex logs, private prompts, session content, screenshots, recordings, export payloads, credentials, or secrets were added.
+
+### Verification
+
+- Ran `wt bootstrap`.
+- Ran `swift build --package-path apps/macos`.
+- Ran `npm run package:mac`.
+- Relaunched `dist/macos/Codex Log Viewer.app`.
+- Verified the menu item list through macOS accessibility automation.
+- Verified a toggle round trip for `Testing/verification` and restored it to visible.
+- Ran `npm run check:mac-accessibility`.
+- Ran `git diff --check`.
+
+## 2026-05-20 - Reset App Source To Default Logs
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> Well I ran the app you created but it failed to load my logs. Why is it?
+
+### Interpreted Intent
+
+The user wanted to understand why the packaged macOS app did not show their real Codex logs after the external distribution build.
+
+### Response / Work Done
+
+- Checked whether the packaged app or local engine was still running.
+- Confirmed the default Codex log roots exist locally.
+- Parsed the default local log roots through the parser and app cache path, using aggregate counts only.
+- Found the app's saved `sourcePaths` preference was still pointing at the sanitized repository fixture from QA instead of the default Codex log roots.
+- Cleared the saved custom source and recent source preferences so the app returns to default Codex log discovery.
+- Relaunched the packaged app for immediate review.
+
+### Privacy Notes
+
+No raw Codex logs, private prompt content, session files, screenshots, recordings, export payloads, credentials, or secrets were added. Diagnostics used aggregate counts and sanitized preference paths only.
+
+### Verification
+
+- Confirmed default local roots parse successfully with the app cache path.
+- Confirmed the saved custom source preference was removed.
+- Relaunched the packaged app after resetting the preference.
+
+## 2026-05-20 - External Distribution Build Attempt
+
+Status: Completed with signing follow-up
+Related commit/PR: TBD
+
+### User Messages
+
+> let's build the app for external distribution
+
+### Interpreted Intent
+
+The user wanted a macOS distributable build suitable for sharing outside the local development machine.
+
+### Response / Work Done
+
+- Bootstrapped the worktree dependencies before release verification.
+- Ran the release verification path for privacy, tests, build/lint, accessibility identifiers, dependency audit, benchmark, fixture reference parity, package smoke, and native UI smoke.
+- Built `Codex Log Viewer.app` and the `Codex-Log-Viewer-v0.1-build99-macOS.zip` distribution artifact with checksum.
+- Confirmed the app bundle verifies on disk and the zip checksum is valid.
+- Confirmed the current artifact is ad-hoc signed and rejected by Gatekeeper, so it is a tested distribution candidate but not yet a notarized external public download.
+- Confirmed the machine currently exposes an Apple Development signing identity but not a Developer ID Application identity for this app's direct-download macOS release path.
+
+### Privacy Notes
+
+No Apple credentials, notary passwords, certificates, private keys, raw Codex logs, private session content, screenshots, recordings, or export payloads were added. Signing checks only inspected local signing availability and artifact status.
+
+### Verification
+
+- Ran `wt bootstrap`.
+- Ran `npm run privacy:scan`.
+- Ran `npm test`.
+- Ran `npm run lint`.
+- Ran `npm run check:mac-accessibility`.
+- Ran `npm audit --audit-level=moderate`.
+- Ran `npm run benchmark:search`.
+- Ran `npm run check:reference -- --reference fixtures/codex/sample-reference-summary.json --path fixtures/codex/sample-session.jsonl --project sample-app`.
+- Ran `npm run release:mac`; the package was created, then the first package smoke pass reported an already-running packaged app/local engine process.
+- Cleaned up the leftover packaged app/local engine process and reran `npm run smoke:mac-package`.
+- Ran `npm run smoke:mac-ui`.
+- Ran checksum verification for `Codex-Log-Viewer-v0.1-build99-macOS.zip`.
+- Ran code signature and Gatekeeper assessment checks on the packaged app.
+- Ran `npm run release:notes -- --tag v0.1.0 --output dist/macos/release-notes.md`.
+
+## 2026-05-20 - Local Run And Signing Guidance
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> What do I need to do now to run this app locally on my machine?
+>
+> Do you need my Apple store credentials? What do you need?
+>
+> I believe my Apple information is already available in the Connect K game
+
+### Interpreted Intent
+
+The user wanted a clear explanation of how to run the native macOS app locally and whether Apple developer or App Store credentials are needed at this stage.
+
+### Response / Work Done
+
+- Reviewed the README, package scripts, macOS package definition, local engine startup code, and release checklist.
+- Confirmed the local machine has compatible Node, npm, and Swift tooling installed.
+- Confirmed a packaged `.app` already exists under `dist/macos`.
+- Explained that local development and local packaged runs do not require Apple credentials; Apple developer credentials are only needed for notarized public release artifacts.
+
+### Privacy Notes
+
+No Apple credentials, secrets, raw Codex logs, private session content, screenshots, recordings, or export payloads were requested or added.
+
+### Verification
+
+- Documentation-only guidance; no app rebuild or relaunch was needed.
+
 ## 2026-05-20 - Execute Manual QA Fix Plan
 
 Status: Completed
