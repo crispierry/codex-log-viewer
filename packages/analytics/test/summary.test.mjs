@@ -272,8 +272,8 @@ test("summarizeParsedCorpus groups command-style prompt families", () => {
 
   const summary = summarizeParsedCorpus(corpus, { project: "sample-app" });
   assert.equal(summary.totals.userMessages, 23);
-  assert.equal(summary.totals.uniqueUserMessages, 5);
-  assert.equal(summary.messagesByDay[0]?.uniqueCount, 5);
+  assert.equal(summary.totals.uniqueUserMessages, 4);
+  assert.equal(summary.messagesByDay[0]?.uniqueCount, 4);
 
   const gitGroup = summary.repeatedUserMessages.find((group) => group.sample === "Git commands");
   assert.equal(gitGroup?.count, 10);
@@ -293,23 +293,19 @@ test("summarizeParsedCorpus groups command-style prompt families", () => {
     ]
   );
 
-  const deployGroup = summary.repeatedUserMessages.find((group) => group.sample === "Deploy/release");
-  assert.equal(deployGroup?.count, 3);
+  const deployGroup = summary.repeatedUserMessages.find((group) => group.sample === "Deploy/release/run/build");
+  assert.equal(deployGroup?.count, 8);
   assert.deepEqual(
     deployGroup?.variants.map((variant) => variant.sample),
-    ["publish to origin", "Deploy to production", "publish"]
-  );
-
-  const runAppGroup = summary.repeatedUserMessages.find((group) => group.sample === "Run/build app");
-  assert.equal(runAppGroup?.count, 5);
-  assert.deepEqual(
-    runAppGroup?.variants.map((variant) => variant.sample),
     [
       "relaunch the packaged app",
       "build the app",
       "OK open the app for me",
       "start the server",
-      "run the app"
+      "run the app",
+      "publish to origin",
+      "Deploy to production",
+      "publish"
     ]
   );
 
@@ -330,20 +326,20 @@ test("summarizeParsedCorpus groups command-style prompt families", () => {
   const search = searchMessages(corpus, { query: "", role: "user", submittedOnly: true });
   assert.equal(search.results.find((result) => result.content === "do a code review")?.category, "Code review/QA");
   assert.equal(search.results.find((result) => result.content === "do a code review")?.promptIntent, "Code review/QA");
-  assert.equal(search.results.find((result) => result.content === "publish")?.category, "Deploy/release");
-  assert.equal(search.results.find((result) => result.content === "publish")?.promptIntent, "Deploy/release");
-  assert.equal(search.results.find((result) => result.content === "build the app")?.category, "Run/build app");
+  assert.equal(search.results.find((result) => result.content === "publish")?.category, "Deploy/release/run/build");
+  assert.equal(search.results.find((result) => result.content === "publish")?.promptIntent, "Deploy/release/run/build");
+  assert.equal(search.results.find((result) => result.content === "build the app")?.category, "Deploy/release/run/build");
   assert.equal(search.results.find((result) => result.content === "run the accessibility check")?.category, "Testing/verification");
 
   const filteredSearch = searchMessages(corpus, {
     query: "",
     role: "user",
     submittedOnly: true,
-    hiddenCategories: ["Code review/QA", "Run/build app"]
+    hiddenCategories: ["Code review/QA", "Deploy/release/run/build"]
   });
-  assert.equal(filteredSearch.totalMatches, 15);
+  assert.equal(filteredSearch.totalMatches, 12);
   assert.equal(filteredSearch.results.some((result) => result.category === "Code review/QA"), false);
-  assert.equal(filteredSearch.results.some((result) => result.category === "Run/build app"), false);
+  assert.equal(filteredSearch.results.some((result) => result.category === "Deploy/release/run/build"), false);
 
   const allOperationalFilteredSearch = searchMessages(corpus, {
     query: "",
@@ -351,10 +347,9 @@ test("summarizeParsedCorpus groups command-style prompt families", () => {
     submittedOnly: true,
     hiddenCategories: [
       "Code review/QA",
-      "Deploy/release",
+      "Deploy/release/run/build",
       "Git commands",
       "Plan approvals",
-      "Run/build app",
       "Testing/verification"
     ]
   });
@@ -514,8 +509,7 @@ test("summarizeParsedCorpus classifies project focus prompt intents accurately",
   assert.equal(buckets.get("Feature design")?.count, 1);
   assert.equal(buckets.get("Bug fixes")?.count, 1);
   assert.equal(buckets.get("Git commands")?.count, 1);
-  assert.equal(buckets.get("Deploy/release")?.count, 1);
-  assert.equal(buckets.get("Run/build app")?.count, 1);
+  assert.equal(buckets.get("Deploy/release/run/build")?.count, 2);
   assert.equal(buckets.get("Code review/QA")?.count, 1);
   assert.equal(buckets.get("Research")?.count, 1);
   assert.equal(buckets.get("Documentation")?.count, 1);
@@ -527,13 +521,13 @@ test("summarizeParsedCorpus classifies project focus prompt intents accurately",
   assert.equal(buckets.get("Planning/strategy")?.count, 1);
   assert.equal(buckets.get("Content creation")?.count, 1);
   assert.equal(buckets.get("Data/metrics")?.count, 1);
-  assert.equal(buckets.get("Deploy/release")?.examples[0], "Deploy to production");
-  assert.equal(buckets.get("Deploy/release")?.percentage, 6.3);
+  assert.equal(buckets.get("Deploy/release/run/build")?.examples[0], "Deploy to production");
+  assert.equal(buckets.get("Deploy/release/run/build")?.percentage, 12.5);
 
   const unfilteredSummary = summarizeParsedCorpus(corpus, { project: "sample-app" });
   const unfilteredBuckets = new Map(unfilteredSummary.promptIntents.buckets.map((bucket) => [bucket.label, bucket]));
   assert.equal(unfilteredSummary.promptIntents.totalMessages, 17);
-  assert.equal(unfilteredBuckets.get("Deploy/release")?.count, 2);
+  assert.equal(unfilteredBuckets.get("Deploy/release/run/build")?.count, 3);
 });
 
 test("summarizeParsedCorpus counts automation prompts separately from sent user messages", () => {

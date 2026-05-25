@@ -1075,6 +1075,35 @@ final class AppModel: ObservableObject {
     return !hiddenOperationalMessageCategories.contains(category)
   }
 
+  func visiblePromptIntentSummary(_ summary: PromptIntentSummary) -> PromptIntentSummary {
+    let visibleBuckets = summary.buckets
+      .filter { !hiddenOperationalMessageCategories.contains($0.label) }
+    let totalMessages = visibleBuckets.reduce(0) { $0 + $1.count }
+    let unclassifiedMessages = visibleBuckets
+      .filter { $0.key == "other" }
+      .reduce(0) { $0 + $1.count }
+    let buckets = visibleBuckets.map { bucket in
+      PromptIntentBucket(
+        key: bucket.key,
+        label: bucket.label,
+        count: bucket.count,
+        percentage: totalMessages > 0 ? Double((Double(bucket.count) / Double(totalMessages) * 1000).rounded()) / 10 : 0,
+        sessionCount: bucket.sessionCount,
+        projects: bucket.projects,
+        examples: bucket.examples,
+        firstSeen: bucket.firstSeen,
+        lastSeen: bucket.lastSeen
+      )
+    }
+
+    return PromptIntentSummary(
+      totalMessages: totalMessages,
+      classifiedMessages: totalMessages - unclassifiedMessages,
+      unclassifiedMessages: unclassifiedMessages,
+      buckets: buckets
+    )
+  }
+
   private func reconcileOperationalMessageFilters() {
     if let browseMessagesSummary,
       let selectedBrowseMessageID,
@@ -1395,6 +1424,9 @@ final class AppModel: ObservableObject {
       settingsVersion: savedOperationalCategoryVersion
     )
     showSessionBrowser = UserDefaults.standard.bool(forKey: DefaultsKeys.showSessionBrowser)
+    if savedOperationalCategoryVersion < Self.operationalMessageCategoriesVersion {
+      saveSettings()
+    }
   }
 
   private func saveSettings() {
@@ -1549,6 +1581,15 @@ final class AppModel: ObservableObject {
     }
     summary = projectSummary
     selectedSection = .overview
+    let previousOverviewHiddenCategories = hiddenOperationalMessageCategories
+    hiddenOperationalMessageCategories = ["Testing/verification"]
+    let filteredProjectFocus = visiblePromptIntentSummary(projectSummary.promptIntents)
+    guard filteredProjectFocus.totalMessages == 0,
+      filteredProjectFocus.buckets.isEmpty
+    else {
+      throw AppSmokeError.unexpected("The overview Project Focus summary did not honor hidden operational categories.")
+    }
+    hiddenOperationalMessageCategories = previousOverviewHiddenCategories
 
     messageQuery = "parser test"
     messageRoleFilter = .all
@@ -1924,10 +1965,9 @@ final class AppModel: ObservableObject {
 
   private static let operationalPromptCategoryOrder = [
     "Code review/QA",
-    "Deploy/release",
+    "Deploy/release/run/build",
     "Git commands",
     "Plan approvals",
-    "Run/build app",
     "Testing/verification"
   ]
   private static let operationalPromptCategorySet = Set(operationalPromptCategoryOrder)
@@ -1937,7 +1977,7 @@ final class AppModel: ObservableObject {
     "Plan approvals",
     "Run app"
   ]
-  private static let operationalMessageCategoriesVersion = 2
+  private static let operationalMessageCategoriesVersion = 3
 
   private static func migratedOperationalCategories(
     _ categories: Set<String>,
@@ -1963,14 +2003,20 @@ final class AppModel: ObservableObject {
     }
 
     var migrated = categories
+    if migrated.remove("Deploy/release") != nil {
+      migrated.insert("Deploy/release/run/build")
+    }
     if migrated.remove("Code review") != nil {
       migrated.insert("Code review/QA")
     }
     if migrated.remove("Run app") != nil {
-      migrated.insert("Run/build app")
+      migrated.insert("Deploy/release/run/build")
+    }
+    if migrated.remove("Run/build app") != nil {
+      migrated.insert("Deploy/release/run/build")
     }
     if categories.contains("Git commands") {
-      migrated.insert("Deploy/release")
+      migrated.insert("Deploy/release/run/build")
     }
     if legacyOperationalPromptCategorySet.isSubset(of: categories) {
       migrated.formUnion(operationalPromptCategorySet)
@@ -2014,7 +2060,7 @@ final class AppModel: ObservableObject {
     Project Focus shows the main types of work in the current project and date range.
 
     Filters
-    Use the date control in the header. In View > Operational Messages, All shows every message in the current scope; unchecking it hides approvals, Git, release, run/build, testing, and review prompts. Use View > Show Sessions only when you need the session column.
+    Use the date control in the header. In View > Operational Messages, open the checklist to show or hide approvals, Git, deploy/release/run/build, testing, and review prompts. Use View > Show Sessions only when you need the session column.
 
     Search and Audit
     Search finds messages across the current filters. Audit prepares a reviewed AI worklog for the selected repository.

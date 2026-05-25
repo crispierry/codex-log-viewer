@@ -915,7 +915,7 @@ struct OverviewSectionView: View {
 
         MetricsGrid(summary: model.summary)
         if let summary = model.summary, summary.totals.sessions > 0 {
-          ProjectFocusView(summary: summary.promptIntents)
+          ProjectFocusView(summary: model.visiblePromptIntentSummary(summary.promptIntents))
           ChartsSection(summary: summary)
         }
       }
@@ -1624,10 +1624,10 @@ private func projectFocusColor(for key: String) -> Color {
     return .red
   case "git-commands":
     return .purple
-  case "deploy-release":
+  case "deploy-release", "deploy-release-run-build":
     return .orange
   case "run-build-app":
-    return .green
+    return .orange
   case "code-review-qa":
     return .blue
   case "planning-strategy":

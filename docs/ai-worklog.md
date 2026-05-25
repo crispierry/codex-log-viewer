@@ -2,6 +2,117 @@
 
 Sanitized audit trail of AI-assisted work on this project.
 
+## 2026-05-25 - Make Overview Honor Operational Filters
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> This also means that the overview tab should honor the Operational Messages that are disabled - in other words don't count them if they are not enabled
+
+### Interpreted Intent
+
+The user wanted the Overview tab's Project Focus chart and counts to exclude operational categories that are disabled in the Operational Messages checklist.
+
+### Response / Work Done
+
+- Added a native filtered Project Focus summary that removes hidden operational categories before rendering Overview.
+- Recalculated visible Project Focus totals, classified counts, unclassified counts, and bucket percentages after filtering.
+- Updated Overview to pass the filtered Project Focus summary into the chart and category list.
+- Extended the native UI smoke workflow so hiding `Testing/verification` must also remove it from Overview Project Focus counts.
+- Rebuilt, repackaged, and relaunched the native macOS app.
+
+### Privacy Notes
+
+No raw Codex logs, private prompts, session content, screenshots, recordings, export payloads, credentials, or secrets were added.
+
+### Verification
+
+- Ran `swift build --package-path apps/macos`.
+- Ran `npm run check:mac-accessibility`.
+- Ran `git diff --check`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-ui`.
+- Relaunched `dist/macos/Codex Log Viewer.app`.
+
+## 2026-05-25 - Combine Deploy Release And Run Build Categories
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> Deploy and release, plus run or build app, are the same category. Please group them accordingly
+
+### Interpreted Intent
+
+The user wanted deploy/release prompts and app run/build prompts to be treated as one operational Project Focus category and one visibility filter.
+
+### Response / Work Done
+
+- Changed the deterministic prompt-intent categories so deploy/release and run/build app prompts share the same key and label: `Deploy/release/run/build`.
+- Updated repeated-prompt grouping, search result category labels, and Project Focus buckets through the shared analytics classifier.
+- Updated macOS operational filter ordering to show one combined checkbox instead of separate deploy/release and run/build checkboxes.
+- Added settings migration so older saved `Deploy/release` and `Run/build app` hidden filters are persisted as the new combined category.
+- Updated the Project Focus color mapping and usage documentation for the combined category.
+- Rebuilt and repackaged the native app, then relaunched the packaged app for review.
+
+### Privacy Notes
+
+No raw Codex logs, private prompts, session content, screenshots, recordings, export payloads, credentials, or secrets were added.
+
+### Verification
+
+- Ran `npm run test -w @codex-log-viewer/analytics`.
+- Ran `swift build --package-path apps/macos`.
+- Ran `npm test`.
+- Ran `npm run check:reference -- --reference fixtures/codex/sample-reference-summary.json --path fixtures/codex/sample-session.jsonl --project sample-app`.
+- Ran `npm run package:mac`.
+- Relaunched `dist/macos/Codex Log Viewer.app`.
+- Verified settings migrated to `Deploy/release/run/build` plus `Git commands`.
+- Verified `View > Operational Messages...` opens the checklist window.
+- Ran `npm run check:mac-accessibility`.
+- Ran `git diff --check`.
+
+## 2026-05-25 - Add Persistent Operational Messages Checklist
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> I want to make one more change. I want to be able to check and uncheck those menu items without closing the whole menu. It's really unintuitive right now and time-consuming. I want to open the menu and be able to check and uncheck what's going to be visible
+
+### Interpreted Intent
+
+The user wanted the operational-message visibility controls to support multiple checkbox changes in one interaction instead of closing the macOS View menu after every category toggle.
+
+### Response / Work Done
+
+- Replaced the multi-click `View > Operational Messages` submenu with `View > Operational Messages...`, which opens a persistent checklist window.
+- Added a SwiftUI `Operational Messages` window with an `All` checkbox, individual operational category checkboxes, and a Done button.
+- Kept the checklist wired to the live `AppModel` so each checkbox immediately updates Browse/Search visibility filters and saved preferences.
+- Updated help copy to describe the new checklist workflow.
+- Rebuilt and repackaged the native app, then relaunched the packaged app for review.
+- Verified the checklist window opens from the View menu and remains open after toggling a category.
+- Restored the user's previous hidden category state after verification.
+
+### Privacy Notes
+
+No raw Codex logs, private prompts, session content, screenshots, recordings, export payloads, credentials, or secrets were added.
+
+### Verification
+
+- Ran `wt bootstrap`.
+- Ran `swift build --package-path apps/macos`.
+- Ran `npm run package:mac`.
+- Relaunched `dist/macos/Codex Log Viewer.app`.
+- Verified `View > Operational Messages...` opens a persistent checklist window.
+- Verified a `Testing/verification` checkbox toggle round trip and restored the prior hidden categories.
+- Ran `npm run check:mac-accessibility`.
+- Ran `git diff --check`.
+
 ## 2026-05-25 - Restore Operational Messages Menu Toggles
 
 Status: Completed

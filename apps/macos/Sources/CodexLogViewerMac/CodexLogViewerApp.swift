@@ -57,33 +57,22 @@ struct CodexLogViewerApp: App {
 
           Divider()
 
-          Menu("Operational Messages") {
-            Toggle(
-              "All",
-              isOn: Binding(
-                get: { model.areAllOperationalMessageCategoriesVisible },
-                set: { model.setAllOperationalMessageCategoriesVisible($0) }
-              )
-            )
-            .accessibilityIdentifier("view-operational-all-filter")
-
-            Divider()
-
-            ForEach(model.operationalMessageCategoryOptions, id: \.self) { category in
-              Toggle(
-                category,
-                isOn: Binding(
-                  get: { model.isOperationalPromptCategoryVisible(category) },
-                  set: { model.setOperationalMessageCategory(category, isVisible: $0) }
-                )
-              )
-              .accessibilityIdentifier("view-operational-message-filter")
+          Button("Operational Messages...") {
+            if let model = commandModel {
+              appDelegate.setCommandModel(model)
             }
+            openWindow(id: AppWindowID.operationalMessages)
+            NSApp.activate(ignoringOtherApps: true)
           }
+          .accessibilityIdentifier("view-operational-messages-panel-menu-item")
         } else {
           Button("Show Sessions") {}
             .disabled(true)
             .accessibilityIdentifier("view-show-sessions-menu-item")
+
+          Button("Operational Messages...") {}
+            .disabled(true)
+            .accessibilityIdentifier("view-operational-messages-panel-menu-item")
         }
       }
 
@@ -178,6 +167,11 @@ struct CodexLogViewerApp: App {
         .accessibilityIdentifier("usage-guide-menu-item")
       }
     }
+
+    Window("Operational Messages", id: AppWindowID.operationalMessages) {
+      OperationalMessagesWindowRootView(appDelegate: appDelegate)
+    }
+    .windowResizability(.contentSize)
   }
 }
 
@@ -197,6 +191,72 @@ private struct AppWindowRootView: View {
         model.startIfNeeded()
       }
       .frame(minWidth: 760, minHeight: 560)
+  }
+}
+
+private struct OperationalMessagesWindowRootView: View {
+  @ObservedObject var appDelegate: AppDelegate
+  @Environment(\.dismiss) private var dismiss
+
+  var body: some View {
+    if let model = appDelegate.commandModel {
+      OperationalMessagesPanelView(model: model) {
+        dismiss()
+      }
+    } else {
+      Text("Open Codex Log Viewer first.")
+        .padding(18)
+        .frame(width: 300)
+    }
+  }
+}
+
+private struct OperationalMessagesPanelView: View {
+  @ObservedObject var model: AppModel
+  let close: () -> Void
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 14) {
+      Text("Operational Messages")
+        .font(.headline)
+
+      Toggle(
+        "All",
+        isOn: Binding(
+          get: { model.areAllOperationalMessageCategoriesVisible },
+          set: { model.setAllOperationalMessageCategoriesVisible($0) }
+        )
+      )
+      .toggleStyle(.checkbox)
+      .accessibilityIdentifier("view-operational-all-filter")
+
+      Divider()
+
+      VStack(alignment: .leading, spacing: 9) {
+        ForEach(model.operationalMessageCategoryOptions, id: \.self) { category in
+          Toggle(
+            category,
+            isOn: Binding(
+              get: { model.isOperationalPromptCategoryVisible(category) },
+              set: { model.setOperationalMessageCategory(category, isVisible: $0) }
+            )
+          )
+          .toggleStyle(.checkbox)
+          .accessibilityIdentifier("view-operational-message-filter")
+        }
+      }
+
+      HStack {
+        Spacer()
+        Button("Done") {
+          close()
+        }
+        .keyboardShortcut(.defaultAction)
+        .accessibilityIdentifier("view-operational-messages-done-button")
+      }
+    }
+    .padding(18)
+    .frame(width: 300)
   }
 }
 
@@ -454,6 +514,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
 enum AppWindowID {
   static let main = "main"
+  static let operationalMessages = "operational-messages"
 }
 
 enum AppRuntime {
