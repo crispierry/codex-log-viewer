@@ -135,7 +135,7 @@ You can pass multiple `--path` values.
 
 - User-message counts come from `event_msg.user_message`.
 - Unique user messages are trimmed, whitespace-collapsed, and lowercased.
-- Project Focus classifies submitted user messages into deterministic local categories such as `Feature design`, `Implementation`, `Bug fixes`, `Git commands`, `Deploy/release/run/build`, `Code review/QA`, `Planning/strategy`, `Research`, `Testing/verification`, `Content creation`, `Data/metrics`, `Documentation`, and `Feedback/context`.
+- Project Focus classifies submitted user messages into deterministic local categories such as `Feature design`, `Implementation`, `Bug fixes`, `Git commands`, `Deploy/release/run/build`, `Code review/QA`, `Planning/strategy`, `Research`, `Testing/verification`, `Content creation`, `Data/metrics`, `Documentation`, and `Context/observation`.
 - Project Focus percentages are based on the current project and date filters, with representative examples shown only inside the local app or non-redacted exports.
 - Repeated prompts are still grouped from normalized user messages in the analytics API and shown only for groups with more than one submission.
 - Short approvals such as `yes`, `go ahead`, `execute`, `do that`, or `sounds good` are grouped as `Plan approvals`.

@@ -2,6 +2,42 @@
 
 Sanitized audit trail of AI-assisted work on this project.
 
+## 2026-05-25 - Rename Feedback Context Label
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> What about feedback and context? Doesn't that count as content creation or feature design?
+>
+> I'm quite sure how to interpret the feedback and context category
+
+> Alright update the label
+
+### Interpreted Intent
+
+The user wanted the ambiguous `Feedback/context` Project Focus label renamed to better reflect that it captures contextual observations rather than content creation or feature design work.
+
+### Response / Work Done
+
+- Renamed the displayed Project Focus label from `Feedback/context` to `Context/observation`.
+- Kept the stable analytics key `feedback-context` unchanged so existing color mapping and data compatibility remain intact.
+- Updated the analytics test expectation and usage documentation.
+- Rebuilt, repackaged, and relaunched the native macOS app.
+
+### Privacy Notes
+
+No raw Codex logs, private prompts, session content, screenshots, recordings, export payloads, credentials, or secrets were added.
+
+### Verification
+
+- Ran `npm run test -w @codex-log-viewer/analytics`.
+- Ran `swift build --package-path apps/macos`.
+- Ran `git diff --check`.
+- Ran `npm run package:mac`.
+- Relaunched `dist/macos/Codex Log Viewer.app`.
+
 ## 2026-05-25 - Make Overview Honor Operational Filters
 
 Status: Completed

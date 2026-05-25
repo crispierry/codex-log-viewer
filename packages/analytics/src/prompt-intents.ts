@@ -15,7 +15,7 @@ export const promptIntentCategories = {
   refactorCleanup: { key: "refactor-cleanup", label: "Refactor/cleanup" },
   contentCreation: { key: "content-creation", label: "Content creation" },
   dataAnalysis: { key: "data-analysis", label: "Data/metrics" },
-  feedbackContext: { key: "feedback-context", label: "Feedback/context" },
+  feedbackContext: { key: "feedback-context", label: "Context/observation" },
   planApprovals: { key: "plan-approvals", label: "Plan approvals" },
   other: { key: "other", label: "Other" }
 } as const satisfies Record<string, PromptIntentCategory>;

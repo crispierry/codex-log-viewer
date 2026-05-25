@@ -516,7 +516,7 @@ test("summarizeParsedCorpus classifies project focus prompt intents accurately",
   assert.equal(buckets.get("Testing/verification")?.count, 1);
   assert.equal(buckets.get("Refactor/cleanup")?.count, 1);
   assert.equal(buckets.get("Plan approvals")?.count, 1);
-  assert.equal(buckets.get("Feedback/context")?.count, 1);
+  assert.equal(buckets.get("Context/observation")?.count, 1);
   assert.equal(buckets.get("Implementation")?.count, 1);
   assert.equal(buckets.get("Planning/strategy")?.count, 1);
   assert.equal(buckets.get("Content creation")?.count, 1);
