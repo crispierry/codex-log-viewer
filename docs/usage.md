@@ -54,7 +54,7 @@ Browse lists prompts you typed and submitted for the selected project without re
 
 In Browse, the sidebar selects the project, the main Messages column lists submitted prompts for the current project and date filters, and the Codex Interaction column shows the selected message split into user message, Codex response, tool activity, system/developer context, and token/timing sections. User messages show their Project Focus category label anywhere they appear. Use `View > Show Sessions` when you want an extra session column before the message list.
 
-Use `View > Operational Messages` to hide or show all operational prompt families at once, or control families independently: `Code review/QA`, `Deploy/release`, `Git commands`, `Plan approvals`, `Run/build app`, and `Testing/verification`. The same operational filters apply in Browse, optional session-message lists, Search results, and repeated prompts.
+Use `View > Operational Messages...` to hide or show all operational prompt families at once, or control families independently: `Code review/QA`, `Deploy/release/run/build`, `Git commands`, `Plan approvals`, and `Testing/verification`. The same operational filters apply in Browse, optional session-message lists, Search results, and repeated prompts.
 
 When `All` is checked, no operational family is hidden, so the app shows all messages that match the current project, date, role, model, session, and search filters. Unchecking `All` hides only the operational families listed in that menu; non-operational Project Focus categories remain visible.
 
@@ -76,7 +76,7 @@ Keyboard shortcuts:
 
 The macOS app stores a private parsed-session cache in `~/Library/Application Support/Codex Log Viewer/Cache/v1` so it does not need to reprocess unchanged logs every time you navigate or relaunch the app.
 
-Refresh checks for added, changed, or deleted session files and updates only what changed. Use `Logs > Rebuild Local Cache` if the cache ever looks stale or you want to force a full local reparse.
+Startup, manual refresh, and full rebuilds show a loading notice while the app checks local logs. Refresh checks for added, changed, or deleted session files and updates only what changed. While the app is running, it also checks for new local log activity in the background about once a minute without opening a dialog or interrupting the current operation. Use `Logs > Rebuild Local Cache` if the cache ever looks stale or you want to force a full local reparse.
 
 ## Exports
 
@@ -135,16 +135,15 @@ You can pass multiple `--path` values.
 
 - User-message counts come from `event_msg.user_message`.
 - Unique user messages are trimmed, whitespace-collapsed, and lowercased.
-- Project Focus classifies submitted user messages into deterministic local categories such as `Feature design`, `Implementation`, `Bug fixes`, `Git commands`, `Deploy/release`, `Run/build app`, `Code review/QA`, `Planning/strategy`, `Research`, `Testing/verification`, `Content creation`, `Data/metrics`, `Documentation`, and `Feedback/context`.
+- Project Focus classifies submitted user messages into deterministic local categories such as `Feature design`, `Implementation`, `Bug fixes`, `Git commands`, `Deploy/release/run/build`, `Code review/QA`, `Planning/strategy`, `Research`, `Testing/verification`, `Content creation`, `Data/metrics`, `Documentation`, and `Context/observation`.
 - Project Focus percentages are based on the current project and date filters, with representative examples shown only inside the local app or non-redacted exports.
 - Repeated prompts are still grouped from normalized user messages in the analytics API and shown only for groups with more than one submission.
 - Short approvals such as `yes`, `go ahead`, `execute`, `do that`, or `sounds good` are grouped as `Plan approvals`.
 - Git workflow requests such as commit, push, branch, PR, worktree, or repo-cleanliness checks are grouped as `Git commands`.
-- Deploy, publish, release, notarization, and production-shipping requests are grouped as `Deploy/release`.
-- App launch, local server, build, package, rebuild, relaunch, and restart requests are grouped as `Run/build app`.
+- Deploy, publish, release, notarization, production-shipping, app launch, local server, build, package, rebuild, relaunch, and restart requests are grouped as `Deploy/release/run/build`.
 - Code review, diff review, implementation audit, and QA-finding prompts are grouped as `Code review/QA`.
 - Test, lint, typecheck, smoke test, accessibility, Playwright, screenshot check, and verification prompts are grouped as `Testing/verification`.
-- Browse, Search, and operational prompt groups can hide or show grouped prompt families from the `View > Operational Messages` menu.
+- Browse, Search, and operational prompt groups can hide or show grouped prompt families from `View > Operational Messages...`.
 - Token totals sum `token_count.info.last_token_usage` records.
 - `token_count` events with `info: null` are ignored for token totals.
 - Unknown event shapes are preserved and counted.

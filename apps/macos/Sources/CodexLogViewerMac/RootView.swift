@@ -11,6 +11,13 @@ struct RootView: View {
       ProjectWorkspaceView()
         .frame(minWidth: 540)
     }
+    .overlay {
+      if let notice = model.logLoadingNotice {
+        LogLoadingDialogView(notice: notice)
+          .transition(.opacity)
+      }
+    }
+    .animation(.easeInOut(duration: 0.16), value: model.logLoadingNotice)
     .toolbar {
       ToolbarItem(placement: .navigation) {
         Button {
@@ -20,6 +27,40 @@ struct RootView: View {
         }
         .accessibilityIdentifier("refresh-button")
       }
+    }
+  }
+}
+
+struct LogLoadingDialogView: View {
+  let notice: LogLoadingNotice
+
+  var body: some View {
+    ZStack {
+      Color.black.opacity(0.08)
+        .ignoresSafeArea()
+
+      VStack(spacing: 12) {
+        ProgressView()
+          .controlSize(.large)
+        Text(notice.title)
+          .font(.headline)
+          .multilineTextAlignment(.center)
+        Text(notice.message)
+          .font(.callout)
+          .foregroundStyle(.secondary)
+          .multilineTextAlignment(.center)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+      .padding(22)
+      .frame(width: 320)
+      .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+      .overlay {
+        RoundedRectangle(cornerRadius: 8)
+          .stroke(Color.primary.opacity(0.12), lineWidth: 1)
+      }
+      .shadow(color: Color.black.opacity(0.16), radius: 18, x: 0, y: 8)
+      .accessibilityElement(children: .combine)
+      .accessibilityIdentifier("log-loading-dialog")
     }
   }
 }
@@ -915,7 +956,7 @@ struct OverviewSectionView: View {
 
         MetricsGrid(summary: model.summary)
         if let summary = model.summary, summary.totals.sessions > 0 {
-          ProjectFocusView(summary: summary.promptIntents)
+          ProjectFocusView(summary: model.visiblePromptIntentSummary(summary.promptIntents))
           ChartsSection(summary: summary)
         }
       }
@@ -1624,10 +1665,10 @@ private func projectFocusColor(for key: String) -> Color {
     return .red
   case "git-commands":
     return .purple
-  case "deploy-release":
+  case "deploy-release", "deploy-release-run-build":
     return .orange
   case "run-build-app":
-    return .green
+    return .orange
   case "code-review-qa":
     return .blue
   case "planning-strategy":
