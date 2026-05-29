@@ -2,6 +2,45 @@
 
 Sanitized audit trail of AI-assisted work on this project.
 
+## 2026-05-29 - Improve Mixed Intent Project Focus Classification
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> Look this message is clearly saying I want to work on new features but we classified that as a bug fix. Why is that?
+
+> Can we fix our classifier? And can we look to improve the classifier so these types of problems do not occur again in the future? And again we run the classifier against all of our logs and update their labels as needed
+
+### Interpreted Intent
+
+The user wanted Project Focus classification to recognize explicit feature-work prompts even when the user includes incidental bug language as rationale, and wanted the updated classifier applied across the local log corpus.
+
+### Response / Work Done
+
+- Added a mixed-intent guardrail so direct bug-fix requests still classify as `Bug fixes`, while explicit product/feature requests can beat incidental bug rationale such as `broken` or `problem`.
+- Added regression coverage for the loading-dialog/background-sync prompt and related feature-vs-bug conflict cases.
+- Ran the updated classifier over the local Codex log corpus using aggregate-only output; the target prompt now resolves to `Feature design`.
+- Fixed the native UI smoke-test cleanup path so the packaged app stops its local engine before termination and force-cleans it if it does not exit promptly.
+- Rebuilt, repackaged, smoke-tested, and relaunched the native macOS app.
+
+### Privacy Notes
+
+No raw Codex logs, private prompts beyond the user-provided classifier example, session content, screenshots, recordings, export payloads, credentials, or secrets were added. The local corpus reclassification check reported aggregate category counts only.
+
+### Verification
+
+- Ran `wt bootstrap`.
+- Ran `npm run test -w @codex-log-viewer/analytics`.
+- Ran `npm test`.
+- Ran aggregate local log reclassification over 4,691 submitted messages; the target prompt matched `Feature design`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-ui`.
+- Ran `npm run smoke:mac-package`.
+- Ran `git diff --check`.
+- Relaunched `dist/macos/Codex Log Viewer.app`.
+
 ## 2026-05-28 - Add Loading Notice And Background Sync
 
 Status: Completed

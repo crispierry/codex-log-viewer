@@ -1686,6 +1686,7 @@ final class AppModel: ObservableObject {
           try await Task.sleep(for: .seconds(10))
           try await runUITestWorkflow(api: api, filters: filters)
           Self.writeStdout("Native UI workflow smoke passed.\n")
+          LocalLogEngineServer.shared.stop()
           NSApp.terminate(nil)
         } catch {
           Self.writeStderr("Native UI workflow smoke failed: \(error.localizedDescription)\n")

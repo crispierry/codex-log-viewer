@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 import Security
 
 struct LocalLogEngineConnection {
@@ -82,7 +83,15 @@ final class LocalLogEngineServer {
 
   func stop() {
     if let process, process.isRunning {
+      let processIdentifier = process.processIdentifier
       process.terminate()
+      let deadline = Date().addingTimeInterval(2)
+      while process.isRunning && Date() < deadline {
+        Thread.sleep(forTimeInterval: 0.05)
+      }
+      if process.isRunning {
+        kill(processIdentifier, SIGKILL)
+      }
       process.waitUntilExit()
     }
     stdoutHandle?.closeFile()

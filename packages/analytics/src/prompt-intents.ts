@@ -46,7 +46,15 @@ export function classifyPromptIntent(message: string): PromptIntentCategory {
   if (isDocumentationPrompt(matchText)) {
     return promptIntentCategories.documentation;
   }
-  if (isBugFixPrompt(matchText)) {
+  const directBugFix = isDirectBugFixPrompt(literal) || isDirectBugFixPrompt(command);
+  const bugFix = isBugFixPrompt(matchText);
+  if (directBugFix) {
+    return promptIntentCategories.bugFixes;
+  }
+  if (bugFix && isStrongFeatureDesignPrompt(matchText)) {
+    return promptIntentCategories.featureDesign;
+  }
+  if (bugFix) {
     return promptIntentCategories.bugFixes;
   }
   if (isRefactorCleanupPrompt(matchText)) {
@@ -169,6 +177,30 @@ function isTestingVerificationPrompt(normalized: string): boolean {
 
 function isDocumentationPrompt(normalized: string): boolean {
   return /\b(docs?|documentation|readme|usage guide|help|worklog|ai worklog|changelog|release notes?|write-up|guide)\b/u.test(normalized);
+}
+
+function isDirectBugFixPrompt(normalized: string): boolean {
+  const directFix =
+    /^(fix|repair|resolve|debug|address|correct)\b/u.test(normalized) ||
+    /^(can|could|would) (you|we) (please )?(fix|repair|resolve|debug|address|correct)\b/u.test(normalized);
+  const bugFixPhrase = /\bbug fixes?\b/u.test(normalized);
+  const fixBugObject =
+    /\b(fix|repair|resolve|debug|address|correct)\b.{0,80}\b(bug|broken|wrong|not working|doesn'?t work|isn'?t working|fails?|failing|failure|error|crash|regression|issues?|problem|p0|p1|p2|p3)\b/u.test(normalized);
+  const bugObjectFix =
+    /\b(bug|broken|wrong|not working|doesn'?t work|isn'?t working|fails?|failing|failure|error|crash|regression|issues?|problem|p0|p1|p2|p3)\b.{0,80}\b(fix|repair|resolve|debug|address|correct)\b/u.test(normalized);
+  return directFix || bugFixPhrase || fixBugObject || bugObjectFix;
+}
+
+function isStrongFeatureDesignPrompt(normalized: string): boolean {
+  const explicitFeatureWork =
+    /\b(features? (we )?(need|want|should|have) to (add|build|create|support|include)|add(?:ing)? (a |an |the |new )?features?|new features?|feature work)\b/u.test(normalized);
+  const productCapability =
+    /\b(add|build|create|show|display|put|include|support|enable|wire|hook up)\b.{0,120}\b(dialog|loading|notice|indicator|spinner|feedback|sync|synchroni[sz]e|background|refresh|filter|setting|option|button|view|chart|summary|panel|window|sidebar|column|label|badge|workflow)\b/u.test(normalized);
+  const desiredAppBehavior =
+    /\bi want (it|the app|the application|codex|codex log viewer) to\b/u.test(normalized);
+  const capabilityLanguage =
+    /\b(ability to|option for|new capability|periodically synchroni[sz]e|background sync)\b/u.test(normalized);
+  return explicitFeatureWork || productCapability || desiredAppBehavior || capabilityLanguage;
 }
 
 function isBugFixPrompt(normalized: string): boolean {

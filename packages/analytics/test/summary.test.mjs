@@ -3,7 +3,14 @@ import test from "node:test";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseCodexCorpus } from "@codex-log-viewer/parser";
-import { projectsFromCorpus, redactedProjectSummary, searchMessages, summarizeParsedCorpus, summaryToJson } from "../dist/index.js";
+import {
+  classifyPromptIntent,
+  projectsFromCorpus,
+  redactedProjectSummary,
+  searchMessages,
+  summarizeParsedCorpus,
+  summaryToJson
+} from "../dist/index.js";
 
 const testDir = dirname(fileURLToPath(import.meta.url));
 const fixturePath = resolve(testDir, "../../../fixtures/codex/sample-session.jsonl");
@@ -528,6 +535,20 @@ test("summarizeParsedCorpus classifies project focus prompt intents accurately",
   const unfilteredBuckets = new Map(unfilteredSummary.promptIntents.buckets.map((bucket) => [bucket.label, bucket]));
   assert.equal(unfilteredSummary.promptIntents.totalMessages, 17);
   assert.equal(unfilteredBuckets.get("Deploy/release/run/build")?.count, 3);
+});
+
+test("classifyPromptIntent lets explicit feature work beat incidental bug rationale", () => {
+  const loadingAndSyncRequest = [
+    "There's a couple of features we need to add:",
+    "1. When we're loading the latest logs, we need to put a dialog box letting the user know that we are loading.",
+    "I actually thought the app was broken because there was no feedback and it wasn't getting the latest information.",
+    "Also if the app is running, I want it to periodically synchronize so that the data is always fresh."
+  ].join(" ");
+
+  assert.equal(classifyPromptIntent(loadingAndSyncRequest).label, "Feature design");
+  assert.equal(classifyPromptIntent("Please add a loading indicator because the app feels broken").label, "Feature design");
+  assert.equal(classifyPromptIntent("Can we fix the broken loading dialog?").label, "Bug fixes");
+  assert.equal(classifyPromptIntent("I want you to fix the broken parser").label, "Bug fixes");
 });
 
 test("summarizeParsedCorpus counts automation prompts separately from sent user messages", () => {
