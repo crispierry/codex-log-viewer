@@ -2,6 +2,11 @@ import AppKit
 import Darwin
 import Foundation
 
+struct LogLoadingNotice: Equatable {
+  let title: String
+  let message: String
+}
+
 @MainActor
 final class AppModel: ObservableObject {
   enum Status: Equatable {
@@ -59,6 +64,8 @@ final class AppModel: ObservableObject {
   @Published var hiddenRepeatedPromptCategories: Set<String> = []
   @Published var messageSearchFocusRequest = 0
   @Published var cacheMetadata: CacheMetadata?
+  @Published private(set) var logLoadingNotice: LogLoadingNotice?
+  @Published private(set) var isBackgroundSyncing = false
   @Published var auditRepoPathDraft = ""
   @Published var auditIncludeResponses = true
   @Published var auditPreview: AuditPreview?
@@ -72,22 +79,42 @@ final class AppModel: ObservableObject {
   private var refreshToken = 0
   private var reloadTask: Task<Void, Never>?
   private var detailTask: Task<Void, Never>?
+  private var quietDetailRefreshTask: Task<Void, Never>?
   private var browseMessagesTask: Task<Void, Never>?
   private var searchTask: Task<Void, Never>?
   private var auditTask: Task<Void, Never>?
+  private var backgroundSyncTask: Task<Void, Never>?
   private var reloadRequestID = 0
   private var detailRequestID = 0
+  private var quietDetailRefreshRequestID = 0
   private var browseMessagesRequestID = 0
   private var searchRequestID = 0
   private var auditRequestID = 0
   private var pendingSearchResultTarget: SearchResultSelectionTarget?
   private var pendingSearchConversationResult: MessageSearchResult?
+  private var isLogRefreshInFlight = false
   private let isEphemeralSettingsRun = ProcessInfo.processInfo.environment["CODEX_LOG_VIEWER_EPHEMERAL_SETTINGS"] == "1" ||
     ProcessInfo.processInfo.environment["CODEX_LOG_VIEWER_UI_TEST"] == "1"
   private var hasScheduledUITestQuit = false
+  private static let backgroundSyncInterval: Duration = .seconds(60)
+
+  private enum RefreshMode {
+    case foreground
+    case background
+  }
 
   init() {
     loadSettings()
+  }
+
+  deinit {
+    reloadTask?.cancel()
+    detailTask?.cancel()
+    quietDetailRefreshTask?.cancel()
+    browseMessagesTask?.cancel()
+    searchTask?.cancel()
+    auditTask?.cancel()
+    backgroundSyncTask?.cancel()
   }
 
   var browseMessages: [MessageSearchResult] {
@@ -171,16 +198,25 @@ final class AppModel: ObservableObject {
     Task {
       do {
         status = .starting
+        logLoadingNotice = LogLoadingNotice(
+          title: "Starting Log Engine",
+          message: "Preparing to scan your local Codex logs."
+        )
         let connection = try await LocalLogEngineServer.shared.start()
         api = LogEngineAPI(baseURL: connection.baseURL, authToken: connection.authToken)
+        startBackgroundSyncIfNeeded()
         refresh()
       } catch {
+        logLoadingNotice = nil
         status = .failed(error.localizedDescription)
       }
     }
   }
 
   var cacheStatusText: String? {
+    if isBackgroundSyncing {
+      return "Syncing latest logs."
+    }
     guard let cacheMetadata else { return nil }
     switch cacheMetadata.cacheStatus {
     case "rebuilt":
@@ -284,8 +320,17 @@ final class AppModel: ObservableObject {
   }
 
   func refresh(force: Bool = false, rebuildCache: Bool = false) {
+    refresh(force: force, rebuildCache: rebuildCache, mode: .foreground)
+  }
+
+  private func refresh(force: Bool = false, rebuildCache: Bool = false, mode: RefreshMode) {
     guard let api else { return }
-    let shouldRefreshCache = force || rebuildCache
+    if mode == .background, shouldSkipBackgroundSync {
+      return
+    }
+
+    let shouldRefreshCache = force || rebuildCache || mode == .background
+    let shouldShowLoadingNotice = mode == .foreground && (summary == nil || force || rebuildCache)
     if shouldRefreshCache {
       refreshToken += 1
       cacheMetadata = CacheMetadata(
@@ -306,10 +351,13 @@ final class AppModel: ObservableObject {
       rebuildCache: rebuildCache
     )
     let project = selectedProject
+    beginLogRefresh(mode: mode, showLoadingNotice: shouldShowLoadingNotice, rebuildCache: rebuildCache)
 
     reloadTask = Task {
       do {
-        status = .loading
+        if mode == .foreground {
+          status = .loading
+        }
         async let projectList = api.projectsWithMetadata(filters: filters)
         async let projectSummary = api.summaryWithMetadata(project: project, filters: filters)
         let (projectsResult, summaryResult) = try await (projectList, projectSummary)
@@ -334,14 +382,22 @@ final class AppModel: ObservableObject {
         if showSessionBrowser && pendingSearchConversationResult == nil {
           selectLatestSessionIfNeeded(in: summary)
         }
-        loadBrowseMessages(selectFirstIfNeeded: !showSessionBrowser && pendingSearchConversationResult == nil)
-        status = .ready
+        loadBrowseMessages(selectFirstIfNeeded: mode == .foreground && !showSessionBrowser && pendingSearchConversationResult == nil)
+        if mode == .background {
+          refreshSelectedSessionQuietly(api: api, filters: currentFilters(), project: project)
+        } else {
+          status = .ready
+        }
+        finishLogRefresh(requestID: requestID)
         scheduleUITestWorkflowIfNeeded(api: api, filters: filters)
       } catch is CancellationError {
         return
       } catch {
         guard requestID == reloadRequestID else { return }
-        status = .failed(error.localizedDescription)
+        finishLogRefresh(requestID: requestID)
+        if mode == .foreground {
+          status = .failed(error.localizedDescription)
+        }
       }
     }
   }
@@ -357,6 +413,111 @@ final class AppModel: ObservableObject {
 
   func rebuildLocalCache() {
     refresh(rebuildCache: true)
+  }
+
+  private var shouldSkipBackgroundSync: Bool {
+    guard api != nil else { return true }
+    if isLogRefreshInFlight || isDetailLoading || isBrowseMessagesLoading || isAuditLoading {
+      return true
+    }
+    if pendingSearchConversationResult != nil {
+      return true
+    }
+    if case .starting = status {
+      return true
+    }
+    if case .loading = status {
+      return true
+    }
+    return false
+  }
+
+  private func startBackgroundSyncIfNeeded() {
+    guard backgroundSyncTask == nil, !isEphemeralSettingsRun else { return }
+    backgroundSyncTask = Task { [weak self] in
+      while !Task.isCancelled {
+        try? await Task.sleep(for: Self.backgroundSyncInterval)
+        guard !Task.isCancelled else { return }
+        self?.syncLatestLogsInBackground()
+      }
+    }
+  }
+
+  private func syncLatestLogsInBackground() {
+    refresh(force: true, mode: .background)
+  }
+
+  private func beginLogRefresh(mode: RefreshMode, showLoadingNotice: Bool, rebuildCache: Bool) {
+    isLogRefreshInFlight = true
+    isBackgroundSyncing = mode == .background
+
+    guard mode == .foreground else {
+      logLoadingNotice = nil
+      return
+    }
+
+    if showLoadingNotice {
+      logLoadingNotice = LogLoadingNotice(
+        title: rebuildCache ? "Rebuilding Local Cache" : "Loading Latest Logs",
+        message: rebuildCache
+          ? "Reparsing your local Codex sessions. This can take a moment for large histories."
+          : "Checking your local Codex sessions for the newest activity."
+      )
+    } else {
+      logLoadingNotice = nil
+    }
+  }
+
+  private func finishLogRefresh(requestID: Int) {
+    guard requestID == reloadRequestID else { return }
+    isLogRefreshInFlight = false
+    isBackgroundSyncing = false
+    logLoadingNotice = nil
+  }
+
+  private func refreshSelectedSessionQuietly(api: LogEngineAPI, filters: LogFilters, project: String) {
+    guard let selectionID = selectedSessionID,
+      selectedSessionDetail != nil,
+      !isDetailLoading
+    else {
+      return
+    }
+
+    let target = detailTarget(for: selectionID)
+    quietDetailRefreshTask?.cancel()
+    quietDetailRefreshRequestID += 1
+    let requestID = quietDetailRefreshRequestID
+
+    quietDetailRefreshTask = Task {
+      do {
+        let detail = try await api.sessionDetail(
+          sessionID: target.sessionID,
+          filePath: target.filePath,
+          dateKey: target.dateKey,
+          project: project,
+          filters: filters
+        )
+        guard !Task.isCancelled,
+          requestID == quietDetailRefreshRequestID,
+          selectedSessionID == selectionID,
+          selectedProject == project
+        else {
+          return
+        }
+        selectedSessionDetail = detail
+        reconcileSelectedUserMessage(in: detail)
+      } catch {
+        return
+      }
+    }
+  }
+
+  private func reconcileSelectedUserMessage(in detail: SessionDetail) {
+    guard let selectedUserMessageIndex else { return }
+    let visibleOffsets = visibleUserMessageOffsets(in: detail, dateKey: selectedSessionDateKey)
+    if !visibleOffsets.contains(where: { $0.offset == selectedUserMessageIndex }) {
+      self.selectedUserMessageIndex = visibleOffsets.last?.offset
+    }
   }
 
   func selectProject(_ project: String) {
@@ -536,6 +697,8 @@ final class AppModel: ObservableObject {
     }
     let target = detailTarget(for: selectionID)
 
+    quietDetailRefreshTask?.cancel()
+    quietDetailRefreshRequestID += 1
     detailTask?.cancel()
     detailRequestID += 1
     let requestID = detailRequestID
@@ -977,6 +1140,8 @@ final class AppModel: ObservableObject {
   }
 
   private func clearSelectedSession() {
+    quietDetailRefreshTask?.cancel()
+    quietDetailRefreshRequestID += 1
     detailTask?.cancel()
     detailRequestID += 1
     selectedSessionID = nil

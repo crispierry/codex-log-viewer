@@ -2,6 +2,48 @@
 
 Sanitized audit trail of AI-assisted work on this project.
 
+## 2026-05-28 - Add Loading Notice And Background Sync
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> There's a couple of features we need to add:
+> 1. When we're loading the latest logs, we need to put a dialog box letting the user know that we are loading. I actually thought the app was broken because there was no feedback and it wasn't getting the latest information.
+> I want you to pull that in
+>
+> Also if the app is running, I want it to periodically synchronize so that the data is always fresh
+>
+> It should be done in the background without disrupting operations
+
+### Interpreted Intent
+
+The user wanted clear native feedback during explicit latest-log loading and automatic non-disruptive synchronization while the app remains open.
+
+### Response / Work Done
+
+- Added a native loading notice for app startup, manual refresh, and local-cache rebuilds.
+- Added a one-minute background sync loop that checks for added, changed, or deleted local session files without opening the loading notice.
+- Made background sync skip while foreground loading, session loading, browse loading, audit work, or smoke-test/ephemeral runs are active.
+- Refreshed the selected session detail quietly after a background sync when it is already loaded.
+- Documented the loading notice and background sync behavior.
+- Rebuilt, repackaged, and relaunched the native macOS app.
+
+### Privacy Notes
+
+No raw Codex logs, private prompts, session content, screenshots, recordings, export payloads, credentials, or secrets were added.
+
+### Verification
+
+- Ran `wt bootstrap`.
+- Ran `swift build --package-path apps/macos`.
+- Ran `npm run check:mac-accessibility`.
+- Ran `git diff --check`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-ui`.
+- Relaunched `dist/macos/Codex Log Viewer.app`.
+
 ## 2026-05-25 - Rename Feedback Context Label
 
 Status: Completed

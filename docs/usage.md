@@ -76,7 +76,7 @@ Keyboard shortcuts:
 
 The macOS app stores a private parsed-session cache in `~/Library/Application Support/Codex Log Viewer/Cache/v1` so it does not need to reprocess unchanged logs every time you navigate or relaunch the app.
 
-Refresh checks for added, changed, or deleted session files and updates only what changed. Use `Logs > Rebuild Local Cache` if the cache ever looks stale or you want to force a full local reparse.
+Startup, manual refresh, and full rebuilds show a loading notice while the app checks local logs. Refresh checks for added, changed, or deleted session files and updates only what changed. While the app is running, it also checks for new local log activity in the background about once a minute without opening a dialog or interrupting the current operation. Use `Logs > Rebuild Local Cache` if the cache ever looks stale or you want to force a full local reparse.
 
 ## Exports
 

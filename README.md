@@ -64,7 +64,7 @@ The app is the primary product experience. From the desktop UI you can:
 - select a sent prompt and inspect the related Codex response, tool activity, context, tokens, and timing in organized native sections
 - filter message search by role, model, session, project, source, and date range
 - review repeated prompts for the current filters
-- refresh the scan
+- refresh the scan, with startup/manual loading feedback and quiet background sync while the app stays open
 - export redacted JSON or aggregate CSV
 - generate a smart-merged AI audit worklog preview and approve the reviewed Markdown into a repository
 - inspect session messages, turns, tokens, warnings, and unknown events, with file-scoped handling for copied logs that reuse a session id
