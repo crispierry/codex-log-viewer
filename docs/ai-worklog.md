@@ -2,6 +2,48 @@
 
 Sanitized audit trail of AI-assisted work on this project.
 
+## 2026-05-29 - Fix Evals Window Responsive Layout
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> Notice that the UI is not fitting properly
+
+> Also I want to make sure we allow the user to manually resize the three columns
+
+> You are not handling resizing correctly. As I resize the left column, the text on the left should not be moving, only the things on the right
+
+### Interpreted Intent
+
+The user wanted the native Evals window to fit cleanly when the app opens or restores the window at narrower sizes, and wanted the wide three-column layout to be manually adjustable without the left sidebar content shifting under the window edge.
+
+### Response / Work Done
+
+- Replaced the fixed-width Evals window layout with a responsive layout that keeps the three-column review surface at wider sizes and switches to stacked native split panes at compact widths.
+- Replaced the wide Evals layout's native split view with controlled draggable dividers so sidebar resizing keeps the left pane anchored and moves only the right edge.
+- Allowed the Evals window to resize normally instead of being locked to the old fixed content size.
+- Let longer sidebar category names wrap or scale slightly instead of pushing the row layout out of bounds.
+- Rebuilt and relaunched the packaged macOS app at build 119 for review.
+
+### Privacy Notes
+
+No raw Codex logs, private prompts, session content, screenshots, recordings, export payloads, credentials, or secrets were added to tracked fixtures.
+
+### Verification
+
+- Ran `wt bootstrap`.
+- Ran `swift build --package-path apps/macos`.
+- Ran `npm run check:classifier`.
+- Ran `npm test`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`.
+- Ran `npm run smoke:mac-ui`.
+- Ran `git diff --check`.
+- Visually checked the Evals window at a narrow width and removed the temporary screenshot.
+- Relaunched `dist/macos/Codex Log Viewer.app` and opened the Evals window.
+
 ## 2026-05-29 - Add In-App Project Focus Evals
 
 Status: Completed

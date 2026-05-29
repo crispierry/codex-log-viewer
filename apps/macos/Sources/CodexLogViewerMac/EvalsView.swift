@@ -16,22 +16,145 @@ struct EvalsWindowRootView: View {
 
 struct EvalsPanelView: View {
   @ObservedObject var model: AppModel
+  @State private var sidebarWidth: CGFloat = 260
+  @State private var inspectorWidth: CGFloat = 380
+  @State private var sidebarDragStart: CGFloat?
+  @State private var inspectorDragStart: CGFloat?
+
+  private let regularLayoutMinimumWidth: CGFloat = 860
+  private let splitDividerWidth: CGFloat = 8
+  private let minimumSidebarWidth: CGFloat = 200
+  private let minimumMessageWidth: CGFloat = 300
+  private let minimumInspectorWidth: CGFloat = 260
 
   var body: some View {
-    HStack(spacing: 0) {
-      EvalsCategorySidebar(model: model)
-        .frame(width: 260)
-      Divider()
-      EvalsMessageList(model: model)
-        .frame(minWidth: 420)
-      Divider()
-      EvalsInspector(model: model)
-        .frame(width: 380)
+    GeometryReader { proxy in
+      if proxy.size.width < regularLayoutMinimumWidth {
+        compactLayout
+      } else {
+        regularLayout(width: proxy.size.width)
+      }
     }
-    .frame(minWidth: 1_080, minHeight: 660)
+    .frame(minWidth: 720, minHeight: 560)
     .task {
       model.loadEvals(selectFirstIfNeeded: true)
     }
+  }
+
+  private func regularLayout(width: CGFloat) -> some View {
+    let columnWidths = regularColumnWidths(for: width)
+
+    return HStack(spacing: 0) {
+      EvalsCategorySidebar(model: model)
+        .frame(width: columnWidths.sidebar, alignment: .topLeading)
+        .frame(maxHeight: .infinity, alignment: .topLeading)
+        .clipped()
+
+      EvalsSplitDivider()
+        .frame(width: splitDividerWidth)
+        .gesture(sidebarResizeGesture(containerWidth: width))
+
+      EvalsMessageList(model: model)
+        .frame(width: columnWidths.message, alignment: .topLeading)
+        .frame(maxHeight: .infinity, alignment: .topLeading)
+        .clipped()
+
+      EvalsSplitDivider()
+        .frame(width: splitDividerWidth)
+        .gesture(inspectorResizeGesture(containerWidth: width))
+
+      EvalsInspector(model: model)
+        .frame(width: columnWidths.inspector, alignment: .topLeading)
+        .frame(maxHeight: .infinity, alignment: .topLeading)
+        .clipped()
+    }
+  }
+
+  private var compactLayout: some View {
+    VSplitView {
+      EvalsCategorySidebar(model: model)
+        .frame(maxWidth: .infinity, minHeight: 170, idealHeight: 220, alignment: .topLeading)
+
+      EvalsMessageList(model: model)
+        .frame(maxWidth: .infinity, minHeight: 230, alignment: .topLeading)
+
+      EvalsInspector(model: model)
+        .frame(maxWidth: .infinity, minHeight: 230, alignment: .topLeading)
+    }
+  }
+
+  private func sidebarResizeGesture(containerWidth: CGFloat) -> some Gesture {
+    DragGesture(minimumDistance: 0)
+      .onChanged { value in
+        if sidebarDragStart == nil {
+          sidebarDragStart = regularColumnWidths(for: containerWidth).sidebar
+        }
+        guard let startWidth = sidebarDragStart else { return }
+        sidebarWidth = regularColumnWidths(for: containerWidth, sidebar: startWidth + value.translation.width).sidebar
+      }
+      .onEnded { _ in
+        sidebarWidth = regularColumnWidths(for: containerWidth).sidebar
+        sidebarDragStart = nil
+      }
+  }
+
+  private func inspectorResizeGesture(containerWidth: CGFloat) -> some Gesture {
+    DragGesture(minimumDistance: 0)
+      .onChanged { value in
+        if inspectorDragStart == nil {
+          inspectorDragStart = regularColumnWidths(for: containerWidth).inspector
+        }
+        guard let startWidth = inspectorDragStart else { return }
+        inspectorWidth = regularColumnWidths(for: containerWidth, inspector: startWidth - value.translation.width).inspector
+      }
+      .onEnded { _ in
+        inspectorWidth = regularColumnWidths(for: containerWidth).inspector
+        inspectorDragStart = nil
+      }
+  }
+
+  private func regularColumnWidths(
+    for containerWidth: CGFloat,
+    sidebar proposedSidebar: CGFloat? = nil,
+    inspector proposedInspector: CGFloat? = nil
+  ) -> (sidebar: CGFloat, message: CGFloat, inspector: CGFloat) {
+    let contentWidth = max(0, containerWidth - (2 * splitDividerWidth))
+    let minimumContentWidth = minimumSidebarWidth + minimumMessageWidth + minimumInspectorWidth
+    guard contentWidth > minimumContentWidth else {
+      let scale = max(0, contentWidth / minimumContentWidth)
+      let sidebar = floor(minimumSidebarWidth * scale)
+      let inspector = floor(minimumInspectorWidth * scale)
+      return (sidebar, max(0, contentWidth - sidebar - inspector), inspector)
+    }
+
+    var sidebar = clamp(proposedSidebar ?? sidebarWidth, min: minimumSidebarWidth, max: contentWidth - minimumMessageWidth - minimumInspectorWidth)
+    var inspector = clamp(proposedInspector ?? inspectorWidth, min: minimumInspectorWidth, max: contentWidth - sidebar - minimumMessageWidth)
+    var message = contentWidth - sidebar - inspector
+
+    if message < minimumMessageWidth {
+      let deficit = minimumMessageWidth - message
+      let inspectorReduction = min(deficit, inspector - minimumInspectorWidth)
+      inspector -= inspectorReduction
+      let remainingDeficit = deficit - inspectorReduction
+      sidebar -= min(remainingDeficit, sidebar - minimumSidebarWidth)
+      message = contentWidth - sidebar - inspector
+    }
+
+    return (sidebar, message, inspector)
+  }
+
+  private func clamp(_ value: CGFloat, min minimum: CGFloat, max maximum: CGFloat) -> CGFloat {
+    Swift.min(Swift.max(value, minimum), Swift.max(minimum, maximum))
+  }
+}
+
+private struct EvalsSplitDivider: View {
+  var body: some View {
+    Rectangle()
+      .fill(Color.primary.opacity(0.16))
+      .frame(width: 1)
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+      .contentShape(Rectangle())
   }
 }
 
@@ -121,7 +244,9 @@ private struct EvalsSidebarButton: View {
           Text(title)
             .font(.subheadline)
             .fontWeight(.semibold)
-            .lineLimit(1)
+            .lineLimit(2)
+            .minimumScaleFactor(0.85)
+            .layoutPriority(1)
           Spacer(minLength: 8)
           Text(count.formatted())
             .font(.caption.monospacedDigit())

@@ -192,7 +192,6 @@ struct CodexLogViewerApp: App {
     Window("Evals", id: AppWindowID.evals) {
       EvalsWindowRootView(appDelegate: appDelegate)
     }
-    .windowResizability(.contentSize)
   }
 }
 
