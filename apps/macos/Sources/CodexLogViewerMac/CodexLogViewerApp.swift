@@ -7,13 +7,18 @@ struct CodexLogViewerApp: App {
   @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
   @Environment(\.openWindow) private var openWindow
   @FocusedValue(\.appModel) private var focusedModel
+  private var commandModel: AppModel? {
+    focusedModel ?? appDelegate.commandModel
+  }
 
   var body: some Scene {
     WindowGroup("Codex Log Viewer", id: AppWindowID.main) {
       if AppRuntime.isSmokeMode {
         EmptyView()
       } else {
-        AppWindowRootView()
+        AppWindowRootView(onModelReady: { model in
+          appDelegate.setCommandModel(model)
+        })
           .onAppear {
             appDelegate.setMainWindowOpener {
               openWindow(id: AppWindowID.main)
@@ -40,7 +45,7 @@ struct CodexLogViewerApp: App {
       }
 
       CommandGroup(after: .sidebar) {
-        if let model = focusedModel {
+        if let model = commandModel {
           Toggle(
             "Show Sessions",
             isOn: Binding(
@@ -52,38 +57,27 @@ struct CodexLogViewerApp: App {
 
           Divider()
 
-          Menu("Operational Messages") {
-            Toggle(
-              "All",
-              isOn: Binding(
-                get: { model.areAllOperationalMessageCategoriesVisible },
-                set: { model.setAllOperationalMessageCategoriesVisible($0) }
-              )
-            )
-            .accessibilityIdentifier("view-operational-all-filter")
-
-            Divider()
-
-            ForEach(model.operationalMessageCategoryOptions, id: \.self) { category in
-              Toggle(
-                category,
-                isOn: Binding(
-                  get: { model.isOperationalPromptCategoryVisible(category) },
-                  set: { model.setOperationalMessageCategory(category, isVisible: $0) }
-                )
-              )
-              .accessibilityIdentifier("view-operational-message-filter")
+          Button("Operational Messages...") {
+            if let model = commandModel {
+              appDelegate.setCommandModel(model)
             }
+            openWindow(id: AppWindowID.operationalMessages)
+            NSApp.activate(ignoringOtherApps: true)
           }
+          .accessibilityIdentifier("view-operational-messages-panel-menu-item")
         } else {
           Button("Show Sessions") {}
             .disabled(true)
             .accessibilityIdentifier("view-show-sessions-menu-item")
+
+          Button("Operational Messages...") {}
+            .disabled(true)
+            .accessibilityIdentifier("view-operational-messages-panel-menu-item")
         }
       }
 
       CommandMenu("Logs") {
-        if let model = focusedModel {
+        if let model = commandModel {
           Button("Status: \(model.status.label)") {}
             .disabled(true)
             .accessibilityIdentifier("status-menu-item")
@@ -173,21 +167,96 @@ struct CodexLogViewerApp: App {
         .accessibilityIdentifier("usage-guide-menu-item")
       }
     }
+
+    Window("Operational Messages", id: AppWindowID.operationalMessages) {
+      OperationalMessagesWindowRootView(appDelegate: appDelegate)
+    }
+    .windowResizability(.contentSize)
   }
 }
 
 private struct AppWindowRootView: View {
   @StateObject private var model = AppModel()
+  var onModelReady: (AppModel) -> Void = { _ in }
 
   var body: some View {
     RootView()
       .environmentObject(model)
       .focusedSceneValue(\.appModel, model)
       .focusedValue(\.appModel, model)
+      .onAppear {
+        onModelReady(model)
+      }
       .task {
         model.startIfNeeded()
       }
       .frame(minWidth: 760, minHeight: 560)
+  }
+}
+
+private struct OperationalMessagesWindowRootView: View {
+  @ObservedObject var appDelegate: AppDelegate
+  @Environment(\.dismiss) private var dismiss
+
+  var body: some View {
+    if let model = appDelegate.commandModel {
+      OperationalMessagesPanelView(model: model) {
+        dismiss()
+      }
+    } else {
+      Text("Open Codex Log Viewer first.")
+        .padding(18)
+        .frame(width: 300)
+    }
+  }
+}
+
+private struct OperationalMessagesPanelView: View {
+  @ObservedObject var model: AppModel
+  let close: () -> Void
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 14) {
+      Text("Operational Messages")
+        .font(.headline)
+
+      Toggle(
+        "All",
+        isOn: Binding(
+          get: { model.areAllOperationalMessageCategoriesVisible },
+          set: { model.setAllOperationalMessageCategoriesVisible($0) }
+        )
+      )
+      .toggleStyle(.checkbox)
+      .accessibilityIdentifier("view-operational-all-filter")
+
+      Divider()
+
+      VStack(alignment: .leading, spacing: 9) {
+        ForEach(model.operationalMessageCategoryOptions, id: \.self) { category in
+          Toggle(
+            category,
+            isOn: Binding(
+              get: { model.isOperationalPromptCategoryVisible(category) },
+              set: { model.setOperationalMessageCategory(category, isVisible: $0) }
+            )
+          )
+          .toggleStyle(.checkbox)
+          .accessibilityIdentifier("view-operational-message-filter")
+        }
+      }
+
+      HStack {
+        Spacer()
+        Button("Done") {
+          close()
+        }
+        .keyboardShortcut(.defaultAction)
+        .accessibilityIdentifier("view-operational-messages-done-button")
+      }
+    }
+    .padding(18)
+    .frame(width: 300)
   }
 }
 
@@ -202,13 +271,21 @@ private extension FocusedValues {
   }
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
+  @Published private(set) var commandModel: AppModel?
   private var tabBarObservers: [NSObjectProtocol] = []
   private var openMainWindow: (() -> Void)?
   private var fallbackViewerWindow: NSWindow?
 
   func setMainWindowOpener(_ opener: @escaping () -> Void) {
     openMainWindow = opener
+  }
+
+  func setCommandModel(_ model: AppModel) {
+    guard commandModel !== model else {
+      return
+    }
+    commandModel = model
   }
 
   func ensureViewerWindowVisible(activate: Bool) {
@@ -418,7 +495,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     window.title = "Codex Logs"
     window.minSize = NSSize(width: 760, height: 560)
     window.tabbingMode = .preferred
-    window.contentView = NSHostingView(rootView: AppWindowRootView())
+    window.contentView = NSHostingView(rootView: AppWindowRootView(onModelReady: { [weak self] model in
+      self?.setCommandModel(model)
+    }))
     window.center()
     window.makeKeyAndOrderFront(nil)
     if activate {
@@ -435,6 +514,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 enum AppWindowID {
   static let main = "main"
+  static let operationalMessages = "operational-messages"
 }
 
 enum AppRuntime {

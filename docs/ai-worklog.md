@@ -2,6 +2,340 @@
 
 Sanitized audit trail of AI-assisted work on this project.
 
+## 2026-05-28 - Add Loading Notice And Background Sync
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> There's a couple of features we need to add:
+> 1. When we're loading the latest logs, we need to put a dialog box letting the user know that we are loading. I actually thought the app was broken because there was no feedback and it wasn't getting the latest information.
+> I want you to pull that in
+>
+> Also if the app is running, I want it to periodically synchronize so that the data is always fresh
+>
+> It should be done in the background without disrupting operations
+
+### Interpreted Intent
+
+The user wanted clear native feedback during explicit latest-log loading and automatic non-disruptive synchronization while the app remains open.
+
+### Response / Work Done
+
+- Added a native loading notice for app startup, manual refresh, and local-cache rebuilds.
+- Added a one-minute background sync loop that checks for added, changed, or deleted local session files without opening the loading notice.
+- Made background sync skip while foreground loading, session loading, browse loading, audit work, or smoke-test/ephemeral runs are active.
+- Refreshed the selected session detail quietly after a background sync when it is already loaded.
+- Documented the loading notice and background sync behavior.
+- Rebuilt, repackaged, and relaunched the native macOS app.
+
+### Privacy Notes
+
+No raw Codex logs, private prompts, session content, screenshots, recordings, export payloads, credentials, or secrets were added.
+
+### Verification
+
+- Ran `wt bootstrap`.
+- Ran `swift build --package-path apps/macos`.
+- Ran `npm run check:mac-accessibility`.
+- Ran `git diff --check`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-ui`.
+- Relaunched `dist/macos/Codex Log Viewer.app`.
+
+## 2026-05-25 - Rename Feedback Context Label
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> What about feedback and context? Doesn't that count as content creation or feature design?
+>
+> I'm quite sure how to interpret the feedback and context category
+
+> Alright update the label
+
+### Interpreted Intent
+
+The user wanted the ambiguous `Feedback/context` Project Focus label renamed to better reflect that it captures contextual observations rather than content creation or feature design work.
+
+### Response / Work Done
+
+- Renamed the displayed Project Focus label from `Feedback/context` to `Context/observation`.
+- Kept the stable analytics key `feedback-context` unchanged so existing color mapping and data compatibility remain intact.
+- Updated the analytics test expectation and usage documentation.
+- Rebuilt, repackaged, and relaunched the native macOS app.
+
+### Privacy Notes
+
+No raw Codex logs, private prompts, session content, screenshots, recordings, export payloads, credentials, or secrets were added.
+
+### Verification
+
+- Ran `npm run test -w @codex-log-viewer/analytics`.
+- Ran `swift build --package-path apps/macos`.
+- Ran `git diff --check`.
+- Ran `npm run package:mac`.
+- Relaunched `dist/macos/Codex Log Viewer.app`.
+
+## 2026-05-25 - Make Overview Honor Operational Filters
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> This also means that the overview tab should honor the Operational Messages that are disabled - in other words don't count them if they are not enabled
+
+### Interpreted Intent
+
+The user wanted the Overview tab's Project Focus chart and counts to exclude operational categories that are disabled in the Operational Messages checklist.
+
+### Response / Work Done
+
+- Added a native filtered Project Focus summary that removes hidden operational categories before rendering Overview.
+- Recalculated visible Project Focus totals, classified counts, unclassified counts, and bucket percentages after filtering.
+- Updated Overview to pass the filtered Project Focus summary into the chart and category list.
+- Extended the native UI smoke workflow so hiding `Testing/verification` must also remove it from Overview Project Focus counts.
+- Rebuilt, repackaged, and relaunched the native macOS app.
+
+### Privacy Notes
+
+No raw Codex logs, private prompts, session content, screenshots, recordings, export payloads, credentials, or secrets were added.
+
+### Verification
+
+- Ran `swift build --package-path apps/macos`.
+- Ran `npm run check:mac-accessibility`.
+- Ran `git diff --check`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-ui`.
+- Relaunched `dist/macos/Codex Log Viewer.app`.
+
+## 2026-05-25 - Combine Deploy Release And Run Build Categories
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> Deploy and release, plus run or build app, are the same category. Please group them accordingly
+
+### Interpreted Intent
+
+The user wanted deploy/release prompts and app run/build prompts to be treated as one operational Project Focus category and one visibility filter.
+
+### Response / Work Done
+
+- Changed the deterministic prompt-intent categories so deploy/release and run/build app prompts share the same key and label: `Deploy/release/run/build`.
+- Updated repeated-prompt grouping, search result category labels, and Project Focus buckets through the shared analytics classifier.
+- Updated macOS operational filter ordering to show one combined checkbox instead of separate deploy/release and run/build checkboxes.
+- Added settings migration so older saved `Deploy/release` and `Run/build app` hidden filters are persisted as the new combined category.
+- Updated the Project Focus color mapping and usage documentation for the combined category.
+- Rebuilt and repackaged the native app, then relaunched the packaged app for review.
+
+### Privacy Notes
+
+No raw Codex logs, private prompts, session content, screenshots, recordings, export payloads, credentials, or secrets were added.
+
+### Verification
+
+- Ran `npm run test -w @codex-log-viewer/analytics`.
+- Ran `swift build --package-path apps/macos`.
+- Ran `npm test`.
+- Ran `npm run check:reference -- --reference fixtures/codex/sample-reference-summary.json --path fixtures/codex/sample-session.jsonl --project sample-app`.
+- Ran `npm run package:mac`.
+- Relaunched `dist/macos/Codex Log Viewer.app`.
+- Verified settings migrated to `Deploy/release/run/build` plus `Git commands`.
+- Verified `View > Operational Messages...` opens the checklist window.
+- Ran `npm run check:mac-accessibility`.
+- Ran `git diff --check`.
+
+## 2026-05-25 - Add Persistent Operational Messages Checklist
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> I want to make one more change. I want to be able to check and uncheck those menu items without closing the whole menu. It's really unintuitive right now and time-consuming. I want to open the menu and be able to check and uncheck what's going to be visible
+
+### Interpreted Intent
+
+The user wanted the operational-message visibility controls to support multiple checkbox changes in one interaction instead of closing the macOS View menu after every category toggle.
+
+### Response / Work Done
+
+- Replaced the multi-click `View > Operational Messages` submenu with `View > Operational Messages...`, which opens a persistent checklist window.
+- Added a SwiftUI `Operational Messages` window with an `All` checkbox, individual operational category checkboxes, and a Done button.
+- Kept the checklist wired to the live `AppModel` so each checkbox immediately updates Browse/Search visibility filters and saved preferences.
+- Updated help copy to describe the new checklist workflow.
+- Rebuilt and repackaged the native app, then relaunched the packaged app for review.
+- Verified the checklist window opens from the View menu and remains open after toggling a category.
+- Restored the user's previous hidden category state after verification.
+
+### Privacy Notes
+
+No raw Codex logs, private prompts, session content, screenshots, recordings, export payloads, credentials, or secrets were added.
+
+### Verification
+
+- Ran `wt bootstrap`.
+- Ran `swift build --package-path apps/macos`.
+- Ran `npm run package:mac`.
+- Relaunched `dist/macos/Codex Log Viewer.app`.
+- Verified `View > Operational Messages...` opens a persistent checklist window.
+- Verified a `Testing/verification` checkbox toggle round trip and restored the prior hidden categories.
+- Ran `npm run check:mac-accessibility`.
+- Ran `git diff --check`.
+
+## 2026-05-25 - Restore Operational Messages Menu Toggles
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> I'm using the app. I'm going to the View menu, Operational Messages. I'm not able to check and uncheck the different operational messages
+>
+> Pretty sure this was working before. I don't know what's wrong now
+
+### Interpreted Intent
+
+The user reported that the native macOS View menu's Operational Messages checkboxes no longer toggled correctly and wanted the regression fixed in the running app.
+
+### Response / Work Done
+
+- Reproduced that the running packaged app could be in the fallback `Codex Logs` window path where focus-based command menu lookup did not provide a live `AppModel`.
+- Updated the app delegate to keep a command-menu model fallback supplied by both normal SwiftUI windows and the fallback native window.
+- Changed the View and Logs command menus to use the focused model when available, or the app delegate's command model otherwise.
+- Rebuilt and repackaged the native macOS app, relaunching the packaged app for immediate review.
+- Verified the View menu contains `Operational Messages` and that toggling `Testing/verification` writes and then restores the expected hidden-category preference.
+
+### Privacy Notes
+
+No raw Codex logs, private prompts, session content, screenshots, recordings, export payloads, credentials, or secrets were added.
+
+### Verification
+
+- Ran `wt bootstrap`.
+- Ran `swift build --package-path apps/macos`.
+- Ran `npm run package:mac`.
+- Relaunched `dist/macos/Codex Log Viewer.app`.
+- Verified the menu item list through macOS accessibility automation.
+- Verified a toggle round trip for `Testing/verification` and restored it to visible.
+- Ran `npm run check:mac-accessibility`.
+- Ran `git diff --check`.
+
+## 2026-05-20 - Reset App Source To Default Logs
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> Well I ran the app you created but it failed to load my logs. Why is it?
+
+### Interpreted Intent
+
+The user wanted to understand why the packaged macOS app did not show their real Codex logs after the external distribution build.
+
+### Response / Work Done
+
+- Checked whether the packaged app or local engine was still running.
+- Confirmed the default Codex log roots exist locally.
+- Parsed the default local log roots through the parser and app cache path, using aggregate counts only.
+- Found the app's saved `sourcePaths` preference was still pointing at the sanitized repository fixture from QA instead of the default Codex log roots.
+- Cleared the saved custom source and recent source preferences so the app returns to default Codex log discovery.
+- Relaunched the packaged app for immediate review.
+
+### Privacy Notes
+
+No raw Codex logs, private prompt content, session files, screenshots, recordings, export payloads, credentials, or secrets were added. Diagnostics used aggregate counts and sanitized preference paths only.
+
+### Verification
+
+- Confirmed default local roots parse successfully with the app cache path.
+- Confirmed the saved custom source preference was removed.
+- Relaunched the packaged app after resetting the preference.
+
+## 2026-05-20 - External Distribution Build Attempt
+
+Status: Completed with signing follow-up
+Related commit/PR: TBD
+
+### User Messages
+
+> let's build the app for external distribution
+
+### Interpreted Intent
+
+The user wanted a macOS distributable build suitable for sharing outside the local development machine.
+
+### Response / Work Done
+
+- Bootstrapped the worktree dependencies before release verification.
+- Ran the release verification path for privacy, tests, build/lint, accessibility identifiers, dependency audit, benchmark, fixture reference parity, package smoke, and native UI smoke.
+- Built `Codex Log Viewer.app` and the `Codex-Log-Viewer-v0.1-build99-macOS.zip` distribution artifact with checksum.
+- Confirmed the app bundle verifies on disk and the zip checksum is valid.
+- Confirmed the current artifact is ad-hoc signed and rejected by Gatekeeper, so it is a tested distribution candidate but not yet a notarized external public download.
+- Confirmed the machine currently exposes an Apple Development signing identity but not a Developer ID Application identity for this app's direct-download macOS release path.
+
+### Privacy Notes
+
+No Apple credentials, notary passwords, certificates, private keys, raw Codex logs, private session content, screenshots, recordings, or export payloads were added. Signing checks only inspected local signing availability and artifact status.
+
+### Verification
+
+- Ran `wt bootstrap`.
+- Ran `npm run privacy:scan`.
+- Ran `npm test`.
+- Ran `npm run lint`.
+- Ran `npm run check:mac-accessibility`.
+- Ran `npm audit --audit-level=moderate`.
+- Ran `npm run benchmark:search`.
+- Ran `npm run check:reference -- --reference fixtures/codex/sample-reference-summary.json --path fixtures/codex/sample-session.jsonl --project sample-app`.
+- Ran `npm run release:mac`; the package was created, then the first package smoke pass reported an already-running packaged app/local engine process.
+- Cleaned up the leftover packaged app/local engine process and reran `npm run smoke:mac-package`.
+- Ran `npm run smoke:mac-ui`.
+- Ran checksum verification for `Codex-Log-Viewer-v0.1-build99-macOS.zip`.
+- Ran code signature and Gatekeeper assessment checks on the packaged app.
+- Ran `npm run release:notes -- --tag v0.1.0 --output dist/macos/release-notes.md`.
+
+## 2026-05-20 - Local Run And Signing Guidance
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> What do I need to do now to run this app locally on my machine?
+>
+> Do you need my Apple store credentials? What do you need?
+>
+> I believe my Apple information is already available in the Connect K game
+
+### Interpreted Intent
+
+The user wanted a clear explanation of how to run the native macOS app locally and whether Apple developer or App Store credentials are needed at this stage.
+
+### Response / Work Done
+
+- Reviewed the README, package scripts, macOS package definition, local engine startup code, and release checklist.
+- Confirmed the local machine has compatible Node, npm, and Swift tooling installed.
+- Confirmed a packaged `.app` already exists under `dist/macos`.
+- Explained that local development and local packaged runs do not require Apple credentials; Apple developer credentials are only needed for notarized public release artifacts.
+
+### Privacy Notes
+
+No Apple credentials, secrets, raw Codex logs, private session content, screenshots, recordings, or export payloads were requested or added.
+
+### Verification
+
+- Documentation-only guidance; no app rebuild or relaunch was needed.
+
 ## 2026-05-20 - Execute Manual QA Fix Plan
 
 Status: Completed

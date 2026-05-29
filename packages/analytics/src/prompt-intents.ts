@@ -5,8 +5,8 @@ export const promptIntentCategories = {
   implementation: { key: "implementation", label: "Implementation" },
   bugFixes: { key: "bug-fixes", label: "Bug fixes" },
   gitCommands: { key: "git-commands", label: "Git commands" },
-  deployRelease: { key: "deploy-release", label: "Deploy/release" },
-  runBuildApp: { key: "run-build-app", label: "Run/build app" },
+  deployRelease: { key: "deploy-release-run-build", label: "Deploy/release/run/build" },
+  runBuildApp: { key: "deploy-release-run-build", label: "Deploy/release/run/build" },
   codeReviewQa: { key: "code-review-qa", label: "Code review/QA" },
   planningStrategy: { key: "planning-strategy", label: "Planning/strategy" },
   research: { key: "research", label: "Research" },
@@ -15,7 +15,7 @@ export const promptIntentCategories = {
   refactorCleanup: { key: "refactor-cleanup", label: "Refactor/cleanup" },
   contentCreation: { key: "content-creation", label: "Content creation" },
   dataAnalysis: { key: "data-analysis", label: "Data/metrics" },
-  feedbackContext: { key: "feedback-context", label: "Feedback/context" },
+  feedbackContext: { key: "feedback-context", label: "Context/observation" },
   planApprovals: { key: "plan-approvals", label: "Plan approvals" },
   other: { key: "other", label: "Other" }
 } as const satisfies Record<string, PromptIntentCategory>;
