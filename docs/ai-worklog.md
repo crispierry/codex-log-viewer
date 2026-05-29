@@ -2,6 +2,44 @@
 
 Sanitized audit trail of AI-assisted work on this project.
 
+## 2026-05-29 - Document Unified AI Log Provider Support Plan
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> I want to investigate what it will take to also support Claude Code and other cloud-related messages
+>
+> Is that possible? Can I incorporate claude support to this log viewer?
+
+> Save this plan To our main branch
+
+### Interpreted Intent
+
+The user wanted to understand whether Claude Code and cloud-related AI messages can fit into the log viewer, then wanted the resulting provider-support plan saved directly on the `main` branch.
+
+### Response / Work Done
+
+- Reviewed the existing parser, analytics, API, CLI, documentation, and native app model to locate Codex-specific assumptions.
+- Inspected local Claude Code transcript metadata at a schema-only level and confirmed Claude local sessions are JSONL with provider-specific top-level records, nested Anthropic messages, usage metadata, and tool content blocks.
+- Recommended a generic provider adapter framework rather than a Claude-only bolt-on.
+- Confirmed the preferred product direction: many providers, unified AI logs, provider filters, and source labels.
+- Added `docs/unified-ai-log-provider-support-plan.md` with the plan name `Unified AI Log Provider Support`.
+- Linked the plan from `docs/research-and-roadmap.md`.
+- Documented that this is a documentation-only change and does not require rebuilding or relaunching the macOS app.
+
+### Privacy Notes
+
+No raw Claude Code transcripts, raw Codex logs, private prompts, session content, screenshots, recordings, export payloads, credentials, or secrets were added to tracked files. Local Claude inspection was limited to aggregate counts and redacted schema shapes.
+
+### Verification
+
+- Ran `wt bootstrap`.
+- Ran `git diff --check`.
+- Ran `npm run privacy:scan`.
+- Did not rebuild or relaunch the macOS app because this was documentation-only.
+
 ## 2026-05-29 - Document Optional ChatGPT Message Support Plan
 
 Status: Completed
