@@ -949,7 +949,14 @@ test("searchMessages searches messages across all projects and supports project 
 
   const allResults = searchMessages(corpus, { query: "parser test" });
   assert.equal(allResults.totalMatches, 2);
+  assert.equal(allResults.offset, 0);
   assert.equal(allResults.results[0]?.project, "sample-app");
+
+  const secondPage = searchMessages(corpus, { query: "parser test", limit: 1, offset: 1 });
+  assert.equal(secondPage.totalMatches, 2);
+  assert.equal(secondPage.limit, 1);
+  assert.equal(secondPage.offset, 1);
+  assert.equal(secondPage.results.length, 1);
 
   const userResults = searchMessages(corpus, { query: "parser test", role: "user" });
   assert.equal(userResults.totalMatches, 1);

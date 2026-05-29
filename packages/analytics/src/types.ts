@@ -138,6 +138,7 @@ export interface MessageSearchOptions extends SummaryOptions {
   submittedOnly?: boolean;
   hiddenCategories?: string[];
   limit?: number;
+  offset?: number;
 }
 
 export interface MessageSearchResult {
@@ -166,6 +167,7 @@ export interface MessageSearchSummary {
   generatedAt: string;
   totalMatches: number;
   limit: number;
+  offset: number;
   results: MessageSearchResult[];
 }
 

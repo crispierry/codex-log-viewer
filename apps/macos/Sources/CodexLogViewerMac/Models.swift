@@ -470,6 +470,7 @@ struct MessageSearchSummary: Decodable {
   let generatedAt: String
   let totalMatches: Int
   let limit: Int
+  let offset: Int
   let results: [MessageSearchResult]
 }
 

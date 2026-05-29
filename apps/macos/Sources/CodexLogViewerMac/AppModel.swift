@@ -7,6 +7,18 @@ struct LogLoadingNotice: Equatable {
   let message: String
 }
 
+struct InteractionPerformance: Equatable {
+  let renderID: String
+  let elapsedMs: Double
+  let source: String
+  let recordedAt: String
+}
+
+private struct SessionDetailCacheKey: Hashable {
+  let sessionID: String
+  let filePath: String?
+}
+
 @MainActor
 final class AppModel: ObservableObject {
   enum Status: Equatable {
@@ -35,8 +47,14 @@ final class AppModel: ObservableObject {
   @Published var projects: [ProjectListItem] = []
   @Published var summary: ProjectSummary?
   @Published var selectedSessionID: SessionSummary.ID?
-  @Published var selectedSessionDetail: SessionDetail?
-  @Published var selectedUserMessageIndex: Int?
+  @Published var selectedSessionDetail: SessionDetail? = nil {
+    didSet { updateSelectedInteraction() }
+  }
+  @Published var selectedUserMessageIndex: Int? = nil {
+    didSet { updateSelectedInteraction() }
+  }
+  @Published private(set) var selectedInteraction: SessionInteraction?
+  @Published private(set) var lastInteractionPerformance: InteractionPerformance?
   @Published var isDetailLoading = false
   @Published var showSessionBrowser = false
   @Published var browseMessagesSummary: MessageSearchSummary?
@@ -88,6 +106,7 @@ final class AppModel: ObservableObject {
   private var reloadTask: Task<Void, Never>?
   private var detailTask: Task<Void, Never>?
   private var quietDetailRefreshTask: Task<Void, Never>?
+  private var detailPrefetchTask: Task<Void, Never>?
   private var browseMessagesTask: Task<Void, Never>?
   private var searchTask: Task<Void, Never>?
   private var auditTask: Task<Void, Never>?
@@ -104,11 +123,19 @@ final class AppModel: ObservableObject {
   private var evalReviewRequestID = 0
   private var pendingSearchResultTarget: SearchResultSelectionTarget?
   private var pendingSearchConversationResult: MessageSearchResult?
+  private var sessionDetailCache: [SessionDetailCacheKey: SessionDetail] = [:]
+  private var sessionDetailCacheOrder: [SessionDetailCacheKey] = []
+  private var detailCacheGeneration = 0
+  private var pendingInteractionRenderStartedAt: Date?
+  private var pendingInteractionRenderSource = ""
+  private var pendingInteractionRenderID: String?
   private var isLogRefreshInFlight = false
   private let isEphemeralSettingsRun = ProcessInfo.processInfo.environment["CODEX_LOG_VIEWER_EPHEMERAL_SETTINGS"] == "1" ||
     ProcessInfo.processInfo.environment["CODEX_LOG_VIEWER_UI_TEST"] == "1"
   private var hasScheduledUITestQuit = false
   private static let backgroundSyncInterval: Duration = .seconds(60)
+  private static let sessionDetailCacheCapacity = 12
+  private static let browseMessagesPageSize = 500
 
   private enum RefreshMode {
     case foreground
@@ -123,6 +150,7 @@ final class AppModel: ObservableObject {
     reloadTask?.cancel()
     detailTask?.cancel()
     quietDetailRefreshTask?.cancel()
+    detailPrefetchTask?.cancel()
     browseMessagesTask?.cancel()
     searchTask?.cancel()
     auditTask?.cancel()
@@ -133,6 +161,11 @@ final class AppModel: ObservableObject {
 
   var browseMessages: [MessageSearchResult] {
     visibleBrowseMessages(in: browseMessagesSummary?.results ?? [])
+  }
+
+  var canLoadMoreBrowseMessages: Bool {
+    guard let browseMessagesSummary else { return false }
+    return browseMessagesSummary.results.count < browseMessagesSummary.totalMatches
   }
 
   var areBrowseMessagesHiddenByOperationalFilters: Bool {
@@ -395,6 +428,9 @@ final class AppModel: ObservableObject {
       rebuildCache: rebuildCache
     )
     let project = selectedProject
+    if shouldRefreshCache {
+      clearSessionDetailCache()
+    }
     beginLogRefresh(mode: mode, showLoadingNotice: shouldShowLoadingNotice, rebuildCache: rebuildCache)
 
     reloadTask = Task {
@@ -548,6 +584,7 @@ final class AppModel: ObservableObject {
         else {
           return
         }
+        storeSessionDetail(detail)
         selectedSessionDetail = detail
         reconcileSelectedUserMessage(in: detail)
       } catch {
@@ -741,6 +778,19 @@ final class AppModel: ObservableObject {
     }
     let target = detailTarget(for: selectionID)
 
+    if let detail = selectedSessionDetail,
+      sessionDetail(detail, matches: target) {
+      applyPendingMessageSelection(to: detail)
+      isDetailLoading = false
+      return
+    }
+    if let cachedDetail = cachedSessionDetail(for: target) {
+      selectedSessionDetail = cachedDetail
+      applyPendingMessageSelection(to: cachedDetail)
+      isDetailLoading = false
+      return
+    }
+
     quietDetailRefreshTask?.cancel()
     quietDetailRefreshRequestID += 1
     detailTask?.cancel()
@@ -760,6 +810,7 @@ final class AppModel: ObservableObject {
           filters: filters
         )
         guard !Task.isCancelled, requestID == detailRequestID else { return }
+        storeSessionDetail(detail)
         selectedSessionDetail = detail
         applyPendingMessageSelection(to: detail)
         isDetailLoading = false
@@ -773,7 +824,7 @@ final class AppModel: ObservableObject {
     }
   }
 
-  func loadBrowseMessages(selectFirstIfNeeded: Bool = false) {
+  func loadBrowseMessages(selectFirstIfNeeded: Bool = false, append: Bool = false) {
     guard let api else {
       browseMessagesSummary = nil
       selectedBrowseMessageID = nil
@@ -781,12 +832,16 @@ final class AppModel: ObservableObject {
       return
     }
 
+    let existingSummary = append ? browseMessagesSummary : nil
+    let offset = existingSummary?.results.count ?? 0
+    guard !append || canLoadMoreBrowseMessages else { return }
+
     browseMessagesTask?.cancel()
     browseMessagesRequestID += 1
     let requestID = browseMessagesRequestID
     let filters = currentFilters()
     let project = selectedProject
-    let limit = max(summary?.totals.userMessages ?? 100, 100)
+    let limit = Self.browseMessagesPageSize
 
     browseMessagesTask = Task {
       do {
@@ -799,19 +854,23 @@ final class AppModel: ObservableObject {
           project: project,
           filters: filters,
           submittedOnly: true,
-          limit: limit
+          limit: limit,
+          offset: offset
         )
         guard !Task.isCancelled, requestID == browseMessagesRequestID else { return }
-        browseMessagesSummary = searchResult.search
+        let updatedSearch = append
+          ? mergedBrowseSearch(existing: existingSummary, incoming: searchResult.search)
+          : searchResult.search
+        browseMessagesSummary = updatedSearch
         cacheMetadata = searchResult.cache ?? cacheMetadata
         isBrowseMessagesLoading = false
-        let visibleResults = visibleBrowseMessages(in: searchResult.search.results)
+        let visibleResults = visibleBrowseMessages(in: updatedSearch.results)
 
         let currentSelectionIsVisible = selectedBrowseMessageID.map { selectedID in
           visibleResults.contains { $0.id == selectedID }
         } ?? false
 
-        if !currentSelectionIsVisible {
+        if !append && !currentSelectionIsVisible {
           selectedBrowseMessageID = nil
           if !showSessionBrowser {
             clearSelectedSession()
@@ -838,8 +897,13 @@ final class AppModel: ObservableObject {
     }
   }
 
+  func loadMoreBrowseMessages() {
+    loadBrowseMessages(append: true)
+  }
+
   func selectBrowseMessage(_ messageID: MessageSearchResult.ID?) {
     selectedBrowseMessageID = messageID
+    beginInteractionSelection(source: "project-message")
     guard let messageID,
       let result = browseMessagesSummary?.results.first(where: { $0.id == messageID })
     else {
@@ -851,14 +915,47 @@ final class AppModel: ObservableObject {
 
     selectedSearchResultID = nil
     pendingSearchResultTarget = SearchResultSelectionTarget(result)
-    selectedUserMessageIndex = nil
-    selectedSessionID = sessionSelectionID(
+    let targetSelectionID = sessionSelectionID(
       sessionID: result.sessionId,
       filePath: result.filePath,
       dateKey: result.dateKey
     ) ?? result.sessionId
+    selectedSessionID = targetSelectionID
+
+    if let detail = selectedSessionDetail,
+      sessionDetail(detail, matches: (sessionID: result.sessionId, filePath: result.filePath, dateKey: result.dateKey)) {
+      detailTask?.cancel()
+      detailRequestID += 1
+      quietDetailRefreshTask?.cancel()
+      quietDetailRefreshRequestID += 1
+      applyPendingMessageSelection(to: detail)
+      isDetailLoading = false
+      prefetchNearbySessionDetails(after: result)
+      return
+    }
+    if let cachedDetail = cachedSessionDetail(
+      for: (sessionID: result.sessionId, filePath: result.filePath, dateKey: result.dateKey)
+    ) {
+      detailTask?.cancel()
+      detailRequestID += 1
+      quietDetailRefreshTask?.cancel()
+      quietDetailRefreshRequestID += 1
+      selectedSessionDetail = cachedDetail
+      applyPendingMessageSelection(to: cachedDetail)
+      isDetailLoading = false
+      prefetchNearbySessionDetails(after: result)
+      return
+    }
+
+    selectedUserMessageIndex = nil
     selectedSessionDetail = nil
     loadSelectedSession()
+    prefetchNearbySessionDetails(after: result)
+  }
+
+  func selectSessionUserMessage(_ index: Int) {
+    beginInteractionSelection(source: "session-message")
+    selectedUserMessageIndex = index
   }
 
   func searchMessages(activateSearch: Bool = true) {
@@ -1105,6 +1202,7 @@ final class AppModel: ObservableObject {
   }
 
   private func showConversation(for result: MessageSearchResult) {
+    beginInteractionSelection(source: "conversation-jump")
     selectedSection = .browse
     selectedBrowseMessageID = browseMessageID(for: result)
     pendingSearchResultTarget = SearchResultSelectionTarget(result)
@@ -1511,6 +1609,170 @@ final class AppModel: ObservableObject {
       return (result.sessionId, result.filePath, result.dateKey)
     }
     return (selectionID, nil, nil)
+  }
+
+  private func mergedBrowseSearch(
+    existing: MessageSearchSummary?,
+    incoming: MessageSearchSummary
+  ) -> MessageSearchSummary {
+    guard let existing else { return incoming }
+    var seenIDs = Set(existing.results.map(\.id))
+    let appendedResults = incoming.results.filter { seenIDs.insert($0.id).inserted }
+    let results = existing.results + appendedResults
+    return MessageSearchSummary(
+      query: incoming.query,
+      project: incoming.project,
+      generatedAt: incoming.generatedAt,
+      totalMatches: incoming.totalMatches,
+      limit: results.count,
+      offset: 0,
+      results: results
+    )
+  }
+
+  private func sessionDetail(
+    _ detail: SessionDetail,
+    matches target: (sessionID: String, filePath: String?, dateKey: String?)
+  ) -> Bool {
+    detail.file.sessionId == target.sessionID &&
+      (target.filePath == nil || detail.file.filePath == target.filePath)
+  }
+
+  private func sessionDetailCacheKey(
+    for target: (sessionID: String, filePath: String?, dateKey: String?)
+  ) -> SessionDetailCacheKey? {
+    guard let filePath = target.filePath else { return nil }
+    return SessionDetailCacheKey(sessionID: target.sessionID, filePath: filePath)
+  }
+
+  private func sessionDetailCacheKey(for detail: SessionDetail) -> SessionDetailCacheKey {
+    SessionDetailCacheKey(sessionID: detail.file.sessionId, filePath: detail.file.filePath)
+  }
+
+  private func cachedSessionDetail(
+    for target: (sessionID: String, filePath: String?, dateKey: String?)
+  ) -> SessionDetail? {
+    guard let key = sessionDetailCacheKey(for: target),
+      let detail = sessionDetailCache[key]
+    else {
+      return nil
+    }
+    touchSessionDetailCacheKey(key)
+    return detail
+  }
+
+  private func storeSessionDetail(_ detail: SessionDetail) {
+    let key = sessionDetailCacheKey(for: detail)
+    sessionDetailCache[key] = detail
+    touchSessionDetailCacheKey(key)
+    while sessionDetailCacheOrder.count > Self.sessionDetailCacheCapacity,
+      let oldestKey = sessionDetailCacheOrder.first {
+      sessionDetailCacheOrder.removeFirst()
+      sessionDetailCache.removeValue(forKey: oldestKey)
+    }
+  }
+
+  private func touchSessionDetailCacheKey(_ key: SessionDetailCacheKey) {
+    sessionDetailCacheOrder.removeAll { $0 == key }
+    sessionDetailCacheOrder.append(key)
+  }
+
+  private func clearSessionDetailCache() {
+    detailPrefetchTask?.cancel()
+    detailCacheGeneration += 1
+    sessionDetailCache.removeAll()
+    sessionDetailCacheOrder.removeAll()
+  }
+
+  private func prefetchNearbySessionDetails(after result: MessageSearchResult) {
+    guard let api else { return }
+    let messages = visibleBrowseMessages(in: browseMessagesSummary?.results ?? [])
+    guard let selectedIndex = messages.firstIndex(where: { $0.id == result.id }) else { return }
+    let currentKey = SessionDetailCacheKey(sessionID: result.sessionId, filePath: result.filePath)
+    guard let target = messages.dropFirst(selectedIndex + 1).first(where: { candidate in
+      let key = SessionDetailCacheKey(sessionID: candidate.sessionId, filePath: candidate.filePath)
+      return key != currentKey && sessionDetailCache[key] == nil
+    }) else {
+      return
+    }
+
+    detailPrefetchTask?.cancel()
+    let cacheGeneration = detailCacheGeneration
+    let filters = currentFilters()
+    let project = selectedProject
+
+    detailPrefetchTask = Task {
+      do {
+        let detail = try await api.sessionDetail(
+          sessionID: target.sessionId,
+          filePath: target.filePath,
+          dateKey: target.dateKey,
+          project: project,
+          filters: filters
+        )
+        guard !Task.isCancelled,
+          cacheGeneration == detailCacheGeneration
+        else {
+          return
+        }
+        storeSessionDetail(detail)
+      } catch {
+        return
+      }
+    }
+  }
+
+  private func beginInteractionSelection(source: String) {
+    pendingInteractionRenderStartedAt = Date()
+    pendingInteractionRenderSource = source
+    pendingInteractionRenderID = nil
+  }
+
+  private func currentInteractionRenderID() -> String? {
+    guard let detail = selectedSessionDetail,
+      let selectedUserMessageIndex
+    else {
+      return nil
+    }
+    return [
+      detail.file.filePath,
+      detail.file.sessionId,
+      String(selectedUserMessageIndex)
+    ].joined(separator: "#")
+  }
+
+  func recordInteractionRendered(renderID: String) {
+    guard let startedAt = pendingInteractionRenderStartedAt,
+      renderID == currentInteractionRenderID()
+    else {
+      return
+    }
+    let elapsedMs = Date().timeIntervalSince(startedAt) * 1000
+    let roundedElapsedMs = (elapsedMs * 10).rounded() / 10
+    lastInteractionPerformance = InteractionPerformance(
+      renderID: renderID,
+      elapsedMs: roundedElapsedMs,
+      source: pendingInteractionRenderSource,
+      recordedAt: Self.isoDateFormatter.string(from: Date())
+    )
+    pendingInteractionRenderStartedAt = nil
+    pendingInteractionRenderID = nil
+    Self.writeStdout("Interaction rendered in \(roundedElapsedMs) ms (\(pendingInteractionRenderSource)).\n")
+  }
+
+  private func updateSelectedInteraction() {
+    guard let detail = selectedSessionDetail,
+      let selectedUserMessageIndex
+    else {
+      selectedInteraction = nil
+      pendingInteractionRenderID = nil
+      return
+    }
+    selectedInteraction = SessionInteractionBuilder.interaction(
+      in: detail,
+      selectedUserMessageIndex: selectedUserMessageIndex
+    )
+    pendingInteractionRenderID = currentInteractionRenderID()
   }
 
   private func sessionForSelectionID(_ selectionID: SessionSummary.ID) -> SessionSummary? {

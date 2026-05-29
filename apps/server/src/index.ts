@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { realpathSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { performance } from "node:perf_hooks";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -8,6 +9,7 @@ import {
   classifyPromptIntent,
   loadCorpus,
   mergeAuditMarkdown,
+  projectContextForFile,
   promptIntentEvalMessages,
   searchMessages,
   summaryToCsv,
@@ -15,11 +17,15 @@ import {
   summarizeParsedCorpus,
   userMessageCategoryLabel,
   type LoadedCorpus,
+  type MessageSearchOptions,
+  type MessageSearchSummary,
   type ParseCacheMetadata,
   type PromptIntentEvalReview,
   type PromptIntentEvalReviewState,
   type SummaryOptions
 } from "@codex-log-viewer/analytics";
+import type { ParsedCodexCorpus, ParsedCodexFile, SessionRecord } from "@codex-log-viewer/parser";
+import { openCurrentSearchIndex, openSearchIndex, searchIndexPath, type SearchIndexHandle } from "./search-index.js";
 
 export interface ServerOptions {
   host?: string;
@@ -35,15 +41,29 @@ interface CorpusCacheEntry {
   loaded?: LoadedCorpus;
 }
 
+interface SearchIndexCacheEntry {
+  handle: SearchIndexHandle;
+}
+
+interface PerformanceTiming {
+  totalMs: number;
+  corpusLoadMs?: number;
+  summaryMs?: number;
+  searchMs?: number;
+  sessionDetailMs?: number;
+}
+
 export async function startServer(options: ServerOptions = {}): Promise<{ url: string; close: () => Promise<void> }> {
   const host = options.host ?? "127.0.0.1";
   const port = options.port ?? 3210;
   const keepAlive = setInterval(() => undefined, 60_000);
   const corpusCache = new Map<string, CorpusCacheEntry>();
+  const searchIndexCache = new Map<string, SearchIndexCacheEntry>();
+  const searchIndexRebuilds = new Set<string>();
 
   const server = createServer(async (request, response) => {
     try {
-      await handleRequest(request, response, options, corpusCache);
+      await handleRequest(request, response, options, corpusCache, searchIndexCache, searchIndexRebuilds);
     } catch (error) {
       sendJson(response, 500, {
         error: error instanceof Error ? error.message : "Unexpected server error"
@@ -61,13 +81,18 @@ export async function startServer(options: ServerOptions = {}): Promise<{ url: s
   const actualPort = typeof address === "object" && address ? address.port : port;
   return {
     url: `http://${host}:${actualPort}`,
-    close: () =>
-      new Promise((resolve, reject) =>
+    close: async () => {
+      await new Promise<void>((resolve, reject) =>
         server.close((error) => {
           clearInterval(keepAlive);
           return error ? reject(error) : resolve();
         })
-      )
+      );
+      for (const entry of searchIndexCache.values()) {
+        entry.handle.close();
+      }
+      searchIndexCache.clear();
+    }
   };
 }
 
@@ -75,9 +100,12 @@ async function handleRequest(
   request: IncomingMessage,
   response: ServerResponse,
   options: ServerOptions,
-  corpusCache: Map<string, CorpusCacheEntry>
+  corpusCache: Map<string, CorpusCacheEntry>,
+  searchIndexCache: Map<string, SearchIndexCacheEntry>,
+  searchIndexRebuilds: Set<string>
 ): Promise<void> {
   const url = new URL(request.url ?? "/", "http://localhost");
+  const requestStartedAt = performance.now();
   if (!isAuthorized(request, options.authToken)) {
     sendJson(response, 401, { error: "Unauthorized" });
     return;
@@ -89,22 +117,38 @@ async function handleRequest(
   }
 
   if (url.pathname === "/api/projects") {
+    const corpusStartedAt = performance.now();
     const corpus = await loadCachedCorpus(url, options, corpusCache);
-    sendJson(response, 200, withCacheMetadata({ projects: corpus.projects }, corpus.cache));
+    sendJson(response, 200, withPerformanceMetadata(
+      withCacheMetadata({ projects: corpus.projects }, corpus.cache),
+      { totalMs: elapsedMs(requestStartedAt), corpusLoadMs: elapsedMs(corpusStartedAt) }
+    ));
     return;
   }
 
   if (url.pathname === "/api/summary") {
+    const corpusStartedAt = performance.now();
     const loaded = await loadCachedCorpus(url, options, corpusCache);
+    const corpusLoadMs = elapsedMs(corpusStartedAt);
+    const summaryStartedAt = performance.now();
     const summary = summarizeParsedCorpus(loaded.corpus, summaryOptionsFromQuery(url, options.paths));
-    sendJson(response, 200, withCacheMetadata({ summary }, loaded.cache));
+    sendJson(response, 200, withPerformanceMetadata(
+      withCacheMetadata({ summary }, loaded.cache),
+      { totalMs: elapsedMs(requestStartedAt), corpusLoadMs, summaryMs: elapsedMs(summaryStartedAt) }
+    ));
     return;
   }
 
   if (url.pathname === "/api/sessions") {
+    const corpusStartedAt = performance.now();
     const loaded = await loadCachedCorpus(url, options, corpusCache);
+    const corpusLoadMs = elapsedMs(corpusStartedAt);
+    const summaryStartedAt = performance.now();
     const summary = summarizeParsedCorpus(loaded.corpus, summaryOptionsFromQuery(url, options.paths));
-    sendJson(response, 200, { sessions: summary.sessions });
+    sendJson(response, 200, withPerformanceMetadata(
+      { sessions: summary.sessions },
+      { totalMs: elapsedMs(requestStartedAt), corpusLoadMs, summaryMs: elapsedMs(summaryStartedAt) }
+    ));
     return;
   }
 
@@ -116,30 +160,18 @@ async function handleRequest(
     }
     const filePath = url.searchParams.get("filePath") ?? undefined;
     const dateKey = url.searchParams.get("dateKey") ?? undefined;
+    const corpusStartedAt = performance.now();
     const loaded = await loadCachedCorpus(url, options, corpusCache);
+    const corpusLoadMs = elapsedMs(corpusStartedAt);
     const summaryOptions = summaryOptionsFromQuery(url, options.paths);
-    const summary = summarizeParsedCorpus(loaded.corpus, summaryOptions);
-    const visibleSession = summary.sessions.find(
-      (session) =>
-        session.sessionId === sessionId &&
-        (!filePath || session.filePath === filePath) &&
-        (!dateKey || session.dateKey === dateKey)
-    );
-    if (!visibleSession) {
-      sendJson(response, 404, { error: "Session not found" });
-      return;
-    }
-    const file = loaded.corpus.files.find(
-      (candidate) => candidate.sessionId === sessionId && candidate.filePath === visibleSession.filePath
-    );
-    const session = loaded.corpus.sessions.find(
-      (candidate) => candidate.sessionId === sessionId && candidate.filePath === visibleSession.filePath
-    );
+    const sessionDetailStartedAt = performance.now();
+    const file = findVisibleSessionFile(loaded.corpus, sessionId, filePath, dateKey, summaryOptions);
     if (!file) {
       sendJson(response, 404, { error: "Session not found" });
       return;
     }
-    sendJson(response, 200, {
+    const session = findSessionRecord(loaded.corpus, file);
+    sendJson(response, 200, withPerformanceMetadata({
       session,
       file: {
         filePath: file.filePath,
@@ -165,27 +197,35 @@ async function handleRequest(
       toolEvents: file.toolEvents,
       unknownEvents: file.unknownEvents,
       warnings: file.warnings
-    });
+    }, { totalMs: elapsedMs(requestStartedAt), corpusLoadMs, sessionDetailMs: elapsedMs(sessionDetailStartedAt) }));
     return;
   }
 
   if (url.pathname === "/api/messages/search") {
+    const corpusStartedAt = performance.now();
     const loaded = await loadCachedCorpus(url, options, corpusCache);
+    const corpusLoadMs = elapsedMs(corpusStartedAt);
     const limit = Number(url.searchParams.get("limit") ?? 100);
-    sendJson(response, 200, withCacheMetadata({
-      search: searchMessages(loaded.corpus, {
-        ...summaryOptionsFromQuery(url, options.paths),
-        query: url.searchParams.get("q") ?? "",
-        role: roleFromQuery(url.searchParams.get("role")),
-        model: url.searchParams.get("model") ?? undefined,
-        sessionId: url.searchParams.get("sessionId") ?? undefined,
-        filePath: url.searchParams.get("filePath") ?? undefined,
-        dateKey: url.searchParams.get("dateKey") ?? undefined,
-        submittedOnly: url.searchParams.get("submittedOnly") === "true",
-        hiddenCategories: url.searchParams.getAll("hiddenCategory"),
-        limit
-      })
-    }, loaded.cache));
+    const offset = Number(url.searchParams.get("offset") ?? 0);
+    const searchStartedAt = performance.now();
+    const searchOptions = {
+      ...summaryOptionsFromQuery(url, options.paths),
+      query: url.searchParams.get("q") ?? "",
+      role: roleFromQuery(url.searchParams.get("role")),
+      model: url.searchParams.get("model") ?? undefined,
+      sessionId: url.searchParams.get("sessionId") ?? undefined,
+      filePath: url.searchParams.get("filePath") ?? undefined,
+      dateKey: url.searchParams.get("dateKey") ?? undefined,
+      submittedOnly: url.searchParams.get("submittedOnly") === "true",
+      hiddenCategories: url.searchParams.getAll("hiddenCategory"),
+      limit,
+      offset
+    };
+    const search = searchMessagesWithLocalIndex(url, options, loaded, searchOptions, searchIndexCache, searchIndexRebuilds) ??
+      searchMessages(loaded.corpus, searchOptions);
+    sendJson(response, 200, withPerformanceMetadata(withCacheMetadata({
+      search
+    }, loaded.cache), { totalMs: elapsedMs(requestStartedAt), corpusLoadMs, searchMs: elapsedMs(searchStartedAt) }));
     return;
   }
 
@@ -356,6 +396,86 @@ function loadCachedCorpus(
   return entry.promise;
 }
 
+function searchMessagesWithLocalIndex(
+  url: URL,
+  options: ServerOptions,
+  loaded: LoadedCorpus,
+  searchOptions: MessageSearchOptions,
+  searchIndexCache: Map<string, SearchIndexCacheEntry>,
+  searchIndexRebuilds: Set<string>
+): MessageSearchSummary | undefined {
+  const cacheDir = options.cacheDir ?? serverCacheDir();
+  if (!cacheDir) {
+    return undefined;
+  }
+
+  const paths = pathsFromQuery(url, options.paths);
+  const key = cacheKey(paths, cacheDir);
+  if (loaded.corpus.messages.length < searchIndexMinMessages()) {
+    searchIndexCache.get(key)?.handle.close();
+    searchIndexCache.delete(key);
+    return undefined;
+  }
+  const shouldReopen = loaded.cache?.cacheStatus === "updated" || loaded.cache?.cacheStatus === "rebuilt";
+  let entry = searchIndexCache.get(key);
+  const indexPath = searchIndexPath(cacheDir, key);
+  if (entry && shouldReopen) {
+    entry?.handle.close();
+    searchIndexCache.delete(key);
+    entry = undefined;
+  }
+
+  if (!entry) {
+    const currentHandle = openCurrentSearchIndex(loaded.corpus, indexPath);
+    if (currentHandle) {
+      entry = { handle: currentHandle };
+      searchIndexCache.set(key, entry);
+    } else {
+      scheduleSearchIndexRebuild(key, indexPath, loaded, searchIndexCache, searchIndexRebuilds);
+      return undefined;
+    }
+  }
+
+  try {
+    return entry.handle.search(searchOptions);
+  } catch {
+    return undefined;
+  }
+}
+
+function scheduleSearchIndexRebuild(
+  key: string,
+  indexPath: string,
+  loaded: LoadedCorpus,
+  searchIndexCache: Map<string, SearchIndexCacheEntry>,
+  searchIndexRebuilds: Set<string>
+): void {
+  if (searchIndexRebuilds.has(key)) {
+    return;
+  }
+  searchIndexRebuilds.add(key);
+  const timer = setTimeout(() => {
+    try {
+      const handle = openSearchIndex(loaded.corpus, indexPath);
+      searchIndexCache.get(key)?.handle.close();
+      searchIndexCache.set(key, { handle });
+    } finally {
+      searchIndexRebuilds.delete(key);
+    }
+  }, searchIndexRebuildDelayMs());
+  timer.unref?.();
+}
+
+function searchIndexMinMessages(): number {
+  const configured = Number(process.env.CODEX_LOG_VIEWER_SEARCH_INDEX_MIN_MESSAGES ?? 20_000);
+  return Number.isFinite(configured) ? Math.max(0, configured) : 20_000;
+}
+
+function searchIndexRebuildDelayMs(): number {
+  const configured = Number(process.env.CODEX_LOG_VIEWER_SEARCH_INDEX_REBUILD_DELAY_MS ?? 2_000);
+  return Number.isFinite(configured) ? Math.max(0, configured) : 2_000;
+}
+
 function summaryOptionsFromQuery(url: URL, fallbackPaths?: string[]): SummaryOptions {
   return {
     paths: pathsFromQuery(url, fallbackPaths),
@@ -437,6 +557,115 @@ function reviewStateFromQuery(value: string | null): PromptIntentEvalReviewState
     default:
       return "all";
   }
+}
+
+function findVisibleSessionFile(
+  corpus: ParsedCodexCorpus,
+  sessionId: string,
+  filePath: string | undefined,
+  dateKey: string | undefined,
+  options: SummaryOptions
+): ParsedCodexFile | undefined {
+  const project = projectFromSummaryOptions(options);
+  const range = dateRangeFromSummaryOptions(options);
+
+  return corpus.files.find((file) => {
+    if (file.sessionId !== sessionId) {
+      return false;
+    }
+    if (filePath && file.filePath !== filePath) {
+      return false;
+    }
+    if (project && projectContextForFile(file, corpus).project !== project) {
+      return false;
+    }
+    if (dateKey && !fileHasSubmittedUserMessageOnDate(file, dateKey, range)) {
+      return false;
+    }
+    if ((range.since !== undefined || range.until !== undefined) && !fileHasActivityInRange(file, range)) {
+      return false;
+    }
+    return true;
+  });
+}
+
+function findSessionRecord(corpus: ParsedCodexCorpus, file: ParsedCodexFile): SessionRecord | undefined {
+  return corpus.sessions.find((session) => session.sessionId === file.sessionId && session.filePath === file.filePath);
+}
+
+function projectFromSummaryOptions(options: SummaryOptions): string | undefined {
+  return options.project && options.project !== "All Projects" ? options.project : undefined;
+}
+
+function fileHasSubmittedUserMessageOnDate(
+  file: ParsedCodexFile,
+  dateKey: string,
+  range: { since?: number; until?: number }
+): boolean {
+  return file.messages.some(
+    (message) =>
+      message.sourceEvent === "event_msg.user_message" &&
+      localDateKey(message.timestamp) === dateKey &&
+      timestampInRange(message.timestamp, range)
+  );
+}
+
+function fileHasActivityInRange(file: ParsedCodexFile, range: { since?: number; until?: number }): boolean {
+  return [...file.sessions, ...file.messages, ...file.turns, ...file.tokenUsage].some((record) =>
+    timestampInRange(record.timestamp, range)
+  );
+}
+
+function dateRangeFromSummaryOptions(options: SummaryOptions): { since?: number; until?: number } {
+  return {
+    since: options.since ? startOfDate(options.since) : undefined,
+    until: options.until ? endOfDate(options.until) : undefined
+  };
+}
+
+function startOfDate(value: string): number {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return Date.parse(`${value}T00:00:00.000`);
+  }
+  return Date.parse(value);
+}
+
+function endOfDate(value: string): number {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return Date.parse(`${value}T23:59:59.999`);
+  }
+  return Date.parse(value);
+}
+
+function timestampInRange(timestamp: string | undefined, range: { since?: number; until?: number }): boolean {
+  if (!timestamp) {
+    return true;
+  }
+  const value = Date.parse(timestamp);
+  if (Number.isNaN(value)) {
+    return true;
+  }
+  if (range.since !== undefined && value < range.since) {
+    return false;
+  }
+  if (range.until !== undefined && value > range.until) {
+    return false;
+  }
+  return true;
+}
+
+function localDateKey(timestamp: string | undefined): string {
+  if (!timestamp) {
+    return "unknown";
+  }
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) {
+    return "unknown";
+  }
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function cacheKey(paths: string[] | undefined, cacheDir: string | undefined): string {
@@ -522,9 +751,17 @@ function withCacheMetadata<T extends Record<string, unknown>>(body: T, cache: Pa
   return cache ? { ...body, ...cache } : body;
 }
 
+function withPerformanceMetadata<T extends Record<string, unknown>>(body: T, timing: PerformanceTiming): T & { performance: PerformanceTiming } {
+  return { ...body, performance: timing };
+}
+
+function elapsedMs(startedAt: number): number {
+  return Math.round((performance.now() - startedAt) * 10) / 10;
+}
+
 function sendJson(response: ServerResponse, statusCode: number, value: unknown): void {
   response.writeHead(statusCode, { "content-type": "application/json; charset=utf-8" });
-  response.end(JSON.stringify(value, null, 2));
+  response.end(JSON.stringify(value));
 }
 
 function isAuthorized(request: IncomingMessage, authToken: string | undefined): boolean {

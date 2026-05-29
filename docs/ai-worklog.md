@@ -2,6 +2,65 @@
 
 Sanitized audit trail of AI-assisted work on this project.
 
+## 2026-05-29 - Improve Interaction Loading Performance
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> Maybe our logs have become too big But right now the system performance, the app performance, has really degraded. Anytime I click on a message I see this spinning loading all the time. What can we do to speed this up?
+>
+> Also I want to make sure we're effectively writing these messages. Right now anytime the app is loading, there's a lot of wait. Remember the idea is we're caching all this information available locally so that we can easily and quickly navigate through messages
+>
+> Manually clocked it right now. When I selected a different message, it took over five seconds for the Codex interaction to be displayed. That's unacceptable
+>
+> Cohesive plan to improve overall performance for maintaining the logs and displaying the logs
+
+> Let's optimize the application until it's fully performant. Right now it takes too long between selecting a message and viewing the review. The cache is probably not operating as well as it could. Please take a look at the documentation you created here, the performance.md, and complete all tasks
+
+### Interpreted Intent
+
+The user wanted the local-first cache/navigation model to feel fast again, especially message selection into the Codex interaction pane, and wanted a cohesive performance plan for log maintenance and display.
+
+### Response / Work Done
+
+- Audited the project-level message selection path from native SwiftUI state through the local server session-detail endpoint.
+- Reused already-loaded session details when selecting another message from the same underlying log file, avoiding unnecessary spinner states and local server round trips.
+- Stored the selected interaction in the app model so the interaction range is not rebuilt repeatedly by SwiftUI while rendering one selection.
+- Changed `/api/session` to validate and fetch the requested session directly instead of recomputing the full project summary before returning one session.
+- Reduced local API payload overhead by compacting JSON responses.
+- Added a fast path for empty-query browse snippets so project message browsing does not normalize every message body just to return the first snippet.
+- Added server-side performance timings for corpus load, summary, search/browse, and session detail.
+- Added native click-to-render interaction timing recorded to stdout and the app model.
+- Added a bounded native session-detail cache with nearby-session prefetch.
+- Paged project-message browsing in 500-row chunks with incremental loading instead of loading every submitted message into SwiftUI.
+- Added a private local SQLite message index under the app cache for browse/search queries, with fallback to the existing in-memory search for correctness.
+- Made interaction rendering more incremental with lazy stacks and collapsed very large message cards.
+- Updated `docs/performance.md` from planned tasks to implemented behavior.
+- Rebuilt, packaged, and relaunched the native macOS app for review.
+
+### Privacy Notes
+
+No raw Codex logs, private prompts, session content, screenshots, recordings, export payloads, credentials, or secrets were added. The performance plan is implementation-level only.
+
+### Verification
+
+- Ran `wt bootstrap`.
+- Ran `npm run build:native-engine`.
+- Ran `swift build --package-path apps/macos`.
+- Ran `npm test`.
+- Ran `npm run benchmark:search` (`18,000` synthetic messages, `31 ms`, `1,500 ms` budget).
+- Ran a temporary synthetic warm-session API benchmark (`800` sessions, `38,400` messages, session detail `0-7 ms`).
+- Ran a temporary synthetic indexed browse/session API benchmark (`800` sessions, `38,400` messages, first indexed browse `423 ms`, warm browse `14-15 ms`, session detail `0-1 ms`).
+- Ran an aggregate-only local cache benchmark without printing prompts, paths, project names, or session ids (`4,721` submitted messages, browse page `104-129 ms`, session detail `3-4 ms`).
+- Ran `npm run lint`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`.
+- Ran `npm run smoke:mac-ui`.
+- Ran `git diff --check`.
+- Relaunched `dist/macos/Codex Log Viewer.app`.
+
 ## 2026-05-29 - Add In-App Project Focus Evals
 
 Status: Completed

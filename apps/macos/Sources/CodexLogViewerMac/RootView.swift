@@ -643,7 +643,7 @@ struct SentMessagesBrowserColumn: View {
       ScrollViewReader { proxy in
         List(sessionUserMessages, id: \.offset) { item in
           Button {
-            model.selectedUserMessageIndex = item.offset
+            model.selectSessionUserMessage(item.offset)
           } label: {
             SentMessageBrowserRow(
               message: item.element,
@@ -693,20 +693,41 @@ struct SentMessagesBrowserColumn: View {
       .frame(maxWidth: .infinity, maxHeight: .infinity)
     } else {
       ScrollViewReader { proxy in
-        List(browseMessages) { message in
-          Button {
-            model.selectBrowseMessage(message.id)
-          } label: {
-            SentMessageResultBrowserRow(
-              message: message,
-              isSelected: model.selectedBrowseMessageID == message.id
-            )
+        List {
+          ForEach(browseMessages) { message in
+            Button {
+              model.selectBrowseMessage(message.id)
+            } label: {
+              SentMessageResultBrowserRow(
+                message: message,
+                isSelected: model.selectedBrowseMessageID == message.id
+              )
+            }
+            .id(message.id)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+            .listRowInsets(EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8))
           }
-          .id(message.id)
-          .frame(maxWidth: .infinity, alignment: .leading)
-          .contentShape(Rectangle())
-          .buttonStyle(.plain)
-          .listRowInsets(EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8))
+
+          if model.canLoadMoreBrowseMessages {
+            Button {
+              model.loadMoreBrowseMessages()
+            } label: {
+              HStack(spacing: 8) {
+                if model.isBrowseMessagesLoading {
+                  ProgressView()
+                    .controlSize(.small)
+                }
+                Label("Load More", systemImage: "arrow.down.circle")
+                Spacer()
+              }
+              .padding(10)
+            }
+            .buttonStyle(.plain)
+            .disabled(model.isBrowseMessagesLoading)
+            .listRowInsets(EdgeInsets(top: 4, leading: 8, bottom: 8, trailing: 8))
+          }
         }
         .listStyle(.plain)
         .accessibilityIdentifier("browse-messages-list")
@@ -870,15 +891,6 @@ private extension View {
 struct InteractionBrowserColumn: View {
   @EnvironmentObject private var model: AppModel
 
-  private var selectedInteraction: SessionInteraction? {
-    guard let detail = model.selectedSessionDetail,
-      let selectedUserMessageIndex = model.selectedUserMessageIndex
-    else {
-      return nil
-    }
-    return SessionInteractionBuilder.interaction(in: detail, selectedUserMessageIndex: selectedUserMessageIndex)
-  }
-
   var body: some View {
     VStack(spacing: 0) {
       Group {
@@ -903,10 +915,11 @@ struct InteractionBrowserColumn: View {
             description: Text("Choose a sent message to show the Codex interaction.")
           )
           .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if let selectedInteraction {
+        } else if let selectedInteraction = model.selectedInteraction {
           ScrollView {
             CodexInteractionView(interaction: selectedInteraction)
               .padding(16)
+              .background(InteractionRenderProbe(renderID: interactionRenderID))
           }
         } else {
           ContentUnavailableView(
@@ -926,7 +939,7 @@ struct InteractionBrowserColumn: View {
   }
 
   private var interactionSubtitle: String? {
-    guard let selectedInteraction else { return nil }
+    guard let selectedInteraction = model.selectedInteraction else { return nil }
     let responseCount = selectedInteraction.assistantMessages.count
     let toolCount = selectedInteraction.toolEvents.count
     let responseLabel = "\(responseCount.formatted()) \(responseCount == 1 ? "response" : "responses")"
@@ -935,6 +948,30 @@ struct InteractionBrowserColumn: View {
       return "\(responseLabel) · \(toolLabel)"
     }
     return responseLabel
+  }
+
+  private var interactionRenderID: String {
+    [
+      model.selectedSessionDetail?.file.filePath ?? "",
+      model.selectedSessionDetail?.file.sessionId ?? "",
+      model.selectedUserMessageIndex.map(String.init) ?? ""
+    ].joined(separator: "#")
+  }
+}
+
+private struct InteractionRenderProbe: View {
+  @EnvironmentObject private var model: AppModel
+  let renderID: String
+
+  var body: some View {
+    Color.clear
+      .frame(width: 0, height: 0)
+      .onAppear {
+        model.recordInteractionRendered(renderID: renderID)
+      }
+      .onChange(of: renderID) { _, newValue in
+        model.recordInteractionRendered(renderID: newValue)
+      }
   }
 }
 
@@ -2745,7 +2782,7 @@ struct CodexInteractionView: View {
         Text("No Codex response was found for this message.")
           .foregroundStyle(.secondary)
       } else {
-        VStack(alignment: .leading, spacing: 10) {
+        LazyVStack(alignment: .leading, spacing: 10) {
           ForEach(Array(interaction.assistantMessages.enumerated()), id: \.offset) { _, message in
             InteractionMessageCard(
               title: responseTitle(message),
@@ -2759,7 +2796,7 @@ struct CodexInteractionView: View {
 
       if !interaction.toolEvents.isEmpty {
         DisclosureGroup("Tool Activity (\(interaction.toolEvents.count.formatted()))") {
-          VStack(alignment: .leading, spacing: 8) {
+          LazyVStack(alignment: .leading, spacing: 8) {
             ForEach(Array(interaction.toolEvents.enumerated()), id: \.offset) { _, event in
               ToolEventRow(event: event)
             }
@@ -2770,7 +2807,7 @@ struct CodexInteractionView: View {
 
       if !interaction.contextMessages.isEmpty {
         DisclosureGroup("System / Developer Context (\(interaction.contextMessages.count.formatted()))") {
-          VStack(alignment: .leading, spacing: 8) {
+          LazyVStack(alignment: .leading, spacing: 8) {
             ForEach(Array(interaction.contextMessages.enumerated()), id: \.offset) { _, message in
               InteractionMessageCard(
                 title: contextTitle(message),
@@ -2830,9 +2867,21 @@ struct InteractionMessageCard: View {
   var promptIntentKey: String?
   var promptIntent: String?
   var monospaced = false
+  @State private var isExpanded = false
+
+  private let collapsedCharacterLimit = 12_000
 
   private var bodyFont: Font {
     monospaced ? .system(.body, design: .monospaced) : .body
+  }
+
+  private var isCollapsible: Bool {
+    text.count > collapsedCharacterLimit
+  }
+
+  private var displayText: String {
+    guard isCollapsible, !isExpanded else { return text }
+    return "\(String(text.prefix(collapsedCharacterLimit)))..."
   }
 
   var body: some View {
@@ -2848,10 +2897,20 @@ struct InteractionMessageCard: View {
           .font(.caption.monospacedDigit())
           .foregroundStyle(.secondary)
       }
-      Text(text)
+      Text(displayText)
         .font(bodyFont)
         .textSelection(.enabled)
         .frame(maxWidth: .infinity, alignment: .leading)
+      if isCollapsible {
+        Button {
+          isExpanded.toggle()
+        } label: {
+          Label(isExpanded ? "Collapse" : "Show Full", systemImage: isExpanded ? "chevron.up" : "chevron.down")
+        }
+        .buttonStyle(.plain)
+        .font(.caption)
+        .foregroundStyle(tint)
+      }
     }
     .padding(10)
     .frame(maxWidth: .infinity, alignment: .leading)

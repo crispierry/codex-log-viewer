@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, unlink, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import test from "node:test";
@@ -55,6 +55,19 @@ test("message search supports model and session filters through the local API", 
     const matchBody = await match.json();
     assert.equal(matchBody.search.totalMatches, 2);
     assert.equal(matchBody.search.results[0]?.model, "gpt-5.5");
+    assert.equal(typeof matchBody.performance?.totalMs, "number");
+    assert.equal(typeof matchBody.performance?.searchMs, "number");
+
+    const secondPage = await fetch(
+      `${server.url}/api/messages/search?q=parser%20test&limit=1&offset=1`,
+      { headers }
+    );
+    assert.equal(secondPage.status, 200);
+    const secondPageBody = await secondPage.json();
+    assert.equal(secondPageBody.search.totalMatches, 2);
+    assert.equal(secondPageBody.search.limit, 1);
+    assert.equal(secondPageBody.search.offset, 1);
+    assert.equal(secondPageBody.search.results.length, 1);
 
     const miss = await fetch(`${server.url}/api/messages/search?q=parser%20test&model=gpt-4.1`, { headers });
     assert.equal(miss.status, 200);
@@ -147,6 +160,43 @@ test("message search can limit browse mode to submitted user messages through th
   } finally {
     await server.close();
     await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("message search writes and reads a local SQLite search index when cache is configured", async () => {
+  const tempDir = await mkdtemp(`${tmpdir()}/codex-log-viewer-search-index-`);
+  const cacheDir = resolve(tempDir, "cache");
+  const previousMinMessages = process.env.CODEX_LOG_VIEWER_SEARCH_INDEX_MIN_MESSAGES;
+  const previousDelayMs = process.env.CODEX_LOG_VIEWER_SEARCH_INDEX_REBUILD_DELAY_MS;
+  process.env.CODEX_LOG_VIEWER_SEARCH_INDEX_MIN_MESSAGES = "0";
+  process.env.CODEX_LOG_VIEWER_SEARCH_INDEX_REBUILD_DELAY_MS = "0";
+  const server = await startServer({ port: 0, authToken: "test-token", paths: [fixturePath], cacheDir });
+  const headers = { authorization: "Bearer test-token" };
+
+  try {
+    const search = await fetch(`${server.url}/api/messages/search?q=parser%20test&limit=1&offset=1`, { headers });
+    assert.equal(search.status, 200);
+    const body = await search.json();
+    assert.equal(body.search.totalMatches, 2);
+    assert.equal(body.search.offset, 1);
+    assert.equal(body.search.results.length, 1);
+
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 50));
+    const indexFiles = await readdir(resolve(cacheDir, "search-index-v1"));
+    assert.equal(indexFiles.some((file) => file.endsWith(".sqlite")), true);
+  } finally {
+    await server.close();
+    await rm(tempDir, { recursive: true, force: true });
+    if (previousMinMessages === undefined) {
+      delete process.env.CODEX_LOG_VIEWER_SEARCH_INDEX_MIN_MESSAGES;
+    } else {
+      process.env.CODEX_LOG_VIEWER_SEARCH_INDEX_MIN_MESSAGES = previousMinMessages;
+    }
+    if (previousDelayMs === undefined) {
+      delete process.env.CODEX_LOG_VIEWER_SEARCH_INDEX_REBUILD_DELAY_MS;
+    } else {
+      process.env.CODEX_LOG_VIEWER_SEARCH_INDEX_REBUILD_DELAY_MS = previousDelayMs;
+    }
   }
 });
 

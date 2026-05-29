@@ -160,6 +160,7 @@ export function searchMessages(corpus: ParsedCodexCorpus, options: MessageSearch
   const aliases = options.aliases ?? [];
   const project = options.project && options.project !== "All Projects" ? options.project : "All Projects";
   const limit = clampLimit(options.limit);
+  const offset = clampOffset(options.offset);
   const modelFilter = options.model?.trim();
   const sessionFilter = options.sessionId?.trim();
   const filePathFilter = options.filePath?.trim();
@@ -265,7 +266,8 @@ export function searchMessages(corpus: ParsedCodexCorpus, options: MessageSearch
     generatedAt: new Date().toISOString(),
     totalMatches: matches.length,
     limit,
-    results: matches.slice(0, limit)
+    offset,
+    results: matches.slice(offset, offset + limit)
   };
 }
 
@@ -284,8 +286,20 @@ function clampLimit(limit: number | undefined): number {
   return Math.max(1, Math.min(10_000, Math.trunc(limit)));
 }
 
+function clampOffset(offset: number | undefined): number {
+  if (!offset || Number.isNaN(offset)) {
+    return 0;
+  }
+  return Math.max(0, Math.trunc(offset));
+}
+
 function snippetFor(content: string, query: string): string {
   const trimmed = content.trim();
+  if (!query.trim()) {
+    const end = Math.min(trimmed.length, 240);
+    const suffix = end < trimmed.length ? "..." : "";
+    return `${trimmed.slice(0, end)}${suffix}`;
+  }
   const matchIndex = normalizedMatchStart(trimmed, query);
   const start = matchIndex >= 0 ? Math.max(0, matchIndex - 32) : 0;
   const end = Math.min(trimmed.length, start + 240);
