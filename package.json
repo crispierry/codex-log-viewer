@@ -37,6 +37,7 @@
     "release:mac": "npm run package:mac && npm run smoke:mac-package && npm run smoke:mac-ui",
     "release:notes": "node scripts/render-release-notes.mjs",
     "privacy:scan": "node scripts/privacy-scan.mjs",
+    "check:classifier": "npm run build -w @codex-log-viewer/parser && npm run build -w @codex-log-viewer/analytics && node scripts/check-prompt-intents.mjs",
     "check:mac-accessibility": "node scripts/check-native-accessibility.mjs",
     "benchmark:search": "npm run build -w @codex-log-viewer/parser && npm run build -w @codex-log-viewer/analytics && node scripts/benchmark-search.mjs",
     "check:reference": "npm run build -w @codex-log-viewer/parser && npm run build -w @codex-log-viewer/analytics && node scripts/check-reference-report.mjs",

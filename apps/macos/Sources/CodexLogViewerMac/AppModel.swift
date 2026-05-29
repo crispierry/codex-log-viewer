@@ -72,6 +72,14 @@ final class AppModel: ObservableObject {
   @Published var auditReviewMarkdown = ""
   @Published var auditStatusMessage: String?
   @Published var isAuditLoading = false
+  @Published var evalsSummary: PromptIntentEvalMessageSummary?
+  @Published var selectedEvalMessageID: PromptIntentEvalMessage.ID?
+  @Published var evalCategoryKeyFilter: String?
+  @Published var evalReviewStateFilter: EvalReviewStateFilter = .all
+  @Published var evalQuery = ""
+  @Published var evalReviewNote = ""
+  @Published var isEvalsLoading = false
+  @Published var evalsStatusMessage: String?
 
   private var exportDirectoryPath = ""
   private var api: LogEngineAPI?
@@ -83,6 +91,8 @@ final class AppModel: ObservableObject {
   private var browseMessagesTask: Task<Void, Never>?
   private var searchTask: Task<Void, Never>?
   private var auditTask: Task<Void, Never>?
+  private var evalsTask: Task<Void, Never>?
+  private var evalReviewTask: Task<Void, Never>?
   private var backgroundSyncTask: Task<Void, Never>?
   private var reloadRequestID = 0
   private var detailRequestID = 0
@@ -90,6 +100,8 @@ final class AppModel: ObservableObject {
   private var browseMessagesRequestID = 0
   private var searchRequestID = 0
   private var auditRequestID = 0
+  private var evalsRequestID = 0
+  private var evalReviewRequestID = 0
   private var pendingSearchResultTarget: SearchResultSelectionTarget?
   private var pendingSearchConversationResult: MessageSearchResult?
   private var isLogRefreshInFlight = false
@@ -114,6 +126,8 @@ final class AppModel: ObservableObject {
     browseMessagesTask?.cancel()
     searchTask?.cancel()
     auditTask?.cancel()
+    evalsTask?.cancel()
+    evalReviewTask?.cancel()
     backgroundSyncTask?.cancel()
   }
 
@@ -138,6 +152,36 @@ final class AppModel: ObservableObject {
 
   var searchResults: [MessageSearchResult] {
     visibleSearchResults(in: searchSummary?.results ?? [])
+  }
+
+  var evalMessages: [PromptIntentEvalMessage] {
+    evalsSummary?.results ?? []
+  }
+
+  var selectedEvalMessage: PromptIntentEvalMessage? {
+    guard let selectedEvalMessageID else { return nil }
+    return evalMessages.first { $0.id == selectedEvalMessageID }
+  }
+
+  var promptIntentCategoryOptions: [PromptIntentCategoryOption] {
+    [
+      PromptIntentCategoryOption(key: "feature-design", label: "Feature design"),
+      PromptIntentCategoryOption(key: "implementation", label: "Implementation"),
+      PromptIntentCategoryOption(key: "bug-fixes", label: "Bug fixes"),
+      PromptIntentCategoryOption(key: "git-commands", label: "Git commands"),
+      PromptIntentCategoryOption(key: "deploy-release-run-build", label: "Deploy/release/run/build"),
+      PromptIntentCategoryOption(key: "code-review-qa", label: "Code review/QA"),
+      PromptIntentCategoryOption(key: "planning-strategy", label: "Planning/strategy"),
+      PromptIntentCategoryOption(key: "research", label: "Research"),
+      PromptIntentCategoryOption(key: "documentation", label: "Documentation"),
+      PromptIntentCategoryOption(key: "testing-verification", label: "Testing/verification"),
+      PromptIntentCategoryOption(key: "refactor-cleanup", label: "Refactor/cleanup"),
+      PromptIntentCategoryOption(key: "content-creation", label: "Content creation"),
+      PromptIntentCategoryOption(key: "data-analysis", label: "Data/metrics"),
+      PromptIntentCategoryOption(key: "feedback-context", label: "Context/observation"),
+      PromptIntentCategoryOption(key: "plan-approvals", label: "Plan approvals"),
+      PromptIntentCategoryOption(key: "other", label: "Other")
+    ]
   }
 
   var operationalMessageCategoryOptions: [String] {
@@ -875,6 +919,159 @@ final class AppModel: ObservableObject {
 
   func refreshMessageResults() {
     searchMessages(activateSearch: false)
+  }
+
+  func loadEvals(selectFirstIfNeeded: Bool = false) {
+    guard let api else {
+      evalsSummary = nil
+      selectedEvalMessageID = nil
+      evalReviewNote = ""
+      isEvalsLoading = false
+      return
+    }
+
+    evalsTask?.cancel()
+    evalsRequestID += 1
+    let requestID = evalsRequestID
+    let filters = LogFilters(paths: sourcePaths)
+    let project = AppConstants.allProjectsName
+    let query = evalQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+    let categoryKey = evalCategoryKeyFilter
+    let reviewState = evalReviewStateFilter
+
+    evalsTask = Task {
+      do {
+        isEvalsLoading = true
+        evalsStatusMessage = nil
+        let result = try await api.evalMessagesWithMetadata(
+          query: query,
+          categoryKey: categoryKey,
+          reviewState: reviewState,
+          project: project,
+          filters: filters,
+          limit: 1_000
+        )
+        guard !Task.isCancelled, requestID == evalsRequestID else { return }
+        evalsSummary = result.evals
+        cacheMetadata = result.cache ?? cacheMetadata
+        isEvalsLoading = false
+        if let selectedEvalMessageID,
+          !result.evals.results.contains(where: { $0.id == selectedEvalMessageID }) {
+          self.selectedEvalMessageID = nil
+          evalReviewNote = ""
+        }
+        if selectFirstIfNeeded || self.selectedEvalMessageID == nil {
+          selectEvalMessage(result.evals.results.first?.id)
+        }
+      } catch is CancellationError {
+        return
+      } catch {
+        guard requestID == evalsRequestID else { return }
+        isEvalsLoading = false
+        evalsStatusMessage = error.localizedDescription
+      }
+    }
+  }
+
+  func setEvalCategoryFilter(_ categoryKey: String?) {
+    evalCategoryKeyFilter = categoryKey
+    loadEvals(selectFirstIfNeeded: true)
+  }
+
+  func setEvalReviewStateFilter(_ state: EvalReviewStateFilter) {
+    evalReviewStateFilter = state
+    loadEvals(selectFirstIfNeeded: true)
+  }
+
+  func selectEvalMessage(_ messageID: PromptIntentEvalMessage.ID?) {
+    selectedEvalMessageID = messageID
+    evalReviewNote = selectedEvalMessage?.review?.note ?? ""
+  }
+
+  func markSelectedEvalCorrect() {
+    guard let message = selectedEvalMessage else { return }
+    saveEvalReview(for: message, expectedKey: message.promptIntentKey, note: evalReviewNote)
+  }
+
+  func saveEvalReview(for message: PromptIntentEvalMessage, expectedKey: String, note: String) {
+    guard let api else { return }
+    evalReviewTask?.cancel()
+    evalReviewRequestID += 1
+    let requestID = evalReviewRequestID
+    let trimmedNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
+
+    evalReviewTask = Task {
+      do {
+        _ = try await api.saveEvalReview(
+          evalId: message.evalId,
+          actualKey: message.promptIntentKey,
+          expectedKey: expectedKey,
+          note: trimmedNote.isEmpty ? nil : trimmedNote
+        )
+        guard !Task.isCancelled, requestID == evalReviewRequestID else { return }
+        loadEvals()
+      } catch is CancellationError {
+        return
+      } catch {
+        guard requestID == evalReviewRequestID else { return }
+        evalsStatusMessage = error.localizedDescription
+      }
+    }
+  }
+
+  func clearEvalReview(_ message: PromptIntentEvalMessage) {
+    guard let api else { return }
+    evalReviewTask?.cancel()
+    evalReviewRequestID += 1
+    let requestID = evalReviewRequestID
+
+    evalReviewTask = Task {
+      do {
+        try await api.deleteEvalReview(evalId: message.evalId)
+        guard !Task.isCancelled, requestID == evalReviewRequestID else { return }
+        evalReviewNote = ""
+        loadEvals()
+      } catch is CancellationError {
+        return
+      } catch {
+        guard requestID == evalReviewRequestID else { return }
+        evalsStatusMessage = error.localizedDescription
+      }
+    }
+  }
+
+  func showConversation(for evalMessage: PromptIntentEvalMessage) {
+    pendingSearchConversationResult = MessageSearchResult(
+      id: evalMessage.evalId,
+      sessionId: evalMessage.sessionId,
+      filePath: evalMessage.filePath,
+      dateKey: evalMessage.dateKey,
+      project: evalMessage.project,
+      cwd: evalMessage.cwd,
+      lineNumber: evalMessage.lineNumber,
+      turnId: evalMessage.turnId,
+      model: nil,
+      timestamp: evalMessage.timestamp,
+      role: "user",
+      sourceEvent: "event_msg.user_message",
+      category: nil,
+      promptIntentKey: evalMessage.promptIntentKey,
+      promptIntent: evalMessage.promptIntent,
+      snippet: evalMessage.snippet,
+      content: evalMessage.content
+    )
+    selectedProject = AppConstants.allProjectsName
+    if let date = Self.dateFormatter.date(from: evalMessage.dateKey) {
+      hasSinceFilter = true
+      hasUntilFilter = true
+      sinceDate = date
+      untilDate = date
+      dateRangeMode = .day
+      dateAnchorDate = date
+    }
+    selectedSection = .browse
+    refresh()
+    Self.restoreViewerWindow(activate: true)
   }
 
   func focusMessageSearch() {
@@ -1897,6 +2094,53 @@ final class AppModel: ObservableObject {
     )
     guard sessionSearch.totalMatches >= 1 else {
       throw AppSmokeError.unexpected("The selected-session message filter returned no fixture matches.")
+    }
+
+    let evals = try await api.evalMessagesWithMetadata(
+      query: "parser test",
+      categoryKey: nil,
+      reviewState: .all,
+      project: AppConstants.allProjectsName,
+      filters: LogFilters(paths: filters.paths)
+    )
+    guard let evalMessage = evals.evals.results.first,
+      evalMessage.promptIntent == "Testing/verification",
+      evalMessage.ruleKey == "testing-verification"
+    else {
+      throw AppSmokeError.unexpected("The Evals workflow did not expose the fixture prompt classification.")
+    }
+    let review = try await api.saveEvalReview(
+      evalId: evalMessage.evalId,
+      actualKey: evalMessage.promptIntentKey,
+      expectedKey: evalMessage.promptIntentKey,
+      note: nil
+    )
+    guard review.isCorrect else {
+      throw AppSmokeError.unexpected("The Evals workflow did not save a correct review.")
+    }
+    let reviewedEvals = try await api.evalMessagesWithMetadata(
+      query: "parser test",
+      categoryKey: nil,
+      reviewState: .correct,
+      project: AppConstants.allProjectsName,
+      filters: LogFilters(paths: filters.paths)
+    )
+    guard reviewedEvals.evals.totalMatches == 1,
+      reviewedEvals.evals.summary.reviewedMessages == 1,
+      reviewedEvals.evals.summary.correctMessages == 1
+    else {
+      throw AppSmokeError.unexpected("The Evals workflow did not update reviewed counts.")
+    }
+    try await api.deleteEvalReview(evalId: evalMessage.evalId)
+    let clearedEvals = try await api.evalMessagesWithMetadata(
+      query: "parser test",
+      categoryKey: nil,
+      reviewState: .unreviewed,
+      project: AppConstants.allProjectsName,
+      filters: LogFilters(paths: filters.paths)
+    )
+    guard clearedEvals.evals.totalMatches == 1 else {
+      throw AppSmokeError.unexpected("The Evals workflow did not clear the review.")
     }
 
     let jsonExport = try await api.exportSummary(

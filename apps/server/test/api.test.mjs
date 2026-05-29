@@ -4,6 +4,7 @@ import { dirname, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { explainPromptIntent } from "@codex-log-viewer/analytics";
 import { startServer } from "../dist/index.js";
 
 const testDir = dirname(fileURLToPath(import.meta.url));
@@ -222,6 +223,132 @@ test("message search and session detail expose operational prompt categories", a
     const detailBody = await detail.json();
     assert.equal(detailBody.messages.find((message) => message.content === "commit")?.category, "Git commands");
     assert.equal(detailBody.messages.find((message) => message.content === "commit")?.promptIntent, "Git commands");
+  } finally {
+    await server.close();
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("evals API exposes submitted messages with explanations, filters, pagination, and reviews", async () => {
+  const tempDir = await mkdtemp(`${tmpdir()}/codex-log-viewer-evals-api-`);
+  const fixture = resolve(tempDir, "evals.jsonl");
+  const evalsDir = resolve(tempDir, "evals");
+  const featureMessage = "Please add a loading indicator because the app feels broken";
+  const bugMessage = "Can we fix the broken loading dialog?";
+
+  await mkdir(evalsDir, { recursive: true });
+  await writeFile(
+    fixture,
+    [
+      JSON.stringify({
+        timestamp: "2026-04-27T20:00:00.000Z",
+        type: "session_meta",
+        payload: {
+          id: "evals-session",
+          timestamp: "2026-04-27T20:00:00.000Z",
+          cwd: "/Users/example/projects/sample-app"
+        }
+      }),
+      JSON.stringify({
+        timestamp: "2026-04-27T20:00:01.000Z",
+        type: "event_msg",
+        payload: {
+          type: "user_message",
+          message: featureMessage
+        }
+      }),
+      JSON.stringify({
+        timestamp: "2026-04-27T20:00:02.000Z",
+        type: "event_msg",
+        payload: {
+          type: "user_message",
+          message: bugMessage
+        }
+      }),
+      JSON.stringify({
+        timestamp: "2026-04-27T20:00:03.000Z",
+        type: "response_item",
+        payload: {
+          type: "message",
+          role: "user",
+          content: [{ type: "input_text", text: "Internal user context, not submitted" }]
+        }
+      })
+    ].join("\n") + "\n",
+    "utf8"
+  );
+
+  const server = await startServer({ port: 0, authToken: "test-token", paths: [fixture], evalsDir });
+  const headers = { authorization: "Bearer test-token" };
+
+  try {
+    const all = await fetch(`${server.url}/api/evals/messages`, { headers });
+    assert.equal(all.status, 200);
+    const allBody = await all.json();
+    assert.equal(allBody.evals.totalMatches, 2);
+    assert.equal(allBody.evals.summary.totalMessages, 2);
+    assert.equal(allBody.evals.results.some((message) => message.content.includes("Internal user context")), false);
+
+    const feature = allBody.evals.results.find((message) => message.content === featureMessage);
+    assert.ok(feature);
+    const featureExplanation = explainPromptIntent(featureMessage);
+    assert.equal(feature.promptIntentKey, "feature-design");
+    assert.equal(feature.ruleKey, featureExplanation.ruleKey);
+    assert.equal(feature.ruleLabel, featureExplanation.ruleLabel);
+    assert.deepEqual(feature.signals, featureExplanation.signals);
+
+    const filtered = await fetch(`${server.url}/api/evals/messages?categoryKey=feature-design`, { headers });
+    assert.equal(filtered.status, 200);
+    const filteredBody = await filtered.json();
+    assert.equal(filteredBody.evals.totalMatches, 1);
+    assert.equal(filteredBody.evals.results[0]?.evalId, feature.evalId);
+
+    const firstPage = await fetch(`${server.url}/api/evals/messages?limit=1&offset=0`, { headers });
+    const secondPage = await fetch(`${server.url}/api/evals/messages?limit=1&offset=1`, { headers });
+    assert.equal(firstPage.status, 200);
+    assert.equal(secondPage.status, 200);
+    const firstPageBody = await firstPage.json();
+    const secondPageBody = await secondPage.json();
+    assert.equal(firstPageBody.evals.totalMatches, 2);
+    assert.equal(firstPageBody.evals.results.length, 1);
+    assert.equal(secondPageBody.evals.results.length, 1);
+    assert.notEqual(firstPageBody.evals.results[0]?.evalId, secondPageBody.evals.results[0]?.evalId);
+
+    const review = await fetch(`${server.url}/api/evals/reviews`, {
+      method: "POST",
+      headers: { ...headers, "content-type": "application/json" },
+      body: JSON.stringify({
+        evalId: feature.evalId,
+        actualKey: feature.promptIntentKey,
+        expectedKey: feature.promptIntentKey,
+        note: "Looks right"
+      })
+    });
+    assert.equal(review.status, 200);
+    const reviewBody = await review.json();
+    assert.equal(reviewBody.review.isCorrect, true);
+
+    const correct = await fetch(`${server.url}/api/evals/messages?reviewState=correct`, { headers });
+    const unreviewed = await fetch(`${server.url}/api/evals/messages?reviewState=unreviewed`, { headers });
+    assert.equal(correct.status, 200);
+    assert.equal(unreviewed.status, 200);
+    const correctBody = await correct.json();
+    const unreviewedBody = await unreviewed.json();
+    assert.equal(correctBody.evals.totalMatches, 1);
+    assert.equal(correctBody.evals.results[0]?.evalId, feature.evalId);
+    assert.equal(unreviewedBody.evals.totalMatches, 1);
+    assert.equal(correctBody.evals.summary.reviewedMessages, 1);
+    assert.equal(correctBody.evals.summary.correctMessages, 1);
+
+    const cleared = await fetch(`${server.url}/api/evals/reviews?evalId=${feature.evalId}`, {
+      method: "DELETE",
+      headers
+    });
+    assert.equal(cleared.status, 200);
+
+    const afterClear = await fetch(`${server.url}/api/evals/messages?reviewState=unreviewed`, { headers });
+    const afterClearBody = await afterClear.json();
+    assert.equal(afterClearBody.evals.totalMatches, 2);
   } finally {
     await server.close();
     await rm(tempDir, { recursive: true, force: true });

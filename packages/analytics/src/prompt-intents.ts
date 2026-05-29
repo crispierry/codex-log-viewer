@@ -1,5 +1,15 @@
 import type { PromptIntentCategory } from "./types.js";
 
+export type PromptIntentRuleConfidence = "high" | "medium" | "low";
+
+export interface PromptIntentExplanation {
+  category: PromptIntentCategory;
+  ruleKey: string;
+  ruleLabel: string;
+  confidence: PromptIntentRuleConfidence;
+  signals: string[];
+}
+
 export const promptIntentCategories = {
   featureDesign: { key: "feature-design", label: "Feature design" },
   implementation: { key: "implementation", label: "Implementation" },
@@ -21,70 +31,164 @@ export const promptIntentCategories = {
 } as const satisfies Record<string, PromptIntentCategory>;
 
 export function classifyPromptIntent(message: string): PromptIntentCategory {
+  return explainPromptIntent(message).category;
+}
+
+export function explainPromptIntent(message: string): PromptIntentExplanation {
   const literal = normalizeLiteralPrompt(message);
   const command = normalizedCommandText(literal);
   const matchText = command === literal ? command : `${literal} ${command}`;
+  const commandSignal = command === literal ? [] : ["normalized-command"];
 
   if (isPlanApprovalPrompt(literal)) {
-    return promptIntentCategories.planApprovals;
+    return explanation(promptIntentCategories.planApprovals, "plan-approval", "Short approval", "high", [
+      "approval",
+      ...commandSignal
+    ]);
   }
   if (isDeployReleasePrompt(command)) {
-    return promptIntentCategories.deployRelease;
+    return explanation(promptIntentCategories.deployRelease, "deploy-release", "Deploy/release wording", "high", [
+      "deploy-release",
+      ...commandSignal
+    ]);
   }
   if (isGitCommandPrompt(command)) {
-    return promptIntentCategories.gitCommands;
+    return explanation(promptIntentCategories.gitCommands, "git-command", "Git command wording", "high", [
+      "git-command",
+      ...commandSignal
+    ]);
   }
   if (isRunBuildAppPrompt(command)) {
-    return promptIntentCategories.runBuildApp;
+    return explanation(promptIntentCategories.runBuildApp, "run-build-app", "Run/build app wording", "high", [
+      "run-build-app",
+      ...commandSignal
+    ]);
   }
   if (isCodeReviewQaPrompt(command)) {
-    return promptIntentCategories.codeReviewQa;
+    return explanation(promptIntentCategories.codeReviewQa, "code-review-qa", "Review/QA wording", "high", [
+      "code-review-qa",
+      ...commandSignal
+    ]);
   }
   if (isTestingVerificationPrompt(matchText)) {
-    return promptIntentCategories.testingVerification;
+    return explanation(promptIntentCategories.testingVerification, "testing-verification", "Testing/verification wording", "high", [
+      "testing-verification",
+      ...commandSignal
+    ]);
   }
   if (isDocumentationPrompt(matchText)) {
-    return promptIntentCategories.documentation;
+    return explanation(promptIntentCategories.documentation, "documentation", "Documentation wording", "high", [
+      "documentation",
+      ...commandSignal
+    ]);
   }
   const directBugFix = isDirectBugFixPrompt(literal) || isDirectBugFixPrompt(command);
   const bugFix = isBugFixPrompt(matchText);
+  const strongFeatureDesign = isStrongFeatureDesignPrompt(matchText);
   if (directBugFix) {
-    return promptIntentCategories.bugFixes;
+    return explanation(promptIntentCategories.bugFixes, "direct-bug-fix", "Direct bug-fix request", "high", [
+      "direct-fix",
+      "bug-signal",
+      ...commandSignal
+    ]);
   }
-  if (bugFix && isStrongFeatureDesignPrompt(matchText)) {
-    return promptIntentCategories.featureDesign;
+  if (bugFix && strongFeatureDesign) {
+    return explanation(
+      promptIntentCategories.featureDesign,
+      "feature-design-mixed-bug-rationale",
+      "Feature work with incidental bug rationale",
+      "medium",
+      ["strong-feature-signal", "bug-rationale", ...commandSignal]
+    );
   }
   if (bugFix) {
-    return promptIntentCategories.bugFixes;
-  }
-  if (isRefactorCleanupPrompt(matchText)) {
-    return promptIntentCategories.refactorCleanup;
+    return explanation(promptIntentCategories.bugFixes, "bug-fix", "Bug/problem wording", "medium", [
+      "bug-signal",
+      ...commandSignal
+    ]);
   }
   if (isPlanningStrategyPrompt(matchText)) {
-    return promptIntentCategories.planningStrategy;
+    return explanation(promptIntentCategories.planningStrategy, "planning-strategy", "Planning/strategy wording", "high", [
+      "planning-strategy",
+      ...commandSignal
+    ]);
   }
   if (isDataAnalysisPrompt(matchText)) {
-    return promptIntentCategories.dataAnalysis;
+    return explanation(promptIntentCategories.dataAnalysis, "data-analysis", "Data/metrics wording", "high", [
+      "data-analysis",
+      ...commandSignal
+    ]);
   }
   if (isContentCreationPrompt(matchText)) {
-    return promptIntentCategories.contentCreation;
+    return explanation(promptIntentCategories.contentCreation, "content-creation", "Content creation wording", "high", [
+      "content-creation",
+      ...commandSignal
+    ]);
+  }
+  if (strongFeatureDesign) {
+    return explanation(promptIntentCategories.featureDesign, "strong-feature-design", "Explicit feature/capability wording", "high", [
+      "strong-feature-signal",
+      ...commandSignal
+    ]);
+  }
+  if (isRefactorCleanupPrompt(matchText)) {
+    return explanation(promptIntentCategories.refactorCleanup, "refactor-cleanup", "Refactor/cleanup wording", "high", [
+      "refactor-cleanup",
+      ...commandSignal
+    ]);
   }
   if (isFeatureDesignPrompt(matchText)) {
-    return promptIntentCategories.featureDesign;
+    return explanation(promptIntentCategories.featureDesign, "feature-design", "Feature/design wording", "medium", [
+      "feature-design",
+      ...commandSignal
+    ]);
   }
   if (isImplementationPrompt(matchText)) {
-    return promptIntentCategories.implementation;
+    return explanation(promptIntentCategories.implementation, "implementation", "Implementation wording", "medium", [
+      "implementation",
+      ...commandSignal
+    ]);
   }
   if (isResearchPrompt(matchText)) {
-    return promptIntentCategories.research;
+    return explanation(promptIntentCategories.research, "research", "Research/investigation wording", "medium", [
+      "research",
+      ...commandSignal
+    ]);
   }
   if (isFeedbackContextPrompt(matchText)) {
-    return promptIntentCategories.feedbackContext;
+    return explanation(promptIntentCategories.feedbackContext, "context-observation", "Context/observation wording", "medium", [
+      "context-observation",
+      ...commandSignal
+    ]);
   }
   if (isBroadActionRequestPrompt(matchText)) {
-    return promptIntentCategories.implementation;
+    return explanation(promptIntentCategories.implementation, "broad-action-request", "Broad action request", "low", [
+      "broad-action",
+      ...commandSignal
+    ]);
   }
-  return literal ? promptIntentCategories.feedbackContext : promptIntentCategories.other;
+  if (literal) {
+    return explanation(promptIntentCategories.feedbackContext, "fallback-context", "Fallback non-empty prompt", "low", [
+      "non-empty"
+    ]);
+  }
+  return explanation(promptIntentCategories.other, "empty-prompt", "Empty prompt", "low", ["empty"]);
+}
+
+function explanation(
+  category: PromptIntentCategory,
+  ruleKey: string,
+  ruleLabel: string,
+  confidence: PromptIntentRuleConfidence,
+  signals: string[]
+): PromptIntentExplanation {
+  return {
+    category,
+    ruleKey,
+    ruleLabel,
+    confidence,
+    signals
+  };
 }
 
 function normalizeLiteralPrompt(message: string): string {

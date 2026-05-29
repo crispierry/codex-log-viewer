@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { parseCodexCorpus } from "@codex-log-viewer/parser";
 import {
   classifyPromptIntent,
+  explainPromptIntent,
   projectsFromCorpus,
   redactedProjectSummary,
   searchMessages,
@@ -546,8 +547,10 @@ test("classifyPromptIntent lets explicit feature work beat incidental bug ration
   ].join(" ");
 
   assert.equal(classifyPromptIntent(loadingAndSyncRequest).label, "Feature design");
+  assert.equal(explainPromptIntent(loadingAndSyncRequest).ruleKey, "feature-design-mixed-bug-rationale");
   assert.equal(classifyPromptIntent("Please add a loading indicator because the app feels broken").label, "Feature design");
   assert.equal(classifyPromptIntent("Can we fix the broken loading dialog?").label, "Bug fixes");
+  assert.equal(explainPromptIntent("Can we fix the broken loading dialog?").ruleKey, "direct-bug-fix");
   assert.equal(classifyPromptIntent("I want you to fix the broken parser").label, "Bug fixes");
 });
 

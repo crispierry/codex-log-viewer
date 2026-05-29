@@ -140,6 +140,35 @@ enum ProjectSortOption: String, CaseIterable, Identifiable {
   }
 }
 
+enum EvalReviewStateFilter: String, CaseIterable, Identifiable {
+  case all
+  case unreviewed
+  case correct
+  case incorrect
+
+  var id: String { rawValue }
+
+  var label: String {
+    switch self {
+    case .all:
+      return "All"
+    case .unreviewed:
+      return "Unreviewed"
+    case .correct:
+      return "Correct"
+    case .incorrect:
+      return "Incorrect"
+    }
+  }
+}
+
+struct PromptIntentCategoryOption: Identifiable, Hashable {
+  let key: String
+  let label: String
+
+  var id: String { key }
+}
+
 struct LogFilters: Equatable {
   var paths: [String] = []
   var since: String?
@@ -209,6 +238,31 @@ struct MessageSearchResponse: Decodable {
       updatedAt: updatedAt
     )
   }
+}
+
+struct EvalsResponse: Decodable {
+  let evals: PromptIntentEvalMessageSummary
+  let cacheStatus: String?
+  let reusedFiles: Int?
+  let parsedFiles: Int?
+  let removedFiles: Int?
+  let totalFiles: Int?
+  let updatedAt: String?
+
+  var cacheMetadata: CacheMetadata? {
+    CacheMetadata(
+      cacheStatus: cacheStatus,
+      reusedFiles: reusedFiles,
+      parsedFiles: parsedFiles,
+      removedFiles: removedFiles,
+      totalFiles: totalFiles,
+      updatedAt: updatedAt
+    )
+  }
+}
+
+struct EvalReviewResponse: Decodable {
+  let review: PromptIntentEvalReview
 }
 
 struct AuditPreviewResponse: Decodable {
@@ -437,6 +491,83 @@ struct MessageSearchResult: Decodable, Identifiable, Hashable {
   let promptIntent: String?
   let snippet: String
   let content: String
+}
+
+struct PromptIntentEvalMessageSummary: Decodable {
+  let query: String
+  let project: String
+  let generatedAt: String
+  let totalMatches: Int
+  let limit: Int
+  let offset: Int
+  let summary: PromptIntentEvalSummary
+  let results: [PromptIntentEvalMessage]
+}
+
+struct PromptIntentEvalSummary: Decodable, Hashable {
+  let totalMessages: Int
+  let reviewedMessages: Int
+  let correctMessages: Int
+  let incorrectMessages: Int
+  let reviewedAccuracy: Double?
+  let categories: [PromptIntentEvalCategorySummary]
+  let confusions: [PromptIntentEvalConfusion]
+}
+
+struct PromptIntentEvalCategorySummary: Decodable, Identifiable, Hashable {
+  let key: String
+  let label: String
+  let total: Int
+  let reviewed: Int
+  let correct: Int
+  let incorrect: Int
+  let unreviewed: Int
+  let precision: Double?
+  let recall: Double?
+
+  var id: String { key }
+}
+
+struct PromptIntentEvalConfusion: Decodable, Identifiable, Hashable {
+  let actualKey: String
+  let actualLabel: String
+  let expectedKey: String
+  let expectedLabel: String
+  let count: Int
+
+  var id: String { "\(actualKey)#\(expectedKey)" }
+}
+
+struct PromptIntentEvalReview: Decodable, Hashable {
+  let evalId: String
+  let actualKey: String
+  let expectedKey: String
+  let isCorrect: Bool
+  let reviewedAt: String
+  let note: String?
+}
+
+struct PromptIntentEvalMessage: Decodable, Identifiable, Hashable {
+  let evalId: String
+  let sessionId: String
+  let filePath: String
+  let dateKey: String
+  let project: String
+  let cwd: String?
+  let lineNumber: Int?
+  let turnId: String?
+  let timestamp: String?
+  let promptIntentKey: String
+  let promptIntent: String
+  let ruleKey: String
+  let ruleLabel: String
+  let confidence: String
+  let signals: [String]
+  let snippet: String
+  let content: String
+  let review: PromptIntentEvalReview?
+
+  var id: String { evalId }
 }
 
 struct SessionDetail: Decodable {

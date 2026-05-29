@@ -8,6 +8,7 @@ import {
   classifyPromptIntent,
   loadCorpus,
   mergeAuditMarkdown,
+  promptIntentEvalMessages,
   searchMessages,
   summaryToCsv,
   summaryToJson,
@@ -15,6 +16,8 @@ import {
   userMessageCategoryLabel,
   type LoadedCorpus,
   type ParseCacheMetadata,
+  type PromptIntentEvalReview,
+  type PromptIntentEvalReviewState,
   type SummaryOptions
 } from "@codex-log-viewer/analytics";
 
@@ -24,6 +27,7 @@ export interface ServerOptions {
   paths?: string[];
   authToken?: string;
   cacheDir?: string;
+  evalsDir?: string;
 }
 
 interface CorpusCacheEntry {
@@ -182,6 +186,56 @@ async function handleRequest(
         limit
       })
     }, loaded.cache));
+    return;
+  }
+
+  if (url.pathname === "/api/evals/messages") {
+    const loaded = await loadCachedCorpus(url, options, corpusCache);
+    const reviews = await readEvalReviews(options);
+    sendJson(response, 200, withCacheMetadata({
+      evals: promptIntentEvalMessages(loaded.corpus, {
+        ...summaryOptionsFromQuery(url, options.paths),
+        q: url.searchParams.get("q") ?? "",
+        categoryKey: url.searchParams.get("categoryKey") ?? undefined,
+        reviewState: reviewStateFromQuery(url.searchParams.get("reviewState")),
+        limit: Number(url.searchParams.get("limit") ?? 200),
+        offset: Number(url.searchParams.get("offset") ?? 0),
+        reviews
+      })
+    }, loaded.cache));
+    return;
+  }
+
+  if (url.pathname === "/api/evals/reviews" && request.method === "POST") {
+    const body = await readJsonBody(request);
+    const evalId = typeof body.evalId === "string" ? body.evalId.trim() : "";
+    const actualKey = typeof body.actualKey === "string" ? body.actualKey.trim() : "";
+    const expectedKey = typeof body.expectedKey === "string" ? body.expectedKey.trim() : "";
+    const note = typeof body.note === "string" && body.note.trim() ? body.note.trim() : undefined;
+    if (!evalId || !actualKey || !expectedKey) {
+      sendJson(response, 400, { error: "evalId, actualKey, and expectedKey are required" });
+      return;
+    }
+    const review = await saveEvalReview(options, {
+      evalId,
+      actualKey,
+      expectedKey,
+      isCorrect: actualKey === expectedKey,
+      reviewedAt: new Date().toISOString(),
+      note
+    });
+    sendJson(response, 200, { review });
+    return;
+  }
+
+  if (url.pathname === "/api/evals/reviews" && request.method === "DELETE") {
+    const evalId = url.searchParams.get("evalId")?.trim();
+    if (!evalId) {
+      sendJson(response, 400, { error: "evalId is required" });
+      return;
+    }
+    await deleteEvalReview(options, evalId);
+    sendJson(response, 200, { review: { evalId, deleted: true } });
     return;
   }
 
@@ -374,6 +428,17 @@ function roleFromQuery(value: string | null): "all" | "user" | "automation" | "a
   }
 }
 
+function reviewStateFromQuery(value: string | null): PromptIntentEvalReviewState {
+  switch (value) {
+    case "unreviewed":
+    case "correct":
+    case "incorrect":
+      return value;
+    default:
+      return "all";
+  }
+}
+
 function cacheKey(paths: string[] | undefined, cacheDir: string | undefined): string {
   const sourceKey = paths && paths.length > 0 ? [...paths].sort().join("\n") : "__default__";
   return `${cacheDir ?? "__no_cache__"}\n${sourceKey}`;
@@ -381,6 +446,59 @@ function cacheKey(paths: string[] | undefined, cacheDir: string | undefined): st
 
 function serverCacheDir(): string | undefined {
   return process.env.CODEX_LOG_VIEWER_CACHE_DIR;
+}
+
+function evalsDirectory(options: ServerOptions): string | undefined {
+  return options.evalsDir ?? process.env.CODEX_LOG_VIEWER_EVALS_DIR;
+}
+
+function evalReviewsPath(options: ServerOptions): string | undefined {
+  const directory = evalsDirectory(options);
+  return directory ? resolve(directory, "reviews-v1.json") : undefined;
+}
+
+async function readEvalReviews(options: ServerOptions): Promise<Record<string, PromptIntentEvalReview>> {
+  const path = evalReviewsPath(options);
+  if (!path) {
+    return {};
+  }
+  try {
+    const store = JSON.parse(await readFile(path, "utf8")) as {
+      version?: number;
+      reviews?: Record<string, PromptIntentEvalReview>;
+    };
+    return isObject(store.reviews) ? store.reviews : {};
+  } catch (error) {
+    if (isNodeError(error) && error.code === "ENOENT") {
+      return {};
+    }
+    throw error;
+  }
+}
+
+async function writeEvalReviews(
+  options: ServerOptions,
+  reviews: Record<string, PromptIntentEvalReview>
+): Promise<void> {
+  const path = evalReviewsPath(options);
+  if (!path) {
+    throw new Error("Evals review storage is not configured.");
+  }
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, `${JSON.stringify({ version: 1, reviews }, null, 2)}\n`, "utf8");
+}
+
+async function saveEvalReview(options: ServerOptions, review: PromptIntentEvalReview): Promise<PromptIntentEvalReview> {
+  const reviews = await readEvalReviews(options);
+  reviews[review.evalId] = review;
+  await writeEvalReviews(options, reviews);
+  return review;
+}
+
+async function deleteEvalReview(options: ServerOptions, evalId: string): Promise<void> {
+  const reviews = await readEvalReviews(options);
+  delete reviews[evalId];
+  await writeEvalReviews(options, reviews);
 }
 
 function withReadyCache(loaded: LoadedCorpus): LoadedCorpus {
@@ -467,10 +585,12 @@ if (isMainModule()) {
   const urlFileArg = process.argv.find((arg) => arg.startsWith("--url-file="));
   const authTokenArg = process.argv.find((arg) => arg.startsWith("--auth-token="));
   const cacheDirArg = process.argv.find((arg) => arg.startsWith("--cache-dir="));
+  const evalsDirArg = process.argv.find((arg) => arg.startsWith("--evals-dir="));
   const port = portArg ? Number(portArg.split("=")[1]) : Number(process.env.PORT ?? 3210);
   const authToken = authTokenArg?.slice("--auth-token=".length) ?? process.env.CODEX_LOG_VIEWER_AUTH_TOKEN;
   const cacheDir = cacheDirArg?.slice("--cache-dir=".length) ?? process.env.CODEX_LOG_VIEWER_CACHE_DIR;
-  const server = await startServer({ port, authToken, cacheDir });
+  const evalsDir = evalsDirArg?.slice("--evals-dir=".length) ?? process.env.CODEX_LOG_VIEWER_EVALS_DIR;
+  const server = await startServer({ port, authToken, cacheDir, evalsDir });
   if (urlFileArg) {
     await writeFile(urlFileArg.slice("--url-file=".length), `${server.url}\n`);
   }

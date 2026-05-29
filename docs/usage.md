@@ -25,6 +25,7 @@ From the app you can:
 - use Overview for metrics, charts, and Project Focus prompt categories for the selected project
 - use Search for cross-project or project-filtered message search
 - use Audit to generate, review, smart-merge, and approve `docs/ai-worklog.md`
+- use `Evals > Open Evals` to review Project Focus classifier labels across all submitted messages
 - filter by all time, day, week, month, year, or a custom date range from the workspace header
 - search messages across all selected projects
 - filter message search by role, model, and selected session
@@ -62,12 +63,21 @@ The native macOS tab bar is hidden while there is only one viewer tab. Use `File
 
 Search results include the same Project Focus category labels as Browse. Select a search result to copy its session id, project, or a whitespace-normalized snippet with local home paths shortened. Use `Show Conversation` to jump from the result into Browse.
 
+## Evals
+
+Use `Evals > Open Evals` to judge Project Focus classifier quality across submitted user messages. Evals defaults to all projects and all time so every submitted prompt can be reviewed together, with sidebar filters for each current classifier category and review state.
+
+The Evals window separates the classifier output from the human judgment. Select a message to see its current label, matched rule, confidence, signals, full prompt text, project, date, and session metadata. Mark the classifier output `Correct`, choose another expected category when it is wrong, optionally add a note, or clear the review.
+
+Evals reviews are private local data stored under `~/Library/Application Support/Codex Log Viewer/Evals/reviews-v1.json`. The app does not write real prompt text into tracked fixtures automatically. Use `Show Conversation` from a selected eval message to jump back to Browse for the surrounding session.
+
 Keyboard shortcuts:
 
 - `Command-R`: refresh local logs incrementally
 - `Command-Shift-R`: rebuild the local parsed cache
 - `Command-F`: focus message search
 - `Command-Return`: run message search
+- `Command-Shift-L`: open Evals
 - `Command-O`: choose sources
 - `Command-E`: export redacted JSON
 - `Command-Shift-E`: export CSV
@@ -143,6 +153,7 @@ You can pass multiple `--path` values.
 - Deploy, publish, release, notarization, production-shipping, app launch, local server, build, package, rebuild, relaunch, and restart requests are grouped as `Deploy/release/run/build`.
 - Code review, diff review, implementation audit, and QA-finding prompts are grouped as `Code review/QA`.
 - Test, lint, typecheck, smoke test, accessibility, Playwright, screenshot check, and verification prompts are grouped as `Testing/verification`.
+- Run `npm run check:classifier` before accepting Project Focus classifier changes. The check uses sanitized gold-label examples, reports per-category precision/recall and rule coverage, and fails when any expected label regresses.
 - Browse, Search, and operational prompt groups can hide or show grouped prompt families from `View > Operational Messages...`.
 - Token totals sum `token_count.info.last_token_usage` records.
 - `token_count` events with `info: null` are ignored for token totals.

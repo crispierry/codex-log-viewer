@@ -169,6 +169,88 @@ export interface MessageSearchSummary {
   results: MessageSearchResult[];
 }
 
+export type PromptIntentEvalReviewState = "all" | "unreviewed" | "correct" | "incorrect";
+
+export interface PromptIntentEvalReview {
+  evalId: string;
+  actualKey: string;
+  expectedKey: string;
+  isCorrect: boolean;
+  reviewedAt: string;
+  note?: string;
+}
+
+export interface PromptIntentEvalMessage {
+  evalId: string;
+  sessionId: string;
+  filePath: string;
+  dateKey: string;
+  project: string;
+  cwd?: string;
+  lineNumber?: number;
+  turnId?: string;
+  timestamp?: string;
+  promptIntentKey: string;
+  promptIntent: string;
+  ruleKey: string;
+  ruleLabel: string;
+  confidence: "high" | "medium" | "low";
+  signals: string[];
+  snippet: string;
+  content: string;
+  review?: PromptIntentEvalReview;
+}
+
+export interface PromptIntentEvalCategorySummary {
+  key: string;
+  label: string;
+  total: number;
+  reviewed: number;
+  correct: number;
+  incorrect: number;
+  unreviewed: number;
+  precision: number | null;
+  recall: number | null;
+}
+
+export interface PromptIntentEvalConfusion {
+  actualKey: string;
+  actualLabel: string;
+  expectedKey: string;
+  expectedLabel: string;
+  count: number;
+}
+
+export interface PromptIntentEvalSummary {
+  totalMessages: number;
+  reviewedMessages: number;
+  correctMessages: number;
+  incorrectMessages: number;
+  reviewedAccuracy: number | null;
+  categories: PromptIntentEvalCategorySummary[];
+  confusions: PromptIntentEvalConfusion[];
+}
+
+export interface PromptIntentEvalMessageOptions extends SummaryOptions {
+  q?: string;
+  categoryKey?: string;
+  reviewState?: PromptIntentEvalReviewState;
+  limit?: number;
+  offset?: number;
+  reviews?: Record<string, PromptIntentEvalReview>;
+}
+
+export interface PromptIntentEvalMessageSummary {
+  query: string;
+  project: string;
+  generatedAt: string;
+  totalMatches: number;
+  limit: number;
+  offset: number;
+  summary: PromptIntentEvalSummary;
+  results: PromptIntentEvalMessage[];
+}
+
 export interface ProjectListItem {
   project: string;
   cwdSamples: string[];

@@ -1,5 +1,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -8,6 +10,8 @@ const repoRoot = resolve(scriptDir, "..");
 const appPath = resolve(process.argv[2] ?? "dist/macos/Codex Log Viewer.app");
 const executablePath = `${appPath}/Contents/MacOS/CodexLogViewerMac`;
 const fixturePath = resolve(repoRoot, "fixtures/codex/sample-session.jsonl");
+const tempDir = await mkdtemp(`${tmpdir()}/codex-log-viewer-ui-smoke-`);
+const evalsDir = resolve(tempDir, "evals");
 
 if (process.platform !== "darwin") {
   throw new Error("Native macOS UI smoke test only runs on macOS.");
@@ -24,6 +28,7 @@ const child = spawn(executablePath, [], {
     CODEX_LOG_VIEWER_UI_TEST_AUTO_QUIT: "1",
     CODEX_LOG_VIEWER_UI_WORKFLOW_SMOKE: "1",
     CODEX_LOG_VIEWER_EPHEMERAL_SETTINGS: "1",
+    CODEX_LOG_VIEWER_EVALS_DIR: evalsDir,
     CODEX_LOG_VIEWER_INITIAL_PATHS: fixturePath
   },
   stdio: ["ignore", "pipe", "pipe"]
@@ -42,6 +47,8 @@ let windowTextError;
 let waitExitError;
 try {
   await waitForWindowText(["All Projects"], child);
+  openEvalsWindow();
+  await waitForWindowText(["Evals", "parser test"], child);
 } catch (error) {
   windowTextError = error;
 }
@@ -54,6 +61,7 @@ try {
 
 await cleanupLaunchedApp();
 assertNoLeakedEngine();
+await rm(tempDir, { recursive: true, force: true });
 
 if (child.exitCode !== 0 && child.exitCode !== null) {
   throw new Error(
@@ -178,6 +186,13 @@ function requestAppQuit() {
   });
 }
 
+function openEvalsWindow() {
+  spawnSync("osascript", ["-e", openEvalsAppleScript()], {
+    encoding: "utf8",
+    maxBuffer: 1024 * 1024
+  });
+}
+
 function leakedProcesses() {
   const processList = spawnSync("ps", ["-axo", "pid=,command="], { encoding: "utf8" }).stdout;
   const bundledEnginePath = `${appPath}/Contents/Resources/engine/apps/server/dist/index.js`;
@@ -234,6 +249,23 @@ tell application "System Events"
       tell process (candidateName as text)
         try
           click menu item "Quit Codex Log Viewer" of menu "Codex Log Viewer" of menu bar item "Codex Log Viewer" of menu bar 1
+        end try
+      end tell
+    end if
+  end repeat
+end tell
+`;
+}
+
+function openEvalsAppleScript() {
+  return `
+tell application "System Events"
+  repeat with candidateName in {"Codex Log Viewer", "CodexLogViewerMac"}
+    if exists process (candidateName as text) then
+      tell process (candidateName as text)
+        try
+          click menu item "Open Evals" of menu "Evals" of menu bar item "Evals" of menu bar 1
+          return
         end try
       end tell
     end if
