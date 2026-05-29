@@ -163,10 +163,20 @@ struct CodexLogViewerApp: App {
           }
           .keyboardShortcut("l", modifiers: [.command, .shift])
           .accessibilityIdentifier("evals-open-menu-item")
+
+          Divider()
+
+          Button("Export Fixture Draft...") {
+            model.exportEvalFixtureDraft()
+          }
+          .accessibilityIdentifier("evals-export-fixture-draft-menu-item")
         } else {
           Button("Open Evals") {}
             .disabled(true)
             .accessibilityIdentifier("evals-open-menu-item")
+          Button("Export Fixture Draft...") {}
+            .disabled(true)
+            .accessibilityIdentifier("evals-export-fixture-draft-menu-item")
         }
       }
 

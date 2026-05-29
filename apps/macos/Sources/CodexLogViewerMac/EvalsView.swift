@@ -16,8 +16,8 @@ struct EvalsWindowRootView: View {
 
 struct EvalsPanelView: View {
   @ObservedObject var model: AppModel
-  @State private var sidebarWidth: CGFloat = 260
-  @State private var inspectorWidth: CGFloat = 380
+  @AppStorage("evalsSidebarWidth") private var persistedSidebarWidth = 260.0
+  @AppStorage("evalsInspectorWidth") private var persistedInspectorWidth = 380.0
   @State private var sidebarDragStart: CGFloat?
   @State private var inspectorDragStart: CGFloat?
 
@@ -90,10 +90,12 @@ struct EvalsPanelView: View {
           sidebarDragStart = regularColumnWidths(for: containerWidth).sidebar
         }
         guard let startWidth = sidebarDragStart else { return }
-        sidebarWidth = regularColumnWidths(for: containerWidth, sidebar: startWidth + value.translation.width).sidebar
+        let widths = regularColumnWidths(for: containerWidth, sidebar: startWidth + value.translation.width)
+        persistedSidebarWidth = Double(widths.sidebar)
       }
       .onEnded { _ in
-        sidebarWidth = regularColumnWidths(for: containerWidth).sidebar
+        let widths = regularColumnWidths(for: containerWidth)
+        persistedSidebarWidth = Double(widths.sidebar)
         sidebarDragStart = nil
       }
   }
@@ -105,10 +107,12 @@ struct EvalsPanelView: View {
           inspectorDragStart = regularColumnWidths(for: containerWidth).inspector
         }
         guard let startWidth = inspectorDragStart else { return }
-        inspectorWidth = regularColumnWidths(for: containerWidth, inspector: startWidth - value.translation.width).inspector
+        let widths = regularColumnWidths(for: containerWidth, inspector: startWidth - value.translation.width)
+        persistedInspectorWidth = Double(widths.inspector)
       }
       .onEnded { _ in
-        inspectorWidth = regularColumnWidths(for: containerWidth).inspector
+        let widths = regularColumnWidths(for: containerWidth)
+        persistedInspectorWidth = Double(widths.inspector)
         inspectorDragStart = nil
       }
   }
@@ -127,8 +131,16 @@ struct EvalsPanelView: View {
       return (sidebar, max(0, contentWidth - sidebar - inspector), inspector)
     }
 
-    var sidebar = clamp(proposedSidebar ?? sidebarWidth, min: minimumSidebarWidth, max: contentWidth - minimumMessageWidth - minimumInspectorWidth)
-    var inspector = clamp(proposedInspector ?? inspectorWidth, min: minimumInspectorWidth, max: contentWidth - sidebar - minimumMessageWidth)
+    var sidebar = clamp(
+      proposedSidebar ?? CGFloat(persistedSidebarWidth),
+      min: minimumSidebarWidth,
+      max: contentWidth - minimumMessageWidth - minimumInspectorWidth
+    )
+    var inspector = clamp(
+      proposedInspector ?? CGFloat(persistedInspectorWidth),
+      min: minimumInspectorWidth,
+      max: contentWidth - sidebar - minimumMessageWidth
+    )
     var message = contentWidth - sidebar - inspector
 
     if message < minimumMessageWidth {

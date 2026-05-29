@@ -251,6 +251,35 @@ export interface PromptIntentEvalMessageSummary {
   results: PromptIntentEvalMessage[];
 }
 
+export interface PromptIntentEvalFixtureDraftOptions extends PromptIntentEvalMessageOptions {
+  includeCorrect?: boolean;
+  includeIncorrect?: boolean;
+}
+
+export interface PromptIntentEvalFixtureDraftExample {
+  id: string;
+  message: string;
+  expectedKey: string;
+  previousKey?: string;
+  notes: string;
+}
+
+export interface PromptIntentEvalFixtureDraft {
+  version: 1;
+  description: string;
+  generatedAt: string;
+  privacy: {
+    mode: "placeholder-messages";
+    instructions: string[];
+  };
+  source: {
+    reviewedMessages: number;
+    correctExamples: number;
+    incorrectExamples: number;
+  };
+  examples: PromptIntentEvalFixtureDraftExample[];
+}
+
 export interface ProjectListItem {
   project: string;
   cwdSamples: string[];

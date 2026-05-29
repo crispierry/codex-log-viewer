@@ -177,6 +177,10 @@ struct LogEngineAPI {
     }
   }
 
+  func exportEvalFixtureDraft(filters: LogFilters) async throws -> Data {
+    try await getData("api/evals/fixture-draft", query: queryItems(filters: filters, includeDateRange: true))
+  }
+
   func exportSummary(format: ExportFormat, project: String, filters: LogFilters) async throws -> Data {
     var queryItems = queryItems(project: project, filters: filters)
     queryItems.append(URLQueryItem(name: "format", value: format.rawValue))

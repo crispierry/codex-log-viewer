@@ -1,6 +1,6 @@
 export { generateAuditMarkdown, mergeAuditMarkdown } from "./audit.js";
 export type { AuditMarkdownOptions, AuditMergeResult, AuditPrivacyMode } from "./audit.js";
-export { evalMessageId, promptIntentEvalMessages } from "./evals.js";
+export { evalMessageId, promptIntentEvalFixtureDraft, promptIntentEvalMessages } from "./evals.js";
 export { redactedProjectSummary, summaryToCsv, summaryToJson } from "./export.js";
 export { listProjects, projectContextForFile, projectContextForSession, projectNameForCwd, sessionsById } from "./project.js";
 export { classifyPromptIntent, explainPromptIntent, promptIntentCategories } from "./prompt-intents.js";
@@ -25,6 +25,9 @@ export type {
   ParseCacheMetadata,
   PromptIntentEvalCategorySummary,
   PromptIntentEvalConfusion,
+  PromptIntentEvalFixtureDraft,
+  PromptIntentEvalFixtureDraftExample,
+  PromptIntentEvalFixtureDraftOptions,
   PromptIntentEvalMessage,
   PromptIntentEvalMessageOptions,
   PromptIntentEvalMessageSummary,

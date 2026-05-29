@@ -4,6 +4,9 @@ import { explainPromptIntent, promptIntentCategories } from "./prompt-intents.js
 import { projectContextForFile } from "./project.js";
 import type {
   PromptIntentEvalCategorySummary,
+  PromptIntentEvalFixtureDraft,
+  PromptIntentEvalFixtureDraftExample,
+  PromptIntentEvalFixtureDraftOptions,
   PromptIntentEvalMessage,
   PromptIntentEvalMessageOptions,
   PromptIntentEvalMessageSummary,
@@ -18,18 +21,129 @@ export function promptIntentEvalMessages(
   corpus: ParsedCodexCorpus,
   options: PromptIntentEvalMessageOptions = {}
 ): PromptIntentEvalMessageSummary {
+  const baseMessages = buildEvalMessages(corpus, options);
   const query = options.q?.trim() ?? "";
-  const normalizedQuery = normalizeSearchText(query);
   const project = options.project && options.project !== allProjectsName ? options.project : allProjectsName;
   const categoryKey = options.categoryKey?.trim();
   const reviewState = reviewStateOption(options.reviewState);
   const limit = clampLimit(options.limit);
   const offset = clampOffset(options.offset);
+  const summary = evalSummary(baseMessages);
+  const filteredMessages = baseMessages.filter((message) =>
+    (!categoryKey || message.promptIntentKey === categoryKey) &&
+    reviewStateMatches(message.review, reviewState)
+  );
+
+  return {
+    query,
+    project,
+    generatedAt: new Date().toISOString(),
+    totalMatches: filteredMessages.length,
+    limit,
+    offset,
+    summary,
+    results: filteredMessages.slice(offset, offset + limit)
+  };
+}
+
+export function promptIntentEvalFixtureDraft(
+  corpus: ParsedCodexCorpus,
+  options: PromptIntentEvalFixtureDraftOptions = {}
+): PromptIntentEvalFixtureDraft {
+  const categoryKey = options.categoryKey?.trim();
+  const includeCorrect = options.includeCorrect !== false;
+  const includeIncorrect = options.includeIncorrect !== false;
+  const messages = buildEvalMessages(corpus, options).filter((message) => {
+    if (!message.review) {
+      return false;
+    }
+    if (categoryKey && message.promptIntentKey !== categoryKey) {
+      return false;
+    }
+    return (message.review.isCorrect && includeCorrect) || (!message.review.isCorrect && includeIncorrect);
+  });
+
+  const examples: PromptIntentEvalFixtureDraftExample[] = [];
+  const counters = new Map<string, number>();
+  let correctExamples = 0;
+  let incorrectExamples = 0;
+
+  for (const message of messages) {
+    const review = message.review;
+    if (!review) {
+      continue;
+    }
+    if (review.isCorrect) {
+      correctExamples += 1;
+    } else {
+      incorrectExamples += 1;
+    }
+
+    const count = (counters.get(review.expectedKey) ?? 0) + 1;
+    counters.set(review.expectedKey, count);
+    const expectedLabel = labelForCategoryKey(review.expectedKey);
+    const actualLabel = labelForCategoryKey(message.promptIntentKey);
+    const example: PromptIntentEvalFixtureDraftExample = {
+      id: `reviewed-${review.expectedKey}-${String(count).padStart(3, "0")}`,
+      message: `TODO: Replace with a sanitized synthetic prompt for ${expectedLabel} reviewed case ${count}.`,
+      expectedKey: review.expectedKey,
+      notes: review.isCorrect
+        ? `Reviewed correct. Current classifier: ${actualLabel} via ${message.ruleKey}. Replace this placeholder before committing.`
+        : `Reviewed incorrect. Current classifier: ${actualLabel} via ${message.ruleKey}. Replace this placeholder before committing.`
+    };
+    if (!review.isCorrect && message.promptIntentKey !== review.expectedKey) {
+      example.previousKey = message.promptIntentKey;
+    }
+    examples.push(example);
+  }
+
+  return {
+    version: 1,
+    description: "Draft Project Focus gold-label examples from local human reviews. Prompt text is intentionally omitted; replace every placeholder with a safe synthetic prompt before copying examples into tracked fixtures.",
+    generatedAt: new Date().toISOString(),
+    privacy: {
+      mode: "placeholder-messages",
+      instructions: [
+        "This draft does not include raw prompt text from local logs.",
+        "Replace each message placeholder with a sanitized synthetic prompt before committing.",
+        "Do not copy local file paths, names, customer data, secrets, or raw session text into tracked fixtures."
+      ]
+    },
+    source: {
+      reviewedMessages: examples.length,
+      correctExamples,
+      incorrectExamples
+    },
+    examples
+  };
+}
+
+export function evalMessageId(message: MessageRecord): string {
+  return createHash("sha256")
+    .update([
+      message.filePath,
+      message.sessionId,
+      message.lineNumber ?? "",
+      message.turnId ?? "",
+      message.timestamp ?? "",
+      message.content
+    ].join("\0"))
+    .digest("hex")
+    .slice(0, 24);
+}
+
+function buildEvalMessages(
+  corpus: ParsedCodexCorpus,
+  options: PromptIntentEvalMessageOptions
+): PromptIntentEvalMessage[] {
+  const query = options.q?.trim() ?? "";
+  const normalizedQuery = normalizeSearchText(query);
+  const project = options.project && options.project !== allProjectsName ? options.project : allProjectsName;
   const reviews = options.reviews ?? {};
   const aliases = options.aliases ?? [];
   const range = dateRange(options);
+  const messages: PromptIntentEvalMessage[] = [];
 
-  const baseMessages: PromptIntentEvalMessage[] = [];
   for (const message of corpus.messages) {
     if (message.sourceEvent !== "event_msg.user_message") {
       continue;
@@ -48,8 +162,15 @@ export function promptIntentEvalMessages(
 
     const evalId = evalMessageId(message);
     const explanation = explainPromptIntent(message.content);
-    const review = reviews[evalId];
-    baseMessages.push({
+    const storedReview = reviews[evalId];
+    const review = storedReview
+      ? {
+          ...storedReview,
+          actualKey: explanation.category.key,
+          isCorrect: explanation.category.key === storedReview.expectedKey
+        }
+      : undefined;
+    messages.push({
       evalId,
       sessionId: message.sessionId,
       filePath: message.filePath,
@@ -71,37 +192,7 @@ export function promptIntentEvalMessages(
     });
   }
 
-  baseMessages.sort(compareEvalMessages);
-  const summary = evalSummary(baseMessages);
-  const filteredMessages = baseMessages.filter((message) =>
-    (!categoryKey || message.promptIntentKey === categoryKey) &&
-    reviewStateMatches(message.review, reviewState)
-  );
-
-  return {
-    query,
-    project,
-    generatedAt: new Date().toISOString(),
-    totalMatches: filteredMessages.length,
-    limit,
-    offset,
-    summary,
-    results: filteredMessages.slice(offset, offset + limit)
-  };
-}
-
-export function evalMessageId(message: MessageRecord): string {
-  return createHash("sha256")
-    .update([
-      message.filePath,
-      message.sessionId,
-      message.lineNumber ?? "",
-      message.turnId ?? "",
-      message.timestamp ?? "",
-      message.content
-    ].join("\0"))
-    .digest("hex")
-    .slice(0, 24);
+  return messages.sort(compareEvalMessages);
 }
 
 function evalSummary(messages: PromptIntentEvalMessage[]): PromptIntentEvalMessageSummary["summary"] {

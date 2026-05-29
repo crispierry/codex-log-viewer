@@ -1176,6 +1176,33 @@ final class AppModel: ObservableObject {
     }
   }
 
+  func exportEvalFixtureDraft() {
+    guard let api else { return }
+    let panel = NSSavePanel()
+    panel.canCreateDirectories = true
+    panel.nameFieldStringValue = "project-focus-reviewed-fixture-draft.json"
+    panel.directoryURL = defaultExportDirectoryURL()
+    if !confirmEvalFixtureDraftExport() {
+      return
+    }
+    guard panel.runModal() == .OK, let destinationURL = panel.url else { return }
+
+    let filters = currentFilters()
+    Task {
+      do {
+        isEvalsLoading = true
+        evalsStatusMessage = nil
+        let data = try await api.exportEvalFixtureDraft(filters: filters)
+        try data.write(to: destinationURL)
+        rememberExportDirectory(destinationURL.deletingLastPathComponent())
+        isEvalsLoading = false
+      } catch {
+        isEvalsLoading = false
+        evalsStatusMessage = error.localizedDescription
+      }
+    }
+  }
+
   func chooseAuditRepoPath() {
     let panel = NSOpenPanel()
     panel.title = "Choose Repository"
@@ -2261,6 +2288,16 @@ final class AppModel: ObservableObject {
     alert.informativeText = "The default JSON export redacts local source paths and working directories. Review exports before sharing because project names, timestamps, session IDs, and usage metadata may still be sensitive."
     alert.alertStyle = .informational
     alert.addButton(withTitle: "Export")
+    alert.addButton(withTitle: "Cancel")
+    return alert.runModal() == .alertFirstButtonReturn
+  }
+
+  private func confirmEvalFixtureDraftExport() -> Bool {
+    let alert = NSAlert()
+    alert.messageText = "Export Evals Fixture Draft?"
+    alert.informativeText = "The draft includes reviewed labels, but it does not include raw prompt text. Replace every placeholder with a sanitized synthetic prompt before copying examples into tracked fixtures."
+    alert.alertStyle = .informational
+    alert.addButton(withTitle: "Export Draft")
     alert.addButton(withTitle: "Cancel")
     return alert.runModal() == .alertFirstButtonReturn
   }

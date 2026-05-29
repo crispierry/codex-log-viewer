@@ -69,7 +69,7 @@ Use `Evals > Open Evals` to judge Project Focus classifier quality across submit
 
 The Evals window separates the classifier output from the human judgment. Select a message to see its current label, matched rule, confidence, signals, full prompt text, project, date, and session metadata. Mark the classifier output `Correct`, choose another expected category when it is wrong, optionally add a note, or clear the review.
 
-Evals reviews are private local data stored under `~/Library/Application Support/Codex Log Viewer/Evals/reviews-v1.json`. The app does not write real prompt text into tracked fixtures automatically. Use `Show Conversation` from a selected eval message to jump back to Browse for the surrounding session.
+Evals reviews are private local data stored under `~/Library/Application Support/Codex Log Viewer/Evals/reviews-v1.json`. The app does not write real prompt text into tracked fixtures automatically. Use `Evals > Export Fixture Draft...` to save a placeholder-only JSON draft from reviewed judgments, then manually replace each placeholder with a sanitized synthetic prompt before copying examples into `fixtures/prompt-intents/gold-labels.json`. Use `Show Conversation` from a selected eval message to jump back to Browse for the surrounding session.
 
 Keyboard shortcuts:
 
@@ -154,6 +154,8 @@ You can pass multiple `--path` values.
 - Code review, diff review, implementation audit, and QA-finding prompts are grouped as `Code review/QA`.
 - Test, lint, typecheck, smoke test, accessibility, Playwright, screenshot check, and verification prompts are grouped as `Testing/verification`.
 - Run `npm run check:classifier` before accepting Project Focus classifier changes. The check uses sanitized gold-label examples, reports per-category precision/recall and rule coverage, and fails when any expected label regresses.
+- Run `npm run evals:report` to score the current classifier against private local Evals reviews.
+- Run `npm run evals:export-fixture-draft` to write a placeholder-only reviewed-example draft under `.codex/evals/` for manual sanitization.
 - Browse, Search, and operational prompt groups can hide or show grouped prompt families from `View > Operational Messages...`.
 - Token totals sum `token_count.info.last_token_usage` records.
 - `token_count` events with `info: null` are ignored for token totals.

@@ -2,6 +2,51 @@
 
 Sanitized audit trail of AI-assisted work on this project.
 
+## 2026-05-29 - Add Local Evals Reporting And Fixture Drafts
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> What else is left to be done in this work stream?
+
+> Let's implement options three, four, and five above. I'll do the evals later
+
+### Interpreted Intent
+
+The user wanted the next Evals quality-loop pieces implemented before doing the manual review pass: a privacy-safe fixture export path, remembered Evals column widths, and a local report command that scores the classifier against private reviews.
+
+### Response / Work Done
+
+- Added a placeholder-only reviewed fixture draft generator for Project Focus Evals so local human judgments can be turned into manually sanitized gold-label examples without exporting raw prompt text.
+- Added `GET /api/evals/fixture-draft` and an `Evals > Export Fixture Draft...` menu action for saving that draft from the native app.
+- Added `npm run evals:report` to score the current classifier against private local Evals reviews, including reviewed accuracy, per-category precision/recall, and confusion pairs.
+- Added `npm run evals:export-fixture-draft` to write the same placeholder-only draft under `.codex/evals/` by default.
+- Made Evals column widths persist across app launches while keeping the left sidebar anchored during manual resizing.
+- Updated usage documentation and added analytics/server tests for the fixture draft path.
+
+### Privacy Notes
+
+The fixture draft intentionally omits raw prompt text, review notes, local paths, and session content. It contains placeholder messages that must be manually replaced with sanitized synthetic prompts before any example is copied into tracked fixtures.
+
+### Verification
+
+- Ran `wt bootstrap`.
+- Ran `npm run build -w @codex-log-viewer/analytics`.
+- Ran `npm run build -w @codex-log-viewer/server`.
+- Ran `swift build --package-path apps/macos`.
+- Ran `npm run evals:report -- --path fixtures/codex/sample-session.jsonl --evals-dir /tmp/codex-log-viewer-empty-evals`.
+- Ran `npm run evals:export-fixture-draft -- --path fixtures/codex/sample-session.jsonl --evals-dir /tmp/codex-log-viewer-empty-evals --output /tmp/codex-log-viewer-evals-draft-test/draft.json`.
+- Ran `npm test`.
+- Ran `npm run check:classifier`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`.
+- Ran `npm run privacy:scan`.
+- Ran `npm run smoke:mac-ui`.
+- Ran `git diff --check`.
+- Relaunched `dist/macos/Codex Log Viewer.app` at build 120.
+
 ## 2026-05-29 - Document Unified AI Log Provider Support Plan
 
 Status: Completed

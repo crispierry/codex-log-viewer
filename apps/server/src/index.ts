@@ -8,6 +8,7 @@ import {
   classifyPromptIntent,
   loadCorpus,
   mergeAuditMarkdown,
+  promptIntentEvalFixtureDraft,
   promptIntentEvalMessages,
   searchMessages,
   summaryToCsv,
@@ -203,6 +204,27 @@ async function handleRequest(
         reviews
       })
     }, loaded.cache));
+    return;
+  }
+
+  if (url.pathname === "/api/evals/fixture-draft") {
+    const loaded = await loadCachedCorpus(url, options, corpusCache);
+    const reviews = await readEvalReviews(options);
+    const draft = promptIntentEvalFixtureDraft(loaded.corpus, {
+      ...summaryOptionsFromQuery(url, options.paths),
+      q: url.searchParams.get("q") ?? "",
+      categoryKey: url.searchParams.get("categoryKey") ?? undefined,
+      reviews,
+      includeCorrect: url.searchParams.get("includeCorrect") !== "false",
+      includeIncorrect: url.searchParams.get("includeIncorrect") !== "false"
+    });
+    sendText(
+      response,
+      200,
+      `${JSON.stringify(draft, null, 2)}\n`,
+      "application/json; charset=utf-8",
+      "project-focus-reviewed-fixture-draft.json"
+    );
     return;
   }
 

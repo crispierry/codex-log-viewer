@@ -328,6 +328,17 @@ test("evals API exposes submitted messages with explanations, filters, paginatio
     const reviewBody = await review.json();
     assert.equal(reviewBody.review.isCorrect, true);
 
+    const draft = await fetch(`${server.url}/api/evals/fixture-draft`, { headers });
+    assert.equal(draft.status, 200);
+    assert.match(draft.headers.get("content-disposition") ?? "", /project-focus-reviewed-fixture-draft\.json/);
+    const draftText = await draft.text();
+    const draftBody = JSON.parse(draftText);
+    assert.equal(draftBody.examples.length, 1);
+    assert.equal(draftBody.examples[0]?.expectedKey, "feature-design");
+    assert.equal(draftBody.examples[0]?.message.includes("TODO: Replace"), true);
+    assert.equal(draftText.includes(featureMessage), false);
+    assert.equal(draftText.includes("Looks right"), false);
+
     const correct = await fetch(`${server.url}/api/evals/messages?reviewState=correct`, { headers });
     const unreviewed = await fetch(`${server.url}/api/evals/messages?reviewState=unreviewed`, { headers });
     assert.equal(correct.status, 200);
