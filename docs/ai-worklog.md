@@ -2,6 +2,46 @@
 
 Sanitized audit trail of AI-assisted work on this project.
 
+## 2026-05-29 - Document Optional ChatGPT Message Support Plan
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> can we also add support for chatgpt messages? or would that make the log viewer complicated for the user?
+
+> Let's save this plan in our repository and tell me the plan name
+
+> merge to main
+
+> commit
+
+> Commit this plan to the main branch
+
+### Interpreted Intent
+
+The user wanted a decision-ready plan for optional ChatGPT message support, wanted the plan saved in the repository, and wanted that documentation committed directly on the `main` branch.
+
+### Response / Work Done
+
+- Assessed the current parser, analytics, API, and native app shape to determine whether ChatGPT messages should be modeled as a separate optional source instead of being blended into Codex project/worktree semantics.
+- Checked local ChatGPT desktop storage at a metadata level and found per-conversation `.data` cache files under the ChatGPT app support directory, with no obvious stable JSONL or SQLite source.
+- Confirmed the user preferences for desktop-local first, optional UI source, export fallback, and searchable message text by default.
+- Added `docs/chatgpt-message-support-plan.md` with the plan name `Optional ChatGPT Message Support`.
+- Documented that this is a documentation-only change and does not require rebuilding or relaunching the macOS app.
+
+### Privacy Notes
+
+No raw ChatGPT messages, raw Codex logs, private prompts, session content, screenshots, recordings, export payloads, credentials, or secrets were added to tracked files. The local ChatGPT storage inspection was limited to paths, file counts, file types, and byte-level metadata.
+
+### Verification
+
+- Ran `wt bootstrap`.
+- Ran `git diff --check`.
+- Ran `npm run privacy:scan`.
+- Did not rebuild or relaunch the macOS app because this was documentation-only.
+
 ## 2026-05-29 - Fix Evals Window Responsive Layout
 
 Status: Completed
