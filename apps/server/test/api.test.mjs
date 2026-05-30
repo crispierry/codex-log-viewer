@@ -13,6 +13,7 @@ const testDir = dirname(fileURLToPath(import.meta.url));
 const fixturePath = resolve(testDir, "../../../fixtures/codex/sample-session.jsonl");
 const interactionDetailFixturePath = resolve(testDir, "../../../fixtures/codex/interaction-detail.jsonl");
 const claudeFixturePath = resolve(testDir, "../../../fixtures/claude/basic-session.jsonl");
+const cursorMarkdownFixturePath = resolve(testDir, "../../../fixtures/cursor/basic-export.md");
 
 test("local API requires bearer token when auth is enabled", async () => {
   const server = await startServer({ port: 0, authToken: "test-token", paths: [fixturePath] });
@@ -49,7 +50,7 @@ test("local API exposes provider filters for mixed sources", async () => {
   const server = await startServer({
     port: 0,
     authToken: "test-token",
-    paths: [fixturePath, claudeFixturePath]
+    paths: [fixturePath, claudeFixturePath, cursorMarkdownFixturePath]
   });
   const headers = { authorization: "Bearer test-token" };
 
@@ -68,6 +69,15 @@ test("local API exposes provider filters for mixed sources", async () => {
     assert.equal(searchBody.search.totalMatches, 1);
     assert.equal(searchBody.search.results[0]?.provider, "claude");
     assert.equal(searchBody.search.results[0]?.content, "Add Claude fixture support");
+
+    const cursorSearch = await fetch(`${server.url}/api/messages/search?provider=cursor&submittedOnly=true&role=user`, {
+      headers
+    });
+    assert.equal(cursorSearch.status, 200);
+    const cursorSearchBody = await cursorSearch.json();
+    assert.equal(cursorSearchBody.search.totalMatches, 1);
+    assert.equal(cursorSearchBody.search.results[0]?.provider, "cursor");
+    assert.equal(cursorSearchBody.search.results[0]?.content, "Add Cursor Markdown import support.");
   } finally {
     await server.close();
   }

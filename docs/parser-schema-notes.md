@@ -8,13 +8,15 @@ These notes describe observed provider log shapes. They are not official provide
 - `~/.codex/archived_sessions/rollout-*.jsonl`
 - user-provided JSONL files or directories
 - Claude Code JSONL files such as `~/.claude/projects/**/*.jsonl`
+- Cursor local SQLite state files such as `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb` when explicitly selected
+- explicit Cursor Markdown export files
 
 ## Provider Metadata
 
 Normalized records carry:
 
-- `provider`: `codex`, `claude`, or a future provider id
-- `inputKind`: source format such as `codex-jsonl` or `claude-jsonl`
+- `provider`: `codex`, `claude`, `cursor`, or a future provider id
+- `inputKind`: source format such as `codex-jsonl`, `claude-jsonl`, `cursor-vscdb`, or `cursor-markdown`
 - `sourceLabel`: display label for the source
 - optional `title`
 - optional `providerConversationId`
@@ -173,6 +175,19 @@ Initial normalized record types:
 - `tool_use` and `tool_result` content blocks become tool events.
 - `message.usage` maps to token usage, including `cache_creation_input_tokens` and `cache_read_input_tokens`.
 - Attachments, queue operations, future records, malformed lines, and unsupported shapes are preserved as unknown events or warnings.
+
+## Cursor Notes
+
+Cursor's public docs describe regular Agent chat history as local SQLite data and provide Markdown export as the preservation path. The local SQLite schema is private and may change, so support is fixture-driven and tolerant rather than a claim of complete schema coverage.
+
+- Local `state.vscdb` imports read `cursorDiskKV` keys shaped like `bubbleId:<composerId>:<bubbleId>`.
+- `composer.composerHeaders` records provide optional session title, created/updated timestamps, and workspace id metadata.
+- When a sibling `workspaceStorage/<workspace-id>/workspace.json` file is available, the parser maps Cursor sessions to a working directory.
+- Bubble type `1` becomes `cursor.user_message`; bubble type `2` becomes `cursor.assistant_message`.
+- Bubble `tokenCount.inputTokens` and `tokenCount.outputTokens` map to token usage when nonzero.
+- Bubble `toolResults` entries become tool events when present.
+- Unsupported bubble types with text are preserved as unknown events. Malformed bubble JSON and unsupported SQLite shapes become parse warnings.
+- Markdown export imports are best-effort and require recognizable user/assistant role headings or inline labels.
 
 ## Aggregation Rules
 

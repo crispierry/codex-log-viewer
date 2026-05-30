@@ -132,7 +132,7 @@ struct WorkspaceHeaderView: View {
       }
       .labelsHidden()
       .pickerStyle(.segmented)
-      .frame(width: 230)
+      .frame(width: 300)
       .help("Filter logs by provider")
 
       DateRangeControlView()
@@ -891,6 +891,8 @@ struct ProviderBadge: View {
       return "Codex"
     case "claude":
       return "Claude"
+    case "cursor":
+      return "Cursor"
     default:
       return provider
     }

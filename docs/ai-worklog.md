@@ -2,6 +2,91 @@
 
 Sanitized audit trail of AI-assisted work on this project.
 
+## 2026-05-30 - Fix Cursor Provider Review Issues
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> Core review
+
+> Fix them
+
+### Interpreted Intent
+
+The user wanted a defect-focused review of the Cursor provider changes, then wanted the identified issues fixed.
+
+### Response / Work Done
+
+- Reviewed the Cursor provider implementation for parser failure modes, privacy behavior, provider filtering, and native/API integration.
+- Fixed Cursor SQLite parsing so private-schema read failures are converted into `cursor_vscdb_parse_failed` parse warnings instead of aborting corpus loading.
+- Updated redacted JSON exports to redact session `title` and `providerConversationId`, preventing Cursor chat titles or native conversation ids from leaking through default exports.
+- Added parser regression coverage for unsupported Cursor SQLite schemas.
+- Added analytics regression coverage for redacted session title and provider conversation id fields.
+
+### Privacy Notes
+
+No raw Cursor, Codex, or Claude transcripts were added. The new parser fixture is synthetic, and the export regression uses synthetic sensitive strings.
+
+### Verification
+
+- Ran `npm run test -w @codex-log-viewer/parser`.
+- Ran `npm run test -w @codex-log-viewer/analytics`.
+- Ran `npm test`.
+- Ran `npm run lint`.
+- Ran `npm run privacy:scan`.
+- Ran `git diff --check`.
+- Ran `npm run build:mac`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`.
+- Ran `npm run smoke:mac-ui`.
+- Relaunched `dist/macos/Codex Log Viewer.app`.
+
+## 2026-05-30 - Add Cursor Provider Support
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> Let’s add support for Cursor as well
+
+### Interpreted Intent
+
+The user wanted Cursor added as another provider in the unified local AI log viewer model, with useful local support rather than an export-only path where possible.
+
+### Response / Work Done
+
+- Checked Cursor's public docs and treated local SQLite history plus Markdown exports as the v1 support boundary.
+- Added Cursor provider metadata and input kinds for `cursor-vscdb` and `cursor-markdown`.
+- Added explicit Cursor `.vscdb` discovery and direct Markdown-file import while avoiding recursive Markdown discovery in ordinary folders.
+- Implemented Cursor SQLite parsing for `cursorDiskKV` chat bubbles, composer headers, workspace-derived working directories, user/assistant messages, token counts, tool results, malformed records, and unknown records.
+- Implemented best-effort Cursor Markdown export parsing for recognizable user/assistant sections.
+- Wired `cursor.user_message` through analytics, audit worklogs, API search, CLI help, native submitted-message reconstruction, provider badges, and the macOS provider filter.
+- Added sanitized Cursor Markdown fixture coverage and synthetic SQLite fixture generation in tests.
+- Updated architecture, schema, usage, privacy, fixture, roadmap, and README documentation.
+
+### Privacy Notes
+
+No raw Cursor, Codex, or Claude transcripts were committed. Local Cursor inspection was limited to schema/key-shape analysis and did not print or commit chat content. New committed Cursor content is synthetic and sanitized.
+
+### Verification
+
+- Ran `wt bootstrap`.
+- Ran `npm run test -w @codex-log-viewer/parser`.
+- Ran `npm run test -w @codex-log-viewer/analytics`.
+- Ran `npm run test -w @codex-log-viewer/server`.
+- Ran `npm run build`.
+- Ran `npm test`.
+- Ran `npm run lint`.
+- Ran `npm run privacy:scan`.
+- Ran `npm run build:mac`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`; the first attempt found the previously running packaged app, then passed after closing that instance.
+- Ran `npm run smoke:mac-ui`.
+- Relaunched `dist/macos/Codex Log Viewer.app`.
+
 ## 2026-05-30 - Fix Provider Support Review Issues
 
 Status: Completed

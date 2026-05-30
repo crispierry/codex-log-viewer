@@ -32,6 +32,9 @@ function projectNameForProvider(provider: string, cwd: string | undefined, alias
   if (provider === "claude") {
     return "Claude Code";
   }
+  if (provider === "cursor") {
+    return "Cursor";
+  }
   return "Unknown Project";
 }
 
@@ -152,7 +155,8 @@ function locatorProvider(locator: SessionLocator, corpus: ParsedCodexCorpus): st
 function isSubmittedUserMessageShape(message: { role: string; sourceEvent: string }): boolean {
   return message.role === "user" && (
     message.sourceEvent === "event_msg.user_message" ||
-    message.sourceEvent === "claude.user_message"
+    message.sourceEvent === "claude.user_message" ||
+    message.sourceEvent === "cursor.user_message"
   );
 }
 

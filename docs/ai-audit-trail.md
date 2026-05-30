@@ -33,9 +33,9 @@ The CLI can also generate an audit draft for a repository:
 npm run cli -- audit --repo /path/to/repo --output /path/to/repo/docs/ai-worklog.md
 ```
 
-By default, the audit command scans the selected local sources, filters sessions for the repository when repository context is available, includes submitted user messages from Codex and Claude Code, and writes public-mode Markdown. Captured AI responses are included by default. Public mode preserves intent while redacting obvious local home paths, email addresses, and token-like strings.
+By default, the audit command scans the selected local sources, filters sessions for the repository when repository context is available, includes submitted user messages from Codex, Claude Code, and Cursor, and writes public-mode Markdown. Captured AI responses are included by default. Public mode preserves intent while redacting obvious local home paths, email addresses, and token-like strings.
 
-Use `--provider all|codex|claude` and `--path` to control which local AI sources contribute to the audit draft.
+Use `--provider all|codex|claude|cursor` and `--path` to control which local AI sources contribute to the audit draft.
 
 Smart merge mode preserves existing reviewed Markdown and appends only generated session sections that are not already present in the target worklog.
 
@@ -62,7 +62,7 @@ Generated audit drafts are not automatically safe to publish. Before committing 
 - screenshots or image references
 - local paths that identify private machines or folders
 
-Do not commit raw Codex or Claude Code transcript files. The audit trail should be derived, reviewed, and intentionally sanitized.
+Do not commit raw Codex, Claude Code, or Cursor transcript files. The audit trail should be derived, reviewed, and intentionally sanitized.
 
 ## Ongoing Workflow
 

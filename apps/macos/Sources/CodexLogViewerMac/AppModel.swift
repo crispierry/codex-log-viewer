@@ -2939,14 +2939,16 @@ private struct SearchResultSelectionTarget {
 private func isSubmittedUserMessage(_ result: MessageSearchResult) -> Bool {
   result.role == "user" && (
     result.sourceEvent == "event_msg.user_message" ||
-      result.sourceEvent == "claude.user_message"
+      result.sourceEvent == "claude.user_message" ||
+      result.sourceEvent == "cursor.user_message"
   )
 }
 
 private func isSubmittedUserMessage(_ target: SearchResultSelectionTarget) -> Bool {
   target.role == "user" && (
     target.sourceEvent == "event_msg.user_message" ||
-      target.sourceEvent == "claude.user_message"
+      target.sourceEvent == "claude.user_message" ||
+      target.sourceEvent == "cursor.user_message"
   )
 }
 

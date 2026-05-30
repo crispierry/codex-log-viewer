@@ -720,7 +720,8 @@ function localDateKey(timestamp: string | undefined): string {
 function isSubmittedUserMessageShape(message: { role: string; sourceEvent: string }): boolean {
   return message.role === "user" && (
     message.sourceEvent === "event_msg.user_message" ||
-    message.sourceEvent === "claude.user_message"
+    message.sourceEvent === "claude.user_message" ||
+    message.sourceEvent === "cursor.user_message"
   );
 }
 

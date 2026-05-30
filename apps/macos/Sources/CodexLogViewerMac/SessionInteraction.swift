@@ -153,7 +153,8 @@ enum SessionInteractionBuilder {
 func isSubmittedUserMessage(_ message: MessageDetail) -> Bool {
   message.role == "user" && (
     message.sourceEvent == "event_msg.user_message" ||
-      message.sourceEvent == "claude.user_message"
+      message.sourceEvent == "claude.user_message" ||
+      message.sourceEvent == "cursor.user_message"
   )
 }
 

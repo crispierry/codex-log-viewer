@@ -74,7 +74,7 @@ class SqliteSearchIndex implements SearchIndexHandle {
       params.push(options.role);
     }
     if (options.submittedOnly) {
-      where.push("(m.source_event = 'event_msg.user_message' OR m.source_event = 'claude.user_message')");
+      where.push("(m.source_event = 'event_msg.user_message' OR m.source_event = 'claude.user_message' OR m.source_event = 'cursor.user_message')");
     }
     if (options.model?.trim()) {
       where.push("COALESCE(m.model, 'unknown') = ?");

@@ -953,7 +953,8 @@ function sessionRecordKey(filePath: string, sessionId: string, suffix?: string):
 export function isSubmittedUserMessage(message: MessageRecord): boolean {
   return message.role === "user" && (
     message.sourceEvent === "event_msg.user_message" ||
-    message.sourceEvent === "claude.user_message"
+    message.sourceEvent === "claude.user_message" ||
+    message.sourceEvent === "cursor.user_message"
   );
 }
 

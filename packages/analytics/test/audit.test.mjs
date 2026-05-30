@@ -34,6 +34,17 @@ test("generateAuditMarkdown includes submitted user messages across providers", 
       firstAssistantMessage: "Claude captured the design notes.",
       secondUserMessage: "Add the Claude follow-up.",
       secondAssistantMessage: "Claude added the follow-up."
+    }),
+    auditCorpus({
+      sessionId: "cursor-audit-session",
+      provider: "cursor",
+      sourceLabel: "Cursor",
+      userSourceEvent: "cursor.user_message",
+      assistantSourceEvent: "cursor.assistant_message",
+      firstUserMessage: "Use Cursor for the local editor workflow.",
+      firstAssistantMessage: "Cursor captured the editor workflow.",
+      secondUserMessage: "Add the Cursor follow-up.",
+      secondAssistantMessage: "Cursor added the follow-up."
     })
   );
 
@@ -42,12 +53,15 @@ test("generateAuditMarkdown includes submitted user messages across providers", 
     privacy: "raw"
   });
 
-  assert.match(markdown, /Providers: Claude Code, Codex/);
-  assert.match(markdown, /User messages: 4/);
-  assert.match(markdown, /AI responses: 4/);
+  assert.match(markdown, /Providers: Claude Code, Codex, Cursor/);
+  assert.match(markdown, /User messages: 6/);
+  assert.match(markdown, /AI responses: 6/);
   assert.match(markdown, /Provider: `Claude Code`/);
+  assert.match(markdown, /Provider: `Cursor`/);
   assert.match(markdown, /> Use Claude for the architecture review\./);
   assert.match(markdown, /> Claude captured the design notes\./);
+  assert.match(markdown, /> Use Cursor for the local editor workflow\./);
+  assert.match(markdown, /> Cursor captured the editor workflow\./);
 });
 
 test("generateAuditMarkdown redacts obvious private strings in public mode", () => {

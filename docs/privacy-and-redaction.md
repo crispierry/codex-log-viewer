@@ -1,6 +1,6 @@
 # Privacy And Redaction
 
-AI session logs are sensitive. Codex and Claude Code logs may contain prompts, code, file paths, command output, screenshots, local image paths, diffs, credentials, cookies, API keys, and private business context.
+AI session logs are sensitive. Codex, Claude Code, and Cursor logs may contain prompts, code, file paths, command output, screenshots, local image paths, diffs, credentials, cookies, API keys, and private business context.
 
 ## Default Privacy Stance
 
@@ -68,7 +68,7 @@ Audit worklogs are detailed Markdown exports intended to preserve user intent. T
 
 The app Audit section and audit command default to public mode. Public mode preserves AI message text while redacting obvious local home paths, email addresses, and token-like strings. This is a safety net, not a complete privacy review.
 
-Audit worklog generation is provider-aware. Codex and Claude Code entries can be repository-scoped through working-directory metadata and must be reviewed before committing.
+Audit worklog generation is provider-aware. Codex, Claude Code, and Cursor entries can be repository-scoped through working-directory metadata when available and must be reviewed before committing.
 
 The app writes an audit worklog only after the user approves the reviewed Markdown preview. Smart merge mode preserves existing reviewed entries and appends only generated sections that are not already present.
 

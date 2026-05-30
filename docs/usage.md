@@ -19,7 +19,7 @@ npm run app:mac
 From the app you can:
 
 - use the default Codex log locations
-- add custom files or directories from the native `Logs` menu, including Codex JSONL and Claude Code JSONL
+- add custom files or directories from the native `Logs` menu, including Codex JSONL, Claude Code JSONL, Cursor `state.vscdb`, and explicit Cursor Markdown exports
 - select a project from the sidebar
 - use Browse to move from project to submitted message to AI interaction, with sessions available as an optional view
 - use Overview for metrics, charts, and Project Focus prompt categories for the selected project
@@ -43,9 +43,11 @@ open "dist/macos/Codex Log Viewer.app"
 
 ## Custom Sources
 
-Use `Logs > Choose Codex Log Location...` to pick custom log files or folders. Custom sources can include Codex JSONL and Claude Code JSONL. Use `Logs > Use Default Codex Log Locations` to return to `~/.codex/sessions` and `~/.codex/archived_sessions`. Recent custom sources, provider filter choices, and date filter choices are stored in local app settings.
+Use `Logs > Choose Codex Log Location...` to pick custom log files or folders. Custom sources can include Codex JSONL, Claude Code JSONL, Cursor `state.vscdb`, and explicit Cursor Markdown exports. Use `Logs > Use Default Codex Log Locations` to return to `~/.codex/sessions` and `~/.codex/archived_sessions`. Recent custom sources, provider filter choices, and date filter choices are stored in local app settings.
 
-The provider filter in the workspace header can show All, Codex, or Claude records. Default launch remains Codex-only because the default source roots are Codex roots.
+The provider filter in the workspace header can show All, Codex, Claude, or Cursor records. Default launch remains Codex-only because the default source roots are Codex roots.
+
+For Cursor, choose the local SQLite state file directly, usually `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb`, or choose the containing Cursor `User` folder if you want discovery to include Cursor state databases. Cursor Markdown exports must be selected as explicit files so ordinary documentation folders are not interpreted as chat exports. Cursor's local SQLite schema is private and may change; unsupported records are reported as warnings instead of aborting the scan.
 
 The date filter lives in the workspace header. Use the calendar control to switch between all time, a specific day, week, month, year, or a custom start/end range. Future dates are disabled, and the current week, month, or year is capped at today.
 
@@ -112,7 +114,7 @@ The CLI remains available for fixture tests and automation:
 npm run cli -- audit --repo /path/to/repo --output /path/to/repo/docs/ai-worklog.md
 ```
 
-The audit flow includes submitted user messages from all enabled providers and, by default, the captured AI responses that followed those messages. Codex and Claude Code entries use working-directory metadata for repository filtering. Output uses public privacy mode unless `--raw` is passed in the CLI, redacting obvious local home paths, email addresses, and token-like strings while preserving user intent.
+The audit flow includes submitted user messages from all enabled providers and, by default, the captured AI responses that followed those messages. Codex, Claude Code, and Cursor entries use working-directory metadata for repository filtering when the provider exposes it. Output uses public privacy mode unless `--raw` is passed in the CLI, redacting obvious local home paths, email addresses, and token-like strings while preserving user intent.
 
 Smart merge mode skips generated sections already present in the target worklog and appends only new generated session sections. Existing reviewed text is preserved.
 
@@ -143,7 +145,7 @@ npm run cli -- summary --path fixtures/codex/sample-session.jsonl
 
 You can pass multiple `--path` values.
 
-Use `--provider all|codex|claude` to filter CLI summaries, session lists, exports, and audit drafts. Custom `--path` values can point at mixed provider sources.
+Use `--provider all|codex|claude|cursor` to filter CLI summaries, session lists, exports, and audit drafts. Custom `--path` values can point at mixed provider sources.
 
 ## Current Metric Rules
 
@@ -163,6 +165,7 @@ Use `--provider all|codex|claude` to filter CLI summaries, session lists, export
 - Browse, Search, and operational prompt groups can hide or show grouped prompt families from `View > Operational Messages...`.
 - Token totals sum `token_count.info.last_token_usage` records.
 - Claude token totals use Anthropic usage fields, including cache creation and cache read token fields.
+- Cursor token totals use local bubble `tokenCount` fields when present; Cursor records without exposed token counts do not contribute token totals.
 - `token_count` events with `info: null` are ignored for token totals.
 - Unknown event shapes are preserved and counted.
 - Malformed JSONL lines produce parse warnings instead of aborting the scan.

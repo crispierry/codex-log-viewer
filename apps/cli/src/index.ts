@@ -258,15 +258,15 @@ function printHelp(): void {
   process.stdout.write(`Codex Log Viewer
 
 Usage:
-  codex-log-viewer projects [--provider all|codex|claude] [--path <file-or-dir>] [--json]
-  codex-log-viewer summary [--provider all|codex|claude] [--project <name>] [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--path <file-or-dir>] [--json]
-  codex-log-viewer sessions [--provider all|codex|claude] [--project <name>] [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--path <file-or-dir>] [--json]
+  codex-log-viewer projects [--provider all|codex|claude|cursor] [--path <file-or-dir>] [--json]
+  codex-log-viewer summary [--provider all|codex|claude|cursor] [--project <name>] [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--path <file-or-dir>] [--json]
+  codex-log-viewer sessions [--provider all|codex|claude|cursor] [--project <name>] [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--path <file-or-dir>] [--json]
   codex-log-viewer export [--format json|csv] [--output <file>] [summary options]
   codex-log-viewer export --format json --raw [summary options]
-  codex-log-viewer audit [--provider all|codex|claude] [--repo <path>] [--project <name>] [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--output <file>] [--raw] [--no-responses]
+  codex-log-viewer audit [--provider all|codex|claude|cursor] [--repo <path>] [--project <name>] [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--output <file>] [--raw] [--no-responses]
 
 Defaults scan ~/.codex/sessions and ~/.codex/archived_sessions.
-Custom paths can include Codex JSONL and Claude Code JSONL.
+Custom paths can include Codex JSONL, Claude Code JSONL, Cursor state.vscdb, and explicit Cursor Markdown exports.
 `);
 }
 

@@ -9,6 +9,7 @@ import { parseCodexCorpusWithCache, parseLogCorpusWithCache } from "../dist/inde
 const testDir = dirname(fileURLToPath(import.meta.url));
 const fixturePath = resolve(testDir, "../../../fixtures/codex/sample-session.jsonl");
 const claudeFixturePath = resolve(testDir, "../../../fixtures/claude/basic-session.jsonl");
+const cursorMarkdownFixturePath = resolve(testDir, "../../../fixtures/cursor/basic-export.md");
 
 test("parseCodexCorpusWithCache incrementally reuses unchanged parsed session files", async () => {
   const tempDir = await mkdtemp(`${tmpdir()}/codex-log-viewer-cache-`);
@@ -132,21 +133,26 @@ test("parseCodexCorpusWithCache repairs corrupt files and stale manifests", asyn
 test("parseLogCorpusWithCache filters provider after reusing detected parsed files", async () => {
   const tempDir = await mkdtemp(`${tmpdir()}/codex-log-viewer-provider-cache-`);
   const cacheDir = join(tempDir, "cache");
-  const paths = [fixturePath, claudeFixturePath];
+  const paths = [fixturePath, claudeFixturePath, cursorMarkdownFixturePath];
 
   try {
     const allProviders = await parseLogCorpusWithCache({ paths, cacheDir });
-    assert.deepEqual(allProviders.corpus.files.map((file) => file.provider).sort(), ["claude", "codex"]);
+    assert.deepEqual(allProviders.corpus.files.map((file) => file.provider).sort(), ["claude", "codex", "cursor"]);
 
     const claudeOnly = await parseLogCorpusWithCache({ paths, provider: "claude", cacheDir });
-    assert.equal(claudeOnly.cache.reusedFiles, 2);
+    assert.equal(claudeOnly.cache.reusedFiles, 3);
     assert.deepEqual(claudeOnly.corpus.files.map((file) => file.provider), ["claude"]);
     assert.equal(claudeOnly.corpus.messages.every((message) => message.provider === "claude"), true);
 
     const codexOnly = await parseLogCorpusWithCache({ paths, provider: "codex", cacheDir });
-    assert.equal(codexOnly.cache.reusedFiles, 2);
+    assert.equal(codexOnly.cache.reusedFiles, 3);
     assert.deepEqual(codexOnly.corpus.files.map((file) => file.provider), ["codex"]);
     assert.equal(codexOnly.corpus.messages.every((message) => message.provider === "codex"), true);
+
+    const cursorOnly = await parseLogCorpusWithCache({ paths, provider: "cursor", cacheDir });
+    assert.equal(cursorOnly.cache.reusedFiles, 3);
+    assert.deepEqual(cursorOnly.corpus.files.map((file) => file.provider), ["cursor"]);
+    assert.equal(cursorOnly.corpus.messages.every((message) => message.provider === "cursor"), true);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }

@@ -9,7 +9,7 @@ Codex Log Viewer is a native macOS app backed by a local TypeScript parsing engi
 - `apps/cli`: command-line access to parser and analytics for automation
 - `packages/parser`: provider-aware log parsing and normalization
 - `packages/analytics`: provider/project grouping, aggregation, bucketing, search, and exports
-- `fixtures/codex`, `fixtures/claude`: sanitized provider fixtures
+- `fixtures/codex`, `fixtures/claude`, `fixtures/cursor`: sanitized provider fixtures
 
 There is intentionally no browser dashboard or Electron shell. Codex logs live on the user's machine, so the product surface is the native app. The local HTTP engine is an implementation detail used to reuse the tested parser and analytics packages.
 
@@ -32,7 +32,7 @@ The CLI remains available for automation and test smoke checks, but it is not th
 
 ```mermaid
 flowchart LR
-  A["Codex JSONL, Claude JSONL"] --> B["Provider discovery"]
+  A["Codex JSONL, Claude JSONL, Cursor state.vscdb/Markdown"] --> B["Provider discovery"]
   B --> C["Provider adapter"]
   C --> D["Normalized records"]
   C --> E["Parse warnings"]
@@ -51,6 +51,7 @@ Responsibilities:
 
 - discover supported local provider files
 - parse JSONL safely
+- read supported provider-specific local storage such as Cursor SQLite only after explicit source selection
 - classify known provider event types
 - keep Codex compatibility APIs while exposing provider-neutral APIs
 - preserve unknown event payloads

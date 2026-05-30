@@ -18,6 +18,7 @@ import {
 const testDir = dirname(fileURLToPath(import.meta.url));
 const fixturePath = resolve(testDir, "../../../fixtures/codex/sample-session.jsonl");
 const claudeFixturePath = resolve(testDir, "../../../fixtures/claude/basic-session.jsonl");
+const cursorMarkdownFixturePath = resolve(testDir, "../../../fixtures/cursor/basic-export.md");
 
 test("summarizeParsedCorpus aggregates messages, unique messages, tokens, models, and warnings", async () => {
   const corpus = await parseCodexCorpus({ paths: [fixturePath] });
@@ -42,17 +43,22 @@ test("summarizeParsedCorpus aggregates messages, unique messages, tokens, models
 });
 
 test("summaries and search support mixed provider filtering", async () => {
-  const corpus = await parseLogCorpus({ paths: [fixturePath, claudeFixturePath] });
+  const corpus = await parseLogCorpus({ paths: [fixturePath, claudeFixturePath, cursorMarkdownFixturePath] });
   const allSummary = summarizeParsedCorpus(corpus);
 
-  assert.deepEqual(allSummary.providers.map((provider) => provider.provider).sort(), ["claude", "codex"]);
-  assert.equal(allSummary.totals.userMessages, 2);
+  assert.deepEqual(allSummary.providers.map((provider) => provider.provider).sort(), ["claude", "codex", "cursor"]);
+  assert.equal(allSummary.totals.userMessages, 3);
   assert.equal(allSummary.promptIntents.totalMessages, 1);
 
   const claudeSearch = searchMessages(corpus, { provider: "claude", submittedOnly: true });
   assert.equal(claudeSearch.totalMatches, 1);
   assert.equal(claudeSearch.results[0]?.provider, "claude");
   assert.equal(claudeSearch.results[0]?.content, "Add Claude fixture support");
+
+  const cursorSearch = searchMessages(corpus, { provider: "cursor", submittedOnly: true });
+  assert.equal(cursorSearch.totalMatches, 1);
+  assert.equal(cursorSearch.results[0]?.provider, "cursor");
+  assert.equal(cursorSearch.results[0]?.content, "Add Cursor Markdown import support.");
 });
 
 test("projectsFromCorpus uses token and turn timestamps for activity metadata", () => {
@@ -1543,6 +1549,8 @@ test("summarizeParsedCorpus filters diagnostics by visible project sessions and 
 test("redactedProjectSummary removes local source paths from JSON exports", async () => {
   const corpus = await parseCodexCorpus({ paths: [fixturePath] });
   const summary = summarizeParsedCorpus(corpus, { project: "sample-app", paths: [fixturePath] });
+  summary.sessions[0].title = "Sensitive Cursor plan";
+  summary.sessions[0].providerConversationId = "cursor-conversation-private-id";
 
   const redacted = redactedProjectSummary(summary);
   const body = summaryToJson(summary, { redacted: true });
@@ -1550,6 +1558,10 @@ test("redactedProjectSummary removes local source paths from JSON exports", asyn
   assert.equal(redacted.filters.paths[0], "[redacted]");
   assert.equal(redacted.sessions[0]?.filePath, "[redacted]");
   assert.equal(redacted.sessions[0]?.cwd, "[redacted]");
+  assert.equal(redacted.sessions[0]?.title, "[redacted]");
+  assert.equal(redacted.sessions[0]?.providerConversationId, "[redacted]");
   assert.equal(body.includes("fixtures/codex/sample-session.jsonl"), false);
   assert.equal(body.includes("/Users/example/projects/sample-app"), false);
+  assert.equal(body.includes("Sensitive Cursor plan"), false);
+  assert.equal(body.includes("cursor-conversation-private-id"), false);
 });

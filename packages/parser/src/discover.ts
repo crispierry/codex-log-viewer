@@ -18,13 +18,13 @@ export async function discoverLogFiles(paths = defaultCodexLogRoots(), provider:
   const files = new Set<string>();
 
   for (const inputPath of paths) {
-    await collectLogFiles(resolve(inputPath), files, provider);
+    await collectLogFiles(resolve(inputPath), files, provider, true);
   }
 
   return [...files].sort();
 }
 
-async function collectLogFiles(path: string, files: Set<string>, provider: ProviderFilter): Promise<void> {
+async function collectLogFiles(path: string, files: Set<string>, provider: ProviderFilter, explicitInput = false): Promise<void> {
   let info;
   try {
     info = await stat(path);
@@ -33,7 +33,7 @@ async function collectLogFiles(path: string, files: Set<string>, provider: Provi
   }
 
   if (info.isFile()) {
-    if (isSupportedLogFile(path, provider)) {
+    if (isSupportedLogFile(path, provider, explicitInput)) {
       files.add(path);
     }
     return;
@@ -54,6 +54,20 @@ async function collectLogFiles(path: string, files: Set<string>, provider: Provi
   );
 }
 
-function isSupportedLogFile(path: string, provider: ProviderFilter): boolean {
-  return (provider === "all" || provider === "codex" || provider === "claude") && path.endsWith(".jsonl");
+function isSupportedLogFile(path: string, provider: ProviderFilter, explicitInput: boolean): boolean {
+  if (path.endsWith(".jsonl")) {
+    return provider === "all" || provider === "codex" || provider === "claude";
+  }
+  if (path.endsWith(".vscdb")) {
+    return (provider === "all" || provider === "cursor") && (explicitInput || isCursorGlobalState(path));
+  }
+  if (explicitInput && path.endsWith(".md")) {
+    return provider === "all" || provider === "cursor";
+  }
+  return false;
+}
+
+function isCursorGlobalState(path: string): boolean {
+  return /\/Cursor\/User\/globalStorage\/state\.vscdb$/u.test(path) ||
+    /\/User\/globalStorage\/state\.vscdb$/u.test(path);
 }

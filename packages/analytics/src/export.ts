@@ -9,6 +9,8 @@ export function redactedProjectSummary(summary: ProjectSummary): ProjectSummary 
     },
     sessions: summary.sessions.map((session) => ({
       ...session,
+      title: session.title ? "[redacted]" : undefined,
+      providerConversationId: session.providerConversationId ? "[redacted]" : undefined,
       filePath: "[redacted]",
       cwd: session.cwd ? "[redacted]" : undefined
     })),

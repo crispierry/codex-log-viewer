@@ -44,6 +44,7 @@ enum ProviderFilter: String, CaseIterable, Identifiable {
   case all
   case codex
   case claude
+  case cursor
 
   var id: String { rawValue }
 
@@ -55,6 +56,8 @@ enum ProviderFilter: String, CaseIterable, Identifiable {
       return "Codex"
     case .claude:
       return "Claude"
+    case .cursor:
+      return "Cursor"
     }
   }
 }

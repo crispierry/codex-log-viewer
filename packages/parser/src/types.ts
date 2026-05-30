@@ -1,10 +1,12 @@
 export type JsonObject = Record<string, unknown>;
 
-export type ProviderId = "codex" | "claude" | (string & {});
+export type ProviderId = "codex" | "claude" | "cursor" | (string & {});
 export type ProviderFilter = "all" | ProviderId;
 export type InputKind =
   | "codex-jsonl"
   | "claude-jsonl"
+  | "cursor-vscdb"
+  | "cursor-markdown"
   | (string & {});
 
 export interface ProviderMetadata {

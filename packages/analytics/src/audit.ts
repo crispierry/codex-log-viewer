@@ -308,7 +308,8 @@ function assistantResponsesForUserMessage(
 function isSubmittedUserMessage(message: MessageRecord): boolean {
   return message.role === "user" && (
     message.sourceEvent === "event_msg.user_message" ||
-    message.sourceEvent === "claude.user_message"
+    message.sourceEvent === "claude.user_message" ||
+    message.sourceEvent === "cursor.user_message"
   );
 }
 
@@ -329,6 +330,8 @@ function providerLabel(record: { provider?: string; sourceLabel?: string }): str
       return "Codex";
     case "claude":
       return "Claude Code";
+    case "cursor":
+      return "Cursor";
     default:
       return recordProvider(record);
   }

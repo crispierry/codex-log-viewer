@@ -14,7 +14,7 @@ import type {
 } from "./types.js";
 
 const CACHE_SCHEMA_VERSION = 1;
-const PARSER_CACHE_VERSION = "parser-v6";
+const PARSER_CACHE_VERSION = "parser-v7";
 
 interface CacheManifest {
   schemaVersion: number;
@@ -281,5 +281,5 @@ function filterProviderFiles(files: ParsedCodexFile[], provider: ProviderFilter)
 }
 
 function isSupportedLogPath(path: string): boolean {
-  return path.endsWith(".jsonl");
+  return path.endsWith(".jsonl") || path.endsWith(".vscdb") || path.endsWith(".md");
 }

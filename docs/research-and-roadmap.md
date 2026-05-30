@@ -154,7 +154,7 @@ Milestone 4: public polish
 
 ## Open Questions And Follow-Ups
 
-- Provider-aware parsing now exists for Codex and Claude Code JSONL. Use the [Unified AI Log Provider Support](unified-ai-log-provider-support-plan.md) notes for the current boundaries and future provider work.
+- Provider-aware parsing now exists for Codex JSONL, Claude Code JSONL, and Cursor local/export sources. Use the [Unified AI Log Provider Support](unified-ai-log-provider-support-plan.md) notes for the current boundaries and future provider work.
 - Should we eventually ship a VS Code extension in addition to the native macOS app?
 - Do we want to estimate API-equivalent cost, even though Codex product/subscription billing can differ?
 - How aggressively should we redact message contents by default in exports?

@@ -1,6 +1,9 @@
 import { createReadStream } from "node:fs";
-import { basename } from "node:path";
+import { readFile } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
 import { createInterface } from "node:readline";
+import { DatabaseSync } from "node:sqlite";
+import { fileURLToPath } from "node:url";
 import { discoverCodexLogFiles, discoverLogFiles } from "./discover.js";
 import type {
   JsonObject,
@@ -39,6 +42,18 @@ const CLAUDE_METADATA: ProviderMetadata = {
   provider: "claude",
   inputKind: "claude-jsonl",
   sourceLabel: "Claude Code"
+};
+
+const CURSOR_VSCDB_METADATA: ProviderMetadata = {
+  provider: "cursor",
+  inputKind: "cursor-vscdb",
+  sourceLabel: "Cursor"
+};
+
+const CURSOR_MARKDOWN_METADATA: ProviderMetadata = {
+  provider: "cursor",
+  inputKind: "cursor-markdown",
+  sourceLabel: "Cursor"
 };
 
 const KNOWN_EVENT_TYPES = new Set([
@@ -96,6 +111,14 @@ export async function parseLogFile(filePath: string, provider: ProviderFilter = 
 }
 
 async function parseDetectedLogFile(filePath: string): Promise<ParsedLogFile[]> {
+  if (filePath.endsWith(".vscdb")) {
+    return parseCursorVscdbFile(filePath);
+  }
+
+  if (filePath.endsWith(".md")) {
+    return [await parseCursorMarkdownFile(filePath)];
+  }
+
   if (await looksLikeClaudeJsonl(filePath)) {
     return [await parseClaudeLogFile(filePath)];
   }
@@ -220,6 +243,177 @@ async function parseClaudeLogFile(filePath: string): Promise<ParsedCodexFile> {
     taskTimings: [],
     toolEvents,
     unknownEvents,
+    warnings
+  };
+}
+
+interface CursorComposerHeader {
+  composerId: string;
+  title?: string;
+  timestamp?: string;
+  updatedAt?: string;
+  cwd?: string;
+}
+
+interface CursorBubble {
+  rowNumber: number;
+  bubbleId: string;
+  raw: JsonObject;
+}
+
+async function parseCursorVscdbFile(filePath: string): Promise<ParsedLogFile[]> {
+  const warnings: ParseWarning[] = [];
+  let database: DatabaseSync;
+  try {
+    database = new DatabaseSync(filePath, { readOnly: true });
+  } catch (error) {
+    warnings.push({
+      ...CURSOR_VSCDB_METADATA,
+      filePath,
+      lineNumber: 0,
+      code: "cursor_vscdb_open_failed",
+      message: errorMessage(error)
+    });
+    return [emptyParsedFile(filePath, CURSOR_VSCDB_METADATA, warnings)];
+  }
+
+  try {
+    if (!sqliteTableExists(database, "cursorDiskKV")) {
+      warnings.push({
+        ...CURSOR_VSCDB_METADATA,
+        filePath,
+        lineNumber: 0,
+        code: "unsupported_cursor_vscdb",
+        message: "Cursor SQLite database does not contain cursorDiskKV chat storage."
+      });
+      return [emptyParsedFile(filePath, CURSOR_VSCDB_METADATA, warnings)];
+    }
+
+    const headers = await cursorComposerHeaders(database, filePath);
+    const bubblesByComposer = cursorBubblesByComposer(database, filePath, warnings);
+    const sessionIds = [...new Set([...headers.keys(), ...bubblesByComposer.keys()])].sort((a, b) => {
+      const aTimestamp = headers.get(a)?.timestamp ?? "";
+      const bTimestamp = headers.get(b)?.timestamp ?? "";
+      return aTimestamp.localeCompare(bTimestamp) || a.localeCompare(b);
+    });
+
+    if (sessionIds.length === 0) {
+      warnings.push({
+        ...CURSOR_VSCDB_METADATA,
+        filePath,
+        lineNumber: 0,
+        code: "cursor_vscdb_no_chats",
+        message: "No Cursor chat bubbles were found in cursorDiskKV."
+      });
+      return [emptyParsedFile(filePath, CURSOR_VSCDB_METADATA, warnings)];
+    }
+
+    const parsedFiles = sessionIds
+      .map((sessionId, index) => cursorParsedFileForSession(filePath, sessionId, headers.get(sessionId), bubblesByComposer.get(sessionId) ?? [], index === 0 ? warnings : []))
+      .filter((file) => file.messages.length > 0 || file.warnings.length > 0);
+
+    return parsedFiles.length > 0 ? parsedFiles : [emptyParsedFile(filePath, CURSOR_VSCDB_METADATA, warnings)];
+  } catch (error) {
+    warnings.push({
+      ...CURSOR_VSCDB_METADATA,
+      filePath,
+      lineNumber: 0,
+      code: "cursor_vscdb_parse_failed",
+      message: errorMessage(error)
+    });
+    return [emptyParsedFile(filePath, CURSOR_VSCDB_METADATA, warnings)];
+  } finally {
+    database.close();
+  }
+}
+
+async function parseCursorMarkdownFile(filePath: string): Promise<ParsedCodexFile> {
+  const warnings: ParseWarning[] = [];
+  const text = await readFile(filePath, "utf8");
+  const lines = text.split(/\r?\n/);
+  const sessionId = sessionIdFromFile(filePath);
+  const state: ParseState = {
+    ...CURSOR_MARKDOWN_METADATA,
+    sessionId,
+    providerConversationId: sessionId,
+    title: markdownTitle(lines) ?? basename(filePath)
+  };
+  const sessions: SessionRecord[] = [];
+  const messages: MessageRecord[] = [];
+  let current: { role: "user" | "assistant"; startLine: number; lines: string[] } | undefined;
+
+  const flush = (): void => {
+    if (!current) {
+      return;
+    }
+    const content = current.lines.join("\n").trim();
+    if (content) {
+      messages.push({
+        ...CURSOR_MARKDOWN_METADATA,
+        title: state.title,
+        providerConversationId: state.providerConversationId,
+        filePath,
+        sessionId,
+        lineNumber: current.startLine,
+        role: current.role,
+        sourceEvent: cursorSourceEvent(current.role),
+        content,
+        imagesCount: 0,
+        localImagesCount: 0
+      });
+    }
+    current = undefined;
+  };
+
+  lines.forEach((line, index) => {
+    const role = cursorMarkdownRoleHeading(line);
+    if (role) {
+      flush();
+      current = { role, startLine: index + 1, lines: [] };
+      return;
+    }
+
+    const inline = cursorMarkdownInlineRole(line);
+    if (inline) {
+      flush();
+      current = { role: inline.role, startLine: index + 1, lines: inline.content ? [inline.content] : [] };
+      return;
+    }
+
+    if (current) {
+      current.lines.push(line);
+    }
+  });
+  flush();
+
+  if (messages.length === 0) {
+    warnings.push({
+      ...CURSOR_MARKDOWN_METADATA,
+      title: state.title,
+      providerConversationId: state.providerConversationId,
+      filePath,
+      lineNumber: 0,
+      code: "cursor_markdown_no_messages",
+      message: "No Cursor Markdown user or assistant sections were found."
+    });
+  }
+
+  ensureProviderSession(filePath, state, sessions);
+
+  return {
+    ...CURSOR_MARKDOWN_METADATA,
+    title: state.title,
+    providerConversationId: state.providerConversationId,
+    filePath,
+    sessionId,
+    lineCount: lines.length,
+    sessions,
+    turns: [],
+    messages,
+    tokenUsage: [],
+    taskTimings: [],
+    toolEvents: [],
+    unknownEvents: [],
     warnings
   };
 }
@@ -642,6 +836,391 @@ function ensureProviderSession(
   });
 }
 
+function cursorParsedFileForSession(
+  filePath: string,
+  sessionId: string,
+  header: CursorComposerHeader | undefined,
+  bubbles: CursorBubble[],
+  warnings: ParseWarning[]
+): ParsedCodexFile {
+  const state: ParseState = {
+    ...CURSOR_VSCDB_METADATA,
+    sessionId,
+    providerConversationId: sessionId,
+    title: header?.title,
+    sessionCwd: header?.cwd
+  };
+  const sessions: SessionRecord[] = [];
+  const turns: TurnRecord[] = [];
+  const messages: MessageRecord[] = [];
+  const tokenUsage: TokenUsageRecord[] = [];
+  const taskTimings = new Map<string, TaskTimingRecord>();
+  const toolEvents: ToolEventRecord[] = [];
+  const unknownEvents: UnknownEventRecord[] = [];
+  ensureProviderSession(filePath, state, sessions, header?.timestamp);
+
+  const sortedBubbles = [...bubbles].sort((a, b) =>
+    (timestampFromUnknown(a.raw.createdAt) ?? "").localeCompare(timestampFromUnknown(b.raw.createdAt) ?? "") ||
+    a.rowNumber - b.rowNumber
+  );
+
+  sortedBubbles.forEach((bubble, index) => {
+    const lineNumber = index + 1;
+    const timestamp = timestampFromUnknown(bubble.raw.createdAt);
+    const role = cursorBubbleRole(bubble.raw);
+    const content = cursorBubbleText(bubble.raw);
+    const turnId = bubble.bubbleId;
+
+    if (role && content) {
+      messages.push({
+        ...CURSOR_VSCDB_METADATA,
+        title: state.title,
+        providerConversationId: state.providerConversationId,
+        filePath,
+        sessionId,
+        lineNumber,
+        turnId,
+        timestamp,
+        role,
+        sourceEvent: cursorSourceEvent(role),
+        content,
+        imagesCount: arrayValue(bubble.raw.images).length,
+        localImagesCount: 0
+      });
+    } else if (content) {
+      unknownEvents.push({
+        ...CURSOR_VSCDB_METADATA,
+        title: state.title,
+        providerConversationId: state.providerConversationId,
+        filePath,
+        sessionId,
+        lineNumber,
+        timestamp,
+        topLevelType: "cursor.bubble",
+        payloadType: stringValue(bubble.raw.type) ?? numberValue(bubble.raw.type)?.toString(),
+        raw: bubble.raw
+      });
+    }
+
+    const usage = usageFromCursorTokenCount(objectValue(bubble.raw.tokenCount));
+    if (usage) {
+      tokenUsage.push({
+        ...CURSOR_VSCDB_METADATA,
+        title: state.title,
+        providerConversationId: state.providerConversationId,
+        filePath,
+        sessionId,
+        lineNumber,
+        turnId,
+        timestamp,
+        usage
+      });
+    }
+
+    const durationMs = numberValue(bubble.raw.turnDurationMs);
+    if (durationMs !== undefined) {
+      const timing = timingFor(taskTimings, filePath, sessionId, turnId, {
+        ...CURSOR_VSCDB_METADATA,
+        title: state.title,
+        providerConversationId: state.providerConversationId
+      });
+      timing.durationMs = durationMs;
+    }
+
+    for (const [toolIndex, tool] of arrayValue(bubble.raw.toolResults).entries()) {
+      if (!isObject(tool)) {
+        continue;
+      }
+      toolEvents.push({
+        ...CURSOR_VSCDB_METADATA,
+        title: state.title,
+        providerConversationId: state.providerConversationId,
+        filePath,
+        sessionId,
+        lineNumber,
+        turnId,
+        timestamp,
+        eventType: stringValue(tool.type) ?? "tool_result",
+        name: stringValue(tool.name) ?? stringValue(tool.toolName),
+        callId: stringValue(tool.id) ?? `${turnId}:tool:${toolIndex + 1}`,
+        content: cursorToolEventContent(tool),
+        cwd: state.sessionCwd
+      });
+    }
+  });
+
+  return {
+    ...CURSOR_VSCDB_METADATA,
+    title: state.title,
+    providerConversationId: state.providerConversationId,
+    filePath,
+    sessionId,
+    lineCount: sortedBubbles.length,
+    sessions,
+    turns,
+    messages,
+    tokenUsage,
+    taskTimings: [...taskTimings.values()],
+    toolEvents,
+    unknownEvents,
+    warnings
+  };
+}
+
+function emptyParsedFile(
+  filePath: string,
+  metadata: ProviderMetadata,
+  warnings: ParseWarning[]
+): ParsedCodexFile {
+  return {
+    ...metadata,
+    filePath,
+    sessionId: sessionIdFromFile(filePath),
+    lineCount: 0,
+    sessions: [],
+    turns: [],
+    messages: [],
+    tokenUsage: [],
+    taskTimings: [],
+    toolEvents: [],
+    unknownEvents: [],
+    warnings
+  };
+}
+
+async function cursorComposerHeaders(database: DatabaseSync, filePath: string): Promise<Map<string, CursorComposerHeader>> {
+  const headers = new Map<string, CursorComposerHeader>();
+  if (!sqliteTableExists(database, "ItemTable")) {
+    return headers;
+  }
+
+  const raw = sqliteJsonValue(database, "ItemTable", "composer.composerHeaders");
+  const composers = arrayValue(objectValue(raw)?.allComposers);
+  await Promise.all(composers.map(async (composer) => {
+    if (!isObject(composer)) {
+      return;
+    }
+    const composerId = stringValue(composer.composerId);
+    if (!composerId) {
+      return;
+    }
+    const workspaceId = stringValue(objectValue(composer.workspaceIdentifier)?.id);
+    headers.set(composerId, {
+      composerId,
+      title: stringValue(composer.name) ?? stringValue(composer.subtitle),
+      timestamp: timestampFromUnknown(composer.createdAt),
+      updatedAt: timestampFromUnknown(composer.lastUpdatedAt),
+      cwd: workspaceId ? await cursorWorkspaceCwd(filePath, workspaceId) : undefined
+    });
+  }));
+  return headers;
+}
+
+function cursorBubblesByComposer(
+  database: DatabaseSync,
+  filePath: string,
+  warnings: ParseWarning[]
+): Map<string, CursorBubble[]> {
+  const groups = new Map<string, CursorBubble[]>();
+  const rows = database.prepare("SELECT key, value FROM cursorDiskKV WHERE key LIKE 'bubbleId:%'").all() as Array<{
+    key?: unknown;
+    value?: unknown;
+  }>;
+
+  rows.forEach((row, index) => {
+    const key = stringValue(row.key);
+    const keyParts = key?.split(":") ?? [];
+    const composerId = keyParts[1];
+    const bubbleId = keyParts[2];
+    if (!composerId || !bubbleId) {
+      return;
+    }
+    const raw = jsonFromSqliteValue(row.value);
+    if (!isObject(raw)) {
+      warnings.push({
+        ...CURSOR_VSCDB_METADATA,
+        filePath,
+        lineNumber: index + 1,
+        code: "malformed_cursor_record",
+        message: `Could not parse Cursor bubble ${bubbleId}.`
+      });
+      return;
+    }
+    const current = groups.get(composerId) ?? [];
+    current.push({ rowNumber: index + 1, bubbleId, raw });
+    groups.set(composerId, current);
+  });
+
+  return groups;
+}
+
+function sqliteTableExists(database: DatabaseSync, tableName: string): boolean {
+  const row = database.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(tableName) as
+    | { name?: string }
+    | undefined;
+  return row?.name === tableName;
+}
+
+function sqliteJsonValue(database: DatabaseSync, tableName: "ItemTable" | "cursorDiskKV", key: string): unknown {
+  const row = database.prepare(`SELECT value FROM ${tableName} WHERE key = ?`).get(key) as
+    | { value?: unknown }
+    | undefined;
+  return jsonFromSqliteValue(row?.value);
+}
+
+function jsonFromSqliteValue(value: unknown): unknown {
+  const text = sqliteTextValue(value);
+  if (!text) {
+    return undefined;
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+}
+
+function sqliteTextValue(value: unknown): string | undefined {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (Buffer.isBuffer(value)) {
+    return value.toString("utf8");
+  }
+  if (value instanceof Uint8Array) {
+    return Buffer.from(value).toString("utf8");
+  }
+  return undefined;
+}
+
+async function cursorWorkspaceCwd(filePath: string, workspaceId: string): Promise<string | undefined> {
+  const userStorage = cursorUserStorageDir(filePath);
+  if (!userStorage) {
+    return undefined;
+  }
+  try {
+    const workspace = JSON.parse(await readFile(join(userStorage, "workspaceStorage", workspaceId, "workspace.json"), "utf8"));
+    const folder = stringValue(objectValue(workspace)?.folder);
+    return folder ? cursorFolderToPath(folder) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function cursorUserStorageDir(filePath: string): string | undefined {
+  const parent = dirname(filePath);
+  if (basename(parent) === "globalStorage") {
+    return dirname(parent);
+  }
+  if (basename(dirname(parent)) === "workspaceStorage") {
+    return dirname(dirname(parent));
+  }
+  return undefined;
+}
+
+function cursorFolderToPath(value: string): string {
+  if (!value.startsWith("file://")) {
+    return value;
+  }
+  try {
+    return fileURLToPath(value);
+  } catch {
+    return value;
+  }
+}
+
+function cursorBubbleRole(raw: JsonObject): "user" | "assistant" | undefined {
+  const type = numberValue(raw.type);
+  if (type === 1) {
+    return "user";
+  }
+  if (type === 2) {
+    return "assistant";
+  }
+  const role = stringValue(raw.role) ?? stringValue(raw.type);
+  if (role === "user" || role === "assistant") {
+    return role;
+  }
+  return undefined;
+}
+
+function cursorBubbleText(raw: JsonObject): string {
+  return (
+    stringValue(raw.text) ??
+    stringValue(raw.message) ??
+    contentToText(raw.content)
+  ).trim();
+}
+
+function cursorSourceEvent(role: "user" | "assistant"): string {
+  return role === "user" ? "cursor.user_message" : "cursor.assistant_message";
+}
+
+function usageFromCursorTokenCount(value?: JsonObject): TokenUsage | undefined {
+  if (!value) {
+    return undefined;
+  }
+  const inputTokens = numberValue(value.inputTokens) ?? numberValue(value.input_tokens) ?? 0;
+  const outputTokens = numberValue(value.outputTokens) ?? numberValue(value.output_tokens) ?? 0;
+  const totalTokens = numberValue(value.totalTokens) ?? numberValue(value.total_tokens) ?? inputTokens + outputTokens;
+  if (inputTokens === 0 && outputTokens === 0 && totalTokens === 0) {
+    return undefined;
+  }
+  return {
+    inputTokens,
+    cachedInputTokens: 0,
+    cacheCreationInputTokens: 0,
+    cacheReadInputTokens: 0,
+    freshInputTokens: inputTokens,
+    outputTokens,
+    reasoningOutputTokens: 0,
+    totalTokens
+  };
+}
+
+function cursorToolEventContent(value: JsonObject): string | undefined {
+  const content = stringValue(value.output) ??
+    stringValue(value.content) ??
+    stringValue(value.result) ??
+    contentToText(value.content) ??
+    jsonContent(value);
+  const normalized = content?.trim();
+  return normalized ? normalized : undefined;
+}
+
+function markdownTitle(lines: string[]): string | undefined {
+  const heading = lines.find((line) => /^#\s+\S/u.test(line));
+  return heading?.replace(/^#\s+/u, "").trim();
+}
+
+function cursorMarkdownRoleHeading(line: string): "user" | "assistant" | undefined {
+  const match = line.trim().match(/^#{1,6}\s+(user|human|you|assistant|cursor|ai)\s*$/iu);
+  return cursorMarkdownRole(match?.[1]);
+}
+
+function cursorMarkdownInlineRole(line: string): { role: "user" | "assistant"; content: string } | undefined {
+  const normalized = line.trim();
+  const boldMatch = normalized.match(/^\*\*(user|human|you|assistant|cursor|ai)\*\*:?\s*(.*)$/iu);
+  const plainMatch = normalized.match(/^(user|human|you|assistant|cursor|ai):\s+(.*)$/iu);
+  const match = boldMatch ?? plainMatch;
+  const role = cursorMarkdownRole(match?.[1]);
+  if (!role) {
+    return undefined;
+  }
+  return { role, content: match?.[2]?.trim() ?? "" };
+}
+
+function cursorMarkdownRole(value: string | undefined): "user" | "assistant" | undefined {
+  const normalized = value?.toLowerCase();
+  if (normalized === "user" || normalized === "human" || normalized === "you") {
+    return "user";
+  }
+  if (normalized === "assistant" || normalized === "cursor" || normalized === "ai") {
+    return "assistant";
+  }
+  return undefined;
+}
+
 function isToolEvent(topLevelType?: string, payloadType?: string): boolean {
   return (
     topLevelType === "response_item" &&
@@ -653,7 +1232,19 @@ function isToolEvent(topLevelType?: string, payloadType?: string): boolean {
 }
 
 function sessionIdFromFile(filePath: string): string {
-  return basename(filePath).replace(/^rollout-/, "").replace(/\.(jsonl|json|zip|data)$/, "");
+  return basename(filePath).replace(/^rollout-/, "").replace(/\.(jsonl|json|zip|data|vscdb|md)$/, "");
+}
+
+function timestampFromUnknown(value: unknown): string | undefined {
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Date.parse(value);
+    return Number.isNaN(parsed) ? value : new Date(parsed).toISOString();
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const millis = value > 10_000_000_000 ? value : value * 1000;
+    return new Date(millis).toISOString();
+  }
+  return undefined;
 }
 
 function usageFromObject(value?: JsonObject): TokenUsage | undefined {
