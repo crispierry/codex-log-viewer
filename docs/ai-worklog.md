@@ -2,6 +2,51 @@
 
 Sanitized audit trail of AI-assisted work on this project.
 
+## 2026-05-30 - Fix Provider Support Review Issues
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> Code review
+
+> Fix all these issues
+
+### Interpreted Intent
+
+The user wanted the provider-support branch reviewed for regressions, then wanted every identified issue fixed before the branch moved forward.
+
+### Response / Work Done
+
+- Reviewed the branch against `main` and identified issues in provider-filtered parsing, persistent parsed-cache reuse, SQLite search-index migration, audit repository scoping, and provider session counts.
+- Changed provider filtering so corpus parsing detects each JSONL source first, then filters by provider.
+- Updated parsed-cache reuse so cached detected provider records are filtered on read instead of being reparsed or reused under the wrong provider mode.
+- Added search-index schema reset logic for stale v2 SQLite databases and guarded async search-index rebuild failures.
+- Tightened audit repository filtering so Claude records without working-directory context are not included in arbitrary repository audits.
+- Aligned provider session counts with the same daily-session semantics used by the summary session list.
+- Added regression coverage for provider filtering with and without cache, stale search-index migration, no-cwd Claude audit exclusion, and provider daily-session counts.
+
+### Privacy Notes
+
+No raw Codex or Claude transcripts were added. New tests use existing sanitized fixtures and synthetic records.
+
+### Verification
+
+- Ran `npm run build`.
+- Ran `npm run test -w @codex-log-viewer/parser`.
+- Ran `npm run test -w @codex-log-viewer/analytics`.
+- Ran `npm run test -w @codex-log-viewer/server`.
+- Ran `npm test`.
+- Ran `npm run lint`.
+- Ran `npm run privacy:scan`.
+- Ran `npm run build:mac`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`.
+- Ran `npm run smoke:mac-ui`.
+- Ran `git diff --check`.
+- Relaunched `dist/macos/Codex Log Viewer.app`.
+
 ## 2026-05-30 - Make Audit Worklogs Provider-Aware
 
 Status: Completed

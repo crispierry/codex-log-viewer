@@ -265,7 +265,7 @@ function projectInScope(
   if (repoPathMatches(cwd, project, options.repoPath, aliases)) {
     return true;
   }
-  return !cwd && recordProvider(file) !== "codex" && hasExplicitSourcePaths(options);
+  return false;
 }
 
 function repoPathMatches(
@@ -337,10 +337,6 @@ function providerLabel(record: { provider?: string; sourceLabel?: string }): str
 function providerSummary(entries: AuditSessionEntry[]): string {
   const providers = [...new Set(entries.map((entry) => providerLabel(entry.file)))].sort((a, b) => a.localeCompare(b));
   return providers.length > 0 ? providers.join(", ") : "none";
-}
-
-function hasExplicitSourcePaths(options: AuditMarkdownOptions): boolean {
-  return Array.isArray(options.paths) && options.paths.length > 0;
 }
 
 function dateRange(options: SummaryOptions): { since?: number; until?: number } {

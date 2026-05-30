@@ -85,19 +85,17 @@ export async function parseCodexCorpus(options: ParseOptions = {}): Promise<Pars
 
 export async function parseLogCorpus(options: ParseOptions = {}): Promise<ParsedCodexCorpus> {
   const provider = providerForDiscovery(options);
-  const files = await discoverLogFiles(options.paths, provider);
-  const parsedFileGroups = await Promise.all(files.map((file) => parseLogFile(file, provider)));
+  const files = await discoverLogFiles(options.paths, "all");
+  const parsedFileGroups = await Promise.all(files.map((file) => parseLogFile(file)));
   return corpusFromFiles(parsedFileGroups.flat().filter((file) => providerMatches(file.provider, provider)));
 }
 
 export async function parseLogFile(filePath: string, provider: ProviderFilter = "all"): Promise<ParsedLogFile[]> {
-  if (provider === "codex") {
-    return [await parseCodexLogFile(filePath)];
-  }
-  if (provider === "claude") {
-    return [await parseClaudeLogFile(filePath)];
-  }
+  const parsed = await parseDetectedLogFile(filePath);
+  return parsed.filter((file) => providerMatches(file.provider, provider));
+}
 
+async function parseDetectedLogFile(filePath: string): Promise<ParsedLogFile[]> {
   if (await looksLikeClaudeJsonl(filePath)) {
     return [await parseClaudeLogFile(filePath)];
   }

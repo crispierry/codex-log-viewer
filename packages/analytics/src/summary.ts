@@ -166,6 +166,7 @@ function providerBuckets(
   tokenUsage: TokenUsageRecord[]
 ): ProviderBucket[] {
   const buckets = new Map<string, ProviderBucket>();
+  const sessionKeysByProvider = new Map<string, Set<string>>();
   for (const file of files) {
     const provider = recordProvider(file);
     const bucket = buckets.get(provider) ?? {
@@ -174,7 +175,6 @@ function providerBuckets(
       messages: 0,
       totalTokens: 0
     };
-    bucket.sessions += 1;
     buckets.set(provider, bucket);
   }
   for (const message of messages) {
@@ -187,6 +187,9 @@ function providerBuckets(
     };
     bucket.messages += 1;
     buckets.set(provider, bucket);
+    const sessionKeys = sessionKeysByProvider.get(provider) ?? new Set<string>();
+    sessionKeys.add(sessionRecordKey(message.filePath, message.sessionId, localDateKey(message.timestamp)));
+    sessionKeysByProvider.set(provider, sessionKeys);
   }
   for (const token of dedupeTokenEvents(tokenUsage)) {
     const provider = recordProvider(token);
@@ -198,6 +201,12 @@ function providerBuckets(
     };
     bucket.totalTokens += token.usage.totalTokens;
     buckets.set(provider, bucket);
+  }
+  for (const [provider, sessionKeys] of sessionKeysByProvider) {
+    const bucket = buckets.get(provider);
+    if (bucket) {
+      bucket.sessions = sessionKeys.size;
+    }
   }
   return [...buckets.values()].sort((a, b) => b.messages - a.messages || a.provider.localeCompare(b.provider));
 }

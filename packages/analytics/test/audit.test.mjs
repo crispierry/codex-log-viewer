@@ -122,6 +122,30 @@ test("generateAuditMarkdown filters by repository path", () => {
   assert.doesNotMatch(markdown, /Do not include this other project/);
 });
 
+test("generateAuditMarkdown excludes provider logs without repository context from repo audits", () => {
+  const corpus = auditCorpus({
+    sessionId: "claude-unscoped-session",
+    provider: "claude",
+    sourceLabel: "Claude Code",
+    userSourceEvent: "claude.user_message",
+    assistantSourceEvent: "claude.assistant_message",
+    cwd: undefined,
+    firstUserMessage: "Do not include this unscoped Claude work.",
+    firstAssistantMessage: "This response should stay out."
+  });
+
+  const markdown = generateAuditMarkdown(corpus, {
+    repoPath: "/Users/example/projects/sample-app",
+    paths: ["/Users/example/.claude/projects/unscoped.jsonl"],
+    generatedAt: "2026-05-19T12:00:00.000Z",
+    privacy: "raw"
+  });
+
+  assert.match(markdown, /Sessions: 0/);
+  assert.match(markdown, /No matching submitted user messages were found\./);
+  assert.doesNotMatch(markdown, /Do not include this unscoped Claude work/);
+});
+
 test("generateAuditMarkdown does not include unrelated repositories with the same basename", () => {
   const firstCorpus = auditCorpus({
     cwd: "/Users/example/client-a/app",

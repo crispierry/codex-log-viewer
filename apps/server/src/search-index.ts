@@ -154,8 +154,9 @@ interface IndexedMessageRow {
 }
 
 function ensureSchema(database: DatabaseSync): void {
+  database.exec("PRAGMA journal_mode = WAL;");
+  resetSearchSchemaIfNeeded(database);
   database.exec(`
-    PRAGMA journal_mode = WAL;
     CREATE TABLE IF NOT EXISTS metadata (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
@@ -189,6 +190,33 @@ function ensureSchema(database: DatabaseSync): void {
       ON messages(session_id, file_path, date_key);
     CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts
       USING fts5(content, content='messages', content_rowid='rowid');
+  `);
+}
+
+function resetSearchSchemaIfNeeded(database: DatabaseSync): void {
+  const table = database.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'messages'").get();
+  if (!table) {
+    return;
+  }
+
+  const columns = new Set(
+    (database.prepare("PRAGMA table_info(messages)").all() as Array<{ name: string }>)
+      .map((column) => column.name)
+  );
+  const requiredColumns = [
+    "provider",
+    "source_label",
+    "title",
+    "provider_conversation_id"
+  ];
+  if (requiredColumns.every((column) => columns.has(column))) {
+    return;
+  }
+
+  database.exec(`
+    DROP TABLE IF EXISTS messages_fts;
+    DROP TABLE IF EXISTS messages;
+    DROP TABLE IF EXISTS metadata;
   `);
 }
 

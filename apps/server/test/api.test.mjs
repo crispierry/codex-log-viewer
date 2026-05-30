@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readdir, readFile, rm, unlink, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { tmpdir } from "node:os";
+import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { explainPromptIntent } from "@codex-log-viewer/analytics";
 import { startServer } from "../dist/index.js";
+import { openSearchIndex } from "../dist/search-index.js";
 
 const testDir = dirname(fileURLToPath(import.meta.url));
 const fixturePath = resolve(testDir, "../../../fixtures/codex/sample-session.jsonl");
@@ -226,6 +228,53 @@ test("message search writes and reads a local SQLite search index when cache is 
     } else {
       process.env.CODEX_LOG_VIEWER_SEARCH_INDEX_REBUILD_DELAY_MS = previousDelayMs;
     }
+  }
+});
+
+test("message search index rebuilds stale v2 schemas", async () => {
+  const tempDir = await mkdtemp(`${tmpdir()}/codex-log-viewer-search-index-migration-`);
+  const indexPath = resolve(tempDir, "messages.sqlite");
+  const database = new DatabaseSync(indexPath);
+  database.exec(`
+    CREATE TABLE metadata (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+    INSERT INTO metadata (key, value) VALUES ('schemaVersion', '2');
+    CREATE TABLE messages (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      file_path TEXT NOT NULL,
+      date_key TEXT NOT NULL,
+      project TEXT NOT NULL,
+      cwd TEXT,
+      line_number INTEGER,
+      turn_id TEXT,
+      model TEXT,
+      timestamp TEXT,
+      role TEXT NOT NULL,
+      source_event TEXT NOT NULL,
+      category TEXT,
+      prompt_intent_key TEXT,
+      prompt_intent TEXT,
+      normalized_content TEXT NOT NULL,
+      content TEXT NOT NULL
+    );
+    CREATE VIRTUAL TABLE messages_fts
+      USING fts5(content, content='messages', content_rowid='rowid');
+  `);
+  database.close();
+
+  try {
+    const handle = openSearchIndex(searchIndexCorpus(), indexPath);
+    const result = handle.search({ submittedOnly: true });
+    handle.close();
+
+    assert.equal(result?.totalMatches, 1);
+    assert.equal(result?.results[0]?.provider, "codex");
+    assert.equal(result?.results[0]?.content, "Upgrade stale index");
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
   }
 });
 
@@ -1014,4 +1063,58 @@ async function writeApiSession(filePath, { sessionId, cwd, timestamp, message })
     ].join("\n") + "\n",
     "utf8"
   );
+}
+
+function searchIndexCorpus() {
+  const file = {
+    provider: "codex",
+    sourceLabel: "Codex",
+    inputKind: "codex-jsonl",
+    filePath: "fixture.jsonl",
+    sessionId: "search-index-session",
+    lineCount: 2,
+    sessions: [],
+    turns: [],
+    messages: [],
+    tokenUsage: [],
+    taskTimings: [],
+    toolEvents: [],
+    unknownEvents: [],
+    warnings: []
+  };
+  const session = {
+    provider: "codex",
+    sourceLabel: "Codex",
+    inputKind: "codex-jsonl",
+    filePath: file.filePath,
+    sessionId: file.sessionId,
+    cwd: "/tmp/search-index-app",
+    timestamp: "2026-01-01T00:00:00.000Z"
+  };
+  const message = {
+    provider: "codex",
+    sourceLabel: "Codex",
+    inputKind: "codex-jsonl",
+    filePath: file.filePath,
+    sessionId: file.sessionId,
+    lineNumber: 2,
+    timestamp: "2026-01-01T00:00:01.000Z",
+    role: "user",
+    sourceEvent: "event_msg.user_message",
+    content: "Upgrade stale index",
+    imagesCount: 0,
+    localImagesCount: 0
+  };
+
+  return {
+    files: [{ ...file, sessions: [session], messages: [message] }],
+    sessions: [session],
+    turns: [],
+    messages: [message],
+    tokenUsage: [],
+    taskTimings: [],
+    toolEvents: [],
+    unknownEvents: [],
+    warnings: []
+  };
 }

@@ -52,10 +52,11 @@ export async function parseCodexCorpusWithCache(options: ParseOptions = {}): Pro
 export async function parseLogCorpusWithCache(options: ParseOptions = {}): Promise<CachedParsedLogCorpus> {
   const provider = providerForDiscovery(options);
   if (!options.cacheDir) {
-    const files = await discoverLogFiles(options.paths, provider);
-    const parsedFiles = (await Promise.all(files.map((file) => parseLogFile(file, provider)))).flat();
+    const files = await discoverLogFiles(options.paths, "all");
+    const parsedFiles = (await Promise.all(files.map((file) => parseLogFile(file)))).flat();
+    const visibleFiles = filterProviderFiles(parsedFiles, provider);
     return {
-      corpus: corpusFromParsedFiles(parsedFiles),
+      corpus: corpusFromParsedFiles(visibleFiles),
       cache: cacheMetadata("updated", 0, parsedFiles.length, 0, parsedFiles.length)
     };
   }
@@ -64,7 +65,7 @@ export async function parseLogCorpusWithCache(options: ParseOptions = {}): Promi
   const filesDirectory = resolve(cacheDirectory, "files");
   await mkdir(filesDirectory, { recursive: true });
 
-  const discoveredFiles = await canonicalLogFiles(await discoverLogFiles(options.paths, provider));
+  const discoveredFiles = await canonicalLogFiles(await discoverLogFiles(options.paths, "all"));
   const fingerprints = await Promise.all(discoveredFiles.map((filePath) => fingerprintFor(filePath)));
   const activeKeys = new Set(fingerprints.map((fingerprint) => fingerprint.cacheKey));
   const sourceScopes = await scopesFor(options.paths ?? defaultCodexLogRoots());
@@ -100,7 +101,7 @@ export async function parseLogCorpusWithCache(options: ParseOptions = {}): Promi
       continue;
     }
 
-    const parsed = await parseLogFile(fingerprint.filePath, provider);
+    const parsed = await parseLogFile(fingerprint.filePath);
     reparsedFiles += 1;
     parsedFiles.push(...parsed);
     manifest.entries[fingerprint.cacheKey] = {
@@ -123,7 +124,7 @@ export async function parseLogCorpusWithCache(options: ParseOptions = {}): Promi
       ? "updated"
       : "ready";
   return {
-    corpus: corpusFromParsedFiles(parsedFiles),
+    corpus: corpusFromParsedFiles(filterProviderFiles(parsedFiles, provider)),
     cache: cacheMetadata(status, reusedFiles, reparsedFiles, removedFiles, parsedFiles.length)
   };
 }
@@ -273,6 +274,10 @@ function cacheMetadata(
 
 function providerForDiscovery(options: ParseOptions): ProviderFilter {
   return options.provider ?? (options.paths && options.paths.length > 0 ? "all" : "codex");
+}
+
+function filterProviderFiles(files: ParsedCodexFile[], provider: ProviderFilter): ParsedCodexFile[] {
+  return provider === "all" ? files : files.filter((file) => file.provider === provider);
 }
 
 function isSupportedLogPath(path: string): boolean {

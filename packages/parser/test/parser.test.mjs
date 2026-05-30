@@ -56,6 +56,16 @@ test("parseLogCorpus can parse mixed provider sources", async () => {
   assert.equal(corpus.sessions.some((session) => session.provider === "claude"), true);
 });
 
+test("parseLogCorpus filters by provider after detecting each source", async () => {
+  const corpus = await parseLogCorpus({ paths: [fixturePath, claudeFixturePath], provider: "claude" });
+  const forcedWrongProvider = await parseLogFile(fixturePath, "claude");
+
+  assert.deepEqual(corpus.files.map((file) => file.provider), ["claude"]);
+  assert.equal(corpus.messages.every((message) => message.provider === "claude"), true);
+  assert.equal(corpus.messages.some((message) => message.sourceEvent === "event_msg.user_message"), false);
+  assert.deepEqual(forcedWrongProvider, []);
+});
+
 test("parseCodexLogFile normalizes response items and tool events", async () => {
   const parsed = await parseCodexLogFile(eventShapesFixturePath);
 

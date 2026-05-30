@@ -1366,6 +1366,7 @@ test("summarizeParsedCorpus splits long raw sessions into daily session slices",
   const secondDay = summary.sessions.find((session) => session.firstSeen === "2026-01-02T12:00:00.000Z");
 
   assert.equal(summary.totals.sessions, 2);
+  assert.equal(summary.providers[0]?.sessions, 2);
   assert.equal(new Set(summary.sessions.map((session) => session.dateKey)).size, 2);
   assert.equal(firstDay?.userMessages, 1);
   assert.equal(firstDay?.assistantMessages, 1);

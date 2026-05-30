@@ -496,6 +496,9 @@ function scheduleSearchIndexRebuild(
       const handle = openSearchIndex(loaded.corpus, indexPath);
       searchIndexCache.get(key)?.handle.close();
       searchIndexCache.set(key, { handle });
+    } catch {
+      searchIndexCache.get(key)?.handle.close();
+      searchIndexCache.delete(key);
     } finally {
       searchIndexRebuilds.delete(key);
     }
