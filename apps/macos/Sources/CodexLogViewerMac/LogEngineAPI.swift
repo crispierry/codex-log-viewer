@@ -66,7 +66,8 @@ struct LogEngineAPI {
     filters: LogFilters,
     submittedOnly: Bool = false,
     hiddenCategories: [String] = [],
-    limit: Int = 100
+    limit: Int = 100,
+    offset: Int = 0
   ) async throws -> MessageSearchSummary {
     try await searchMessagesWithMetadata(
       query: query,
@@ -79,7 +80,8 @@ struct LogEngineAPI {
       filters: filters,
       submittedOnly: submittedOnly,
       hiddenCategories: hiddenCategories,
-      limit: limit
+      limit: limit,
+      offset: offset
     ).search
   }
 
@@ -94,12 +96,14 @@ struct LogEngineAPI {
     filters: LogFilters,
     submittedOnly: Bool = false,
     hiddenCategories: [String] = [],
-    limit: Int = 100
+    limit: Int = 100,
+    offset: Int = 0
   ) async throws -> CachedSearch {
     var queryItems = [
       URLQueryItem(name: "q", value: query),
       URLQueryItem(name: "role", value: role.rawValue),
-      URLQueryItem(name: "limit", value: String(limit))
+      URLQueryItem(name: "limit", value: String(limit)),
+      URLQueryItem(name: "offset", value: String(offset))
     ]
     if model != AppConstants.allModelsName {
       queryItems.append(URLQueryItem(name: "model", value: model))
@@ -122,6 +126,63 @@ struct LogEngineAPI {
     queryItems.append(contentsOf: self.queryItems(project: project, filters: filters))
     let response: MessageSearchResponse = try await get("api/messages/search", query: queryItems)
     return CachedSearch(search: response.search, cache: response.cacheMetadata)
+  }
+
+  func evalMessagesWithMetadata(
+    query: String,
+    categoryKey: String?,
+    reviewState: EvalReviewStateFilter,
+    project: String,
+    filters: LogFilters,
+    limit: Int = 500,
+    offset: Int = 0
+  ) async throws -> CachedEvals {
+    var queryItems = [
+      URLQueryItem(name: "q", value: query),
+      URLQueryItem(name: "reviewState", value: reviewState.rawValue),
+      URLQueryItem(name: "limit", value: String(limit)),
+      URLQueryItem(name: "offset", value: String(offset))
+    ]
+    if let categoryKey, !categoryKey.isEmpty {
+      queryItems.append(URLQueryItem(name: "categoryKey", value: categoryKey))
+    }
+    queryItems.append(contentsOf: self.queryItems(project: project, filters: filters))
+    let response: EvalsResponse = try await get("api/evals/messages", query: queryItems)
+    return CachedEvals(evals: response.evals, cache: response.cacheMetadata)
+  }
+
+  func saveEvalReview(evalId: String, actualKey: String, expectedKey: String, note: String?) async throws -> PromptIntentEvalReview {
+    var body = [
+      "evalId": evalId,
+      "actualKey": actualKey,
+      "expectedKey": expectedKey
+    ]
+    if let note, !note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+      body["note"] = note
+    }
+    let response: EvalReviewResponse = try await postJson("api/evals/reviews", body: body)
+    return response.review
+  }
+
+  func deleteEvalReview(evalId: String) async throws {
+    var components = URLComponents(url: baseURL.appending(path: "api/evals/reviews"), resolvingAgainstBaseURL: false)!
+    components.queryItems = [URLQueryItem(name: "evalId", value: evalId)]
+
+    var request = URLRequest(url: components.url!)
+    request.httpMethod = "DELETE"
+    request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+
+    let (data, response) = try await URLSession.shared.data(for: request)
+    let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+    guard 200..<300 ~= statusCode else {
+      let body = String(data: data, encoding: .utf8)?
+        .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+      throw LogEngineAPIError.badStatus(path: "api/evals/reviews", statusCode: statusCode, body: body)
+    }
+  }
+
+  func exportEvalFixtureDraft(filters: LogFilters) async throws -> Data {
+    try await getData("api/evals/fixture-draft", query: queryItems(filters: filters, includeDateRange: true))
   }
 
   func exportSummary(format: ExportFormat, project: String, filters: LogFilters) async throws -> Data {
@@ -232,5 +293,10 @@ struct CachedSummary {
 
 struct CachedSearch {
   let search: MessageSearchSummary
+  let cache: CacheMetadata?
+}
+
+struct CachedEvals {
+  let evals: PromptIntentEvalMessageSummary
   let cache: CacheMetadata?
 }

@@ -154,6 +154,32 @@ struct CodexLogViewerApp: App {
         }
       }
 
+      CommandMenu("Evals") {
+        if let model = commandModel {
+          Button("Open Evals") {
+            appDelegate.setCommandModel(model)
+            openWindow(id: AppWindowID.evals)
+            NSApp.activate(ignoringOtherApps: true)
+          }
+          .keyboardShortcut("l", modifiers: [.command, .shift])
+          .accessibilityIdentifier("evals-open-menu-item")
+
+          Divider()
+
+          Button("Export Fixture Draft...") {
+            model.exportEvalFixtureDraft()
+          }
+          .accessibilityIdentifier("evals-export-fixture-draft-menu-item")
+        } else {
+          Button("Open Evals") {}
+            .disabled(true)
+            .accessibilityIdentifier("evals-open-menu-item")
+          Button("Export Fixture Draft...") {}
+            .disabled(true)
+            .accessibilityIdentifier("evals-export-fixture-draft-menu-item")
+        }
+      }
+
       CommandGroup(replacing: .help) {
         Button("Codex Log Viewer Help") {
           AppModel.showHelpBox()
@@ -172,6 +198,10 @@ struct CodexLogViewerApp: App {
       OperationalMessagesWindowRootView(appDelegate: appDelegate)
     }
     .windowResizability(.contentSize)
+
+    Window("Evals", id: AppWindowID.evals) {
+      EvalsWindowRootView(appDelegate: appDelegate)
+    }
   }
 }
 
@@ -515,6 +545,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 enum AppWindowID {
   static let main = "main"
   static let operationalMessages = "operational-messages"
+  static let evals = "evals"
 }
 
 enum AppRuntime {

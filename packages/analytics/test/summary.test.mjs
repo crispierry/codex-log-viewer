@@ -3,7 +3,17 @@ import test from "node:test";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseCodexCorpus } from "@codex-log-viewer/parser";
-import { projectsFromCorpus, redactedProjectSummary, searchMessages, summarizeParsedCorpus, summaryToJson } from "../dist/index.js";
+import {
+  classifyPromptIntent,
+  evalMessageId,
+  explainPromptIntent,
+  promptIntentEvalFixtureDraft,
+  projectsFromCorpus,
+  redactedProjectSummary,
+  searchMessages,
+  summarizeParsedCorpus,
+  summaryToJson
+} from "../dist/index.js";
 
 const testDir = dirname(fileURLToPath(import.meta.url));
 const fixturePath = resolve(testDir, "../../../fixtures/codex/sample-session.jsonl");
@@ -530,6 +540,89 @@ test("summarizeParsedCorpus classifies project focus prompt intents accurately",
   assert.equal(unfilteredBuckets.get("Deploy/release/run/build")?.count, 3);
 });
 
+test("classifyPromptIntent lets explicit feature work beat incidental bug rationale", () => {
+  const loadingAndSyncRequest = [
+    "There's a couple of features we need to add:",
+    "1. When we're loading the latest logs, we need to put a dialog box letting the user know that we are loading.",
+    "I actually thought the app was broken because there was no feedback and it wasn't getting the latest information.",
+    "Also if the app is running, I want it to periodically synchronize so that the data is always fresh."
+  ].join(" ");
+
+  assert.equal(classifyPromptIntent(loadingAndSyncRequest).label, "Feature design");
+  assert.equal(explainPromptIntent(loadingAndSyncRequest).ruleKey, "feature-design-mixed-bug-rationale");
+  assert.equal(classifyPromptIntent("Please add a loading indicator because the app feels broken").label, "Feature design");
+  assert.equal(classifyPromptIntent("Can we fix the broken loading dialog?").label, "Bug fixes");
+  assert.equal(explainPromptIntent("Can we fix the broken loading dialog?").ruleKey, "direct-bug-fix");
+  assert.equal(classifyPromptIntent("I want you to fix the broken parser").label, "Bug fixes");
+});
+
+test("promptIntentEvalFixtureDraft exports reviewed placeholders without raw prompt text", () => {
+  const privatePrompt = "Please add a private ACME customer chart from /Users/example/secret-notes.md";
+  const message = {
+    filePath: "private-evals.jsonl",
+    sessionId: "private-evals",
+    timestamp: "2026-01-01T12:00:00.000Z",
+    role: "user",
+    sourceEvent: "event_msg.user_message",
+    content: privatePrompt,
+    imagesCount: 0,
+    localImagesCount: 0
+  };
+  const corpus = {
+    files: [
+      {
+        filePath: message.filePath,
+        sessionId: message.sessionId,
+        lineCount: 1,
+        sessions: [],
+        turns: [],
+        messages: [],
+        tokenUsage: [],
+        taskTimings: [],
+        toolEvents: [],
+        unknownEvents: [],
+        warnings: []
+      }
+    ],
+    sessions: [
+      {
+        filePath: message.filePath,
+        sessionId: message.sessionId,
+        cwd: "/Users/example/private-project",
+        timestamp: message.timestamp
+      }
+    ],
+    turns: [],
+    messages: [message],
+    tokenUsage: [],
+    taskTimings: [],
+    toolEvents: [],
+    unknownEvents: [],
+    warnings: []
+  };
+  const evalId = evalMessageId(message);
+  const draft = promptIntentEvalFixtureDraft(corpus, {
+    reviews: {
+      [evalId]: {
+        evalId,
+        actualKey: "data-analysis",
+        expectedKey: "feature-design",
+        isCorrect: false,
+        reviewedAt: "2026-01-01T12:01:00.000Z",
+        note: "Raw note should not be exported"
+      }
+    }
+  });
+  const serialized = JSON.stringify(draft);
+
+  assert.equal(draft.examples.length, 1);
+  assert.equal(draft.examples[0]?.expectedKey, "feature-design");
+  assert.equal(draft.examples[0]?.message.includes("TODO: Replace"), true);
+  assert.equal(serialized.includes("ACME"), false);
+  assert.equal(serialized.includes("secret-notes"), false);
+  assert.equal(serialized.includes("Raw note"), false);
+});
+
 test("summarizeParsedCorpus counts automation prompts separately from sent user messages", () => {
   const corpus = {
     files: [
@@ -925,7 +1018,14 @@ test("searchMessages searches messages across all projects and supports project 
 
   const allResults = searchMessages(corpus, { query: "parser test" });
   assert.equal(allResults.totalMatches, 2);
+  assert.equal(allResults.offset, 0);
   assert.equal(allResults.results[0]?.project, "sample-app");
+
+  const secondPage = searchMessages(corpus, { query: "parser test", limit: 1, offset: 1 });
+  assert.equal(secondPage.totalMatches, 2);
+  assert.equal(secondPage.limit, 1);
+  assert.equal(secondPage.offset, 1);
+  assert.equal(secondPage.results.length, 1);
 
   const userResults = searchMessages(corpus, { query: "parser test", role: "user" });
   assert.equal(userResults.totalMatches, 1);

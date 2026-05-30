@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 import Security
 
 struct LocalLogEngineConnection {
@@ -82,7 +83,15 @@ final class LocalLogEngineServer {
 
   func stop() {
     if let process, process.isRunning {
+      let processIdentifier = process.processIdentifier
       process.terminate()
+      let deadline = Date().addingTimeInterval(2)
+      while process.isRunning && Date() < deadline {
+        Thread.sleep(forTimeInterval: 0.05)
+      }
+      if process.isRunning {
+        kill(processIdentifier, SIGKILL)
+      }
       process.waitUntilExit()
     }
     stdoutHandle?.closeFile()
@@ -136,6 +145,7 @@ final class LocalLogEngineServer {
     var environment = ProcessInfo.processInfo.environment
     environment["CODEX_LOG_VIEWER_AUTH_TOKEN"] = authToken
     environment["CODEX_LOG_VIEWER_CACHE_DIR"] = try cacheDirectoryURL().path
+    environment["CODEX_LOG_VIEWER_EVALS_DIR"] = try evalsDirectoryURL().path
     process.environment = environment
 
     do {
@@ -236,6 +246,26 @@ final class LocalLogEngineServer {
       .appending(path: "v1", directoryHint: .isDirectory)
     try FileManager.default.createDirectory(at: cacheURL, withIntermediateDirectories: true)
     return cacheURL
+  }
+
+  private func evalsDirectoryURL() throws -> URL {
+    if let evalsDir = ProcessInfo.processInfo.environment["CODEX_LOG_VIEWER_EVALS_DIR"], !evalsDir.isEmpty {
+      let url = URL(fileURLWithPath: evalsDir, isDirectory: true)
+      try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+      return url
+    }
+
+    let appSupportURL = try FileManager.default.url(
+      for: .applicationSupportDirectory,
+      in: .userDomainMask,
+      appropriateFor: nil,
+      create: true
+    )
+    let evalsURL = appSupportURL
+      .appending(path: "Codex Log Viewer", directoryHint: .isDirectory)
+      .appending(path: "Evals", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: evalsURL, withIntermediateDirectories: true)
+    return evalsURL
   }
 
   private func readServerURL() -> URL? {

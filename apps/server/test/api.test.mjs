@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, unlink, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { explainPromptIntent } from "@codex-log-viewer/analytics";
 import { startServer } from "../dist/index.js";
 
 const testDir = dirname(fileURLToPath(import.meta.url));
@@ -54,6 +55,19 @@ test("message search supports model and session filters through the local API", 
     const matchBody = await match.json();
     assert.equal(matchBody.search.totalMatches, 2);
     assert.equal(matchBody.search.results[0]?.model, "gpt-5.5");
+    assert.equal(typeof matchBody.performance?.totalMs, "number");
+    assert.equal(typeof matchBody.performance?.searchMs, "number");
+
+    const secondPage = await fetch(
+      `${server.url}/api/messages/search?q=parser%20test&limit=1&offset=1`,
+      { headers }
+    );
+    assert.equal(secondPage.status, 200);
+    const secondPageBody = await secondPage.json();
+    assert.equal(secondPageBody.search.totalMatches, 2);
+    assert.equal(secondPageBody.search.limit, 1);
+    assert.equal(secondPageBody.search.offset, 1);
+    assert.equal(secondPageBody.search.results.length, 1);
 
     const miss = await fetch(`${server.url}/api/messages/search?q=parser%20test&model=gpt-4.1`, { headers });
     assert.equal(miss.status, 200);
@@ -149,6 +163,43 @@ test("message search can limit browse mode to submitted user messages through th
   }
 });
 
+test("message search writes and reads a local SQLite search index when cache is configured", async () => {
+  const tempDir = await mkdtemp(`${tmpdir()}/codex-log-viewer-search-index-`);
+  const cacheDir = resolve(tempDir, "cache");
+  const previousMinMessages = process.env.CODEX_LOG_VIEWER_SEARCH_INDEX_MIN_MESSAGES;
+  const previousDelayMs = process.env.CODEX_LOG_VIEWER_SEARCH_INDEX_REBUILD_DELAY_MS;
+  process.env.CODEX_LOG_VIEWER_SEARCH_INDEX_MIN_MESSAGES = "0";
+  process.env.CODEX_LOG_VIEWER_SEARCH_INDEX_REBUILD_DELAY_MS = "0";
+  const server = await startServer({ port: 0, authToken: "test-token", paths: [fixturePath], cacheDir });
+  const headers = { authorization: "Bearer test-token" };
+
+  try {
+    const search = await fetch(`${server.url}/api/messages/search?q=parser%20test&limit=1&offset=1`, { headers });
+    assert.equal(search.status, 200);
+    const body = await search.json();
+    assert.equal(body.search.totalMatches, 2);
+    assert.equal(body.search.offset, 1);
+    assert.equal(body.search.results.length, 1);
+
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 50));
+    const indexFiles = await readdir(resolve(cacheDir, "search-index-v1"));
+    assert.equal(indexFiles.some((file) => file.endsWith(".sqlite")), true);
+  } finally {
+    await server.close();
+    await rm(tempDir, { recursive: true, force: true });
+    if (previousMinMessages === undefined) {
+      delete process.env.CODEX_LOG_VIEWER_SEARCH_INDEX_MIN_MESSAGES;
+    } else {
+      process.env.CODEX_LOG_VIEWER_SEARCH_INDEX_MIN_MESSAGES = previousMinMessages;
+    }
+    if (previousDelayMs === undefined) {
+      delete process.env.CODEX_LOG_VIEWER_SEARCH_INDEX_REBUILD_DELAY_MS;
+    } else {
+      process.env.CODEX_LOG_VIEWER_SEARCH_INDEX_REBUILD_DELAY_MS = previousDelayMs;
+    }
+  }
+});
+
 test("message search and session detail expose operational prompt categories", async () => {
   const tempDir = await mkdtemp(`${tmpdir()}/codex-log-viewer-operational-categories-`);
   const fixture = resolve(tempDir, "operational-categories.jsonl");
@@ -222,6 +273,145 @@ test("message search and session detail expose operational prompt categories", a
     const detailBody = await detail.json();
     assert.equal(detailBody.messages.find((message) => message.content === "commit")?.category, "Git commands");
     assert.equal(detailBody.messages.find((message) => message.content === "commit")?.promptIntent, "Git commands");
+  } finally {
+    await server.close();
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("evals API exposes submitted messages with explanations, filters, pagination, and reviews", async () => {
+  const tempDir = await mkdtemp(`${tmpdir()}/codex-log-viewer-evals-api-`);
+  const fixture = resolve(tempDir, "evals.jsonl");
+  const evalsDir = resolve(tempDir, "evals");
+  const featureMessage = "Please add a loading indicator because the app feels broken";
+  const bugMessage = "Can we fix the broken loading dialog?";
+
+  await mkdir(evalsDir, { recursive: true });
+  await writeFile(
+    fixture,
+    [
+      JSON.stringify({
+        timestamp: "2026-04-27T20:00:00.000Z",
+        type: "session_meta",
+        payload: {
+          id: "evals-session",
+          timestamp: "2026-04-27T20:00:00.000Z",
+          cwd: "/Users/example/projects/sample-app"
+        }
+      }),
+      JSON.stringify({
+        timestamp: "2026-04-27T20:00:01.000Z",
+        type: "event_msg",
+        payload: {
+          type: "user_message",
+          message: featureMessage
+        }
+      }),
+      JSON.stringify({
+        timestamp: "2026-04-27T20:00:02.000Z",
+        type: "event_msg",
+        payload: {
+          type: "user_message",
+          message: bugMessage
+        }
+      }),
+      JSON.stringify({
+        timestamp: "2026-04-27T20:00:03.000Z",
+        type: "response_item",
+        payload: {
+          type: "message",
+          role: "user",
+          content: [{ type: "input_text", text: "Internal user context, not submitted" }]
+        }
+      })
+    ].join("\n") + "\n",
+    "utf8"
+  );
+
+  const server = await startServer({ port: 0, authToken: "test-token", paths: [fixture], evalsDir });
+  const headers = { authorization: "Bearer test-token" };
+
+  try {
+    const all = await fetch(`${server.url}/api/evals/messages`, { headers });
+    assert.equal(all.status, 200);
+    const allBody = await all.json();
+    assert.equal(allBody.evals.totalMatches, 2);
+    assert.equal(allBody.evals.summary.totalMessages, 2);
+    assert.equal(typeof allBody.performance?.totalMs, "number");
+    assert.equal(typeof allBody.performance?.evalsMs, "number");
+    assert.equal(allBody.evals.results.some((message) => message.content.includes("Internal user context")), false);
+
+    const feature = allBody.evals.results.find((message) => message.content === featureMessage);
+    assert.ok(feature);
+    const featureExplanation = explainPromptIntent(featureMessage);
+    assert.equal(feature.promptIntentKey, "feature-design");
+    assert.equal(feature.ruleKey, featureExplanation.ruleKey);
+    assert.equal(feature.ruleLabel, featureExplanation.ruleLabel);
+    assert.deepEqual(feature.signals, featureExplanation.signals);
+
+    const filtered = await fetch(`${server.url}/api/evals/messages?categoryKey=feature-design`, { headers });
+    assert.equal(filtered.status, 200);
+    const filteredBody = await filtered.json();
+    assert.equal(filteredBody.evals.totalMatches, 1);
+    assert.equal(filteredBody.evals.results[0]?.evalId, feature.evalId);
+
+    const firstPage = await fetch(`${server.url}/api/evals/messages?limit=1&offset=0`, { headers });
+    const secondPage = await fetch(`${server.url}/api/evals/messages?limit=1&offset=1`, { headers });
+    assert.equal(firstPage.status, 200);
+    assert.equal(secondPage.status, 200);
+    const firstPageBody = await firstPage.json();
+    const secondPageBody = await secondPage.json();
+    assert.equal(firstPageBody.evals.totalMatches, 2);
+    assert.equal(firstPageBody.evals.results.length, 1);
+    assert.equal(secondPageBody.evals.results.length, 1);
+    assert.notEqual(firstPageBody.evals.results[0]?.evalId, secondPageBody.evals.results[0]?.evalId);
+
+    const review = await fetch(`${server.url}/api/evals/reviews`, {
+      method: "POST",
+      headers: { ...headers, "content-type": "application/json" },
+      body: JSON.stringify({
+        evalId: feature.evalId,
+        actualKey: feature.promptIntentKey,
+        expectedKey: feature.promptIntentKey,
+        note: "Looks right"
+      })
+    });
+    assert.equal(review.status, 200);
+    const reviewBody = await review.json();
+    assert.equal(reviewBody.review.isCorrect, true);
+
+    const draft = await fetch(`${server.url}/api/evals/fixture-draft`, { headers });
+    assert.equal(draft.status, 200);
+    assert.match(draft.headers.get("content-disposition") ?? "", /project-focus-reviewed-fixture-draft\.json/);
+    const draftText = await draft.text();
+    const draftBody = JSON.parse(draftText);
+    assert.equal(draftBody.examples.length, 1);
+    assert.equal(draftBody.examples[0]?.expectedKey, "feature-design");
+    assert.equal(draftBody.examples[0]?.message.includes("TODO: Replace"), true);
+    assert.equal(draftText.includes(featureMessage), false);
+    assert.equal(draftText.includes("Looks right"), false);
+
+    const correct = await fetch(`${server.url}/api/evals/messages?reviewState=correct`, { headers });
+    const unreviewed = await fetch(`${server.url}/api/evals/messages?reviewState=unreviewed`, { headers });
+    assert.equal(correct.status, 200);
+    assert.equal(unreviewed.status, 200);
+    const correctBody = await correct.json();
+    const unreviewedBody = await unreviewed.json();
+    assert.equal(correctBody.evals.totalMatches, 1);
+    assert.equal(correctBody.evals.results[0]?.evalId, feature.evalId);
+    assert.equal(unreviewedBody.evals.totalMatches, 1);
+    assert.equal(correctBody.evals.summary.reviewedMessages, 1);
+    assert.equal(correctBody.evals.summary.correctMessages, 1);
+
+    const cleared = await fetch(`${server.url}/api/evals/reviews?evalId=${feature.evalId}`, {
+      method: "DELETE",
+      headers
+    });
+    assert.equal(cleared.status, 200);
+
+    const afterClear = await fetch(`${server.url}/api/evals/messages?reviewState=unreviewed`, { headers });
+    const afterClearBody = await afterClear.json();
+    assert.equal(afterClearBody.evals.totalMatches, 2);
   } finally {
     await server.close();
     await rm(tempDir, { recursive: true, force: true });

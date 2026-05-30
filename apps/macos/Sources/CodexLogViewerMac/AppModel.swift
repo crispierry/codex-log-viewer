@@ -7,6 +7,18 @@ struct LogLoadingNotice: Equatable {
   let message: String
 }
 
+struct InteractionPerformance: Equatable {
+  let renderID: String
+  let elapsedMs: Double
+  let source: String
+  let recordedAt: String
+}
+
+private struct SessionDetailCacheKey: Hashable {
+  let sessionID: String
+  let filePath: String?
+}
+
 @MainActor
 final class AppModel: ObservableObject {
   enum Status: Equatable {
@@ -35,8 +47,14 @@ final class AppModel: ObservableObject {
   @Published var projects: [ProjectListItem] = []
   @Published var summary: ProjectSummary?
   @Published var selectedSessionID: SessionSummary.ID?
-  @Published var selectedSessionDetail: SessionDetail?
-  @Published var selectedUserMessageIndex: Int?
+  @Published var selectedSessionDetail: SessionDetail? = nil {
+    didSet { updateSelectedInteraction() }
+  }
+  @Published var selectedUserMessageIndex: Int? = nil {
+    didSet { updateSelectedInteraction() }
+  }
+  @Published private(set) var selectedInteraction: SessionInteraction?
+  @Published private(set) var lastInteractionPerformance: InteractionPerformance?
   @Published var isDetailLoading = false
   @Published var showSessionBrowser = false
   @Published var browseMessagesSummary: MessageSearchSummary?
@@ -72,6 +90,14 @@ final class AppModel: ObservableObject {
   @Published var auditReviewMarkdown = ""
   @Published var auditStatusMessage: String?
   @Published var isAuditLoading = false
+  @Published var evalsSummary: PromptIntentEvalMessageSummary?
+  @Published var selectedEvalMessageID: PromptIntentEvalMessage.ID?
+  @Published var evalCategoryKeyFilter: String?
+  @Published var evalReviewStateFilter: EvalReviewStateFilter = .all
+  @Published var evalQuery = ""
+  @Published var evalReviewNote = ""
+  @Published var isEvalsLoading = false
+  @Published var evalsStatusMessage: String?
 
   private var exportDirectoryPath = ""
   private var api: LogEngineAPI?
@@ -80,9 +106,12 @@ final class AppModel: ObservableObject {
   private var reloadTask: Task<Void, Never>?
   private var detailTask: Task<Void, Never>?
   private var quietDetailRefreshTask: Task<Void, Never>?
+  private var detailPrefetchTask: Task<Void, Never>?
   private var browseMessagesTask: Task<Void, Never>?
   private var searchTask: Task<Void, Never>?
   private var auditTask: Task<Void, Never>?
+  private var evalsTask: Task<Void, Never>?
+  private var evalReviewTask: Task<Void, Never>?
   private var backgroundSyncTask: Task<Void, Never>?
   private var reloadRequestID = 0
   private var detailRequestID = 0
@@ -90,13 +119,24 @@ final class AppModel: ObservableObject {
   private var browseMessagesRequestID = 0
   private var searchRequestID = 0
   private var auditRequestID = 0
+  private var evalsRequestID = 0
+  private var evalReviewRequestID = 0
   private var pendingSearchResultTarget: SearchResultSelectionTarget?
   private var pendingSearchConversationResult: MessageSearchResult?
+  private var sessionDetailCache: [SessionDetailCacheKey: SessionDetail] = [:]
+  private var sessionDetailCacheOrder: [SessionDetailCacheKey] = []
+  private var detailCacheGeneration = 0
+  private var pendingInteractionRenderStartedAt: Date?
+  private var pendingInteractionRenderSource = ""
+  private var pendingInteractionRenderID: String?
   private var isLogRefreshInFlight = false
   private let isEphemeralSettingsRun = ProcessInfo.processInfo.environment["CODEX_LOG_VIEWER_EPHEMERAL_SETTINGS"] == "1" ||
     ProcessInfo.processInfo.environment["CODEX_LOG_VIEWER_UI_TEST"] == "1"
   private var hasScheduledUITestQuit = false
   private static let backgroundSyncInterval: Duration = .seconds(60)
+  private static let sessionDetailCacheCapacity = 12
+  private static let browseMessagesPageSize = 500
+  private static let evalMessagesPageSize = 500
 
   private enum RefreshMode {
     case foreground
@@ -111,14 +151,27 @@ final class AppModel: ObservableObject {
     reloadTask?.cancel()
     detailTask?.cancel()
     quietDetailRefreshTask?.cancel()
+    detailPrefetchTask?.cancel()
     browseMessagesTask?.cancel()
     searchTask?.cancel()
     auditTask?.cancel()
+    evalsTask?.cancel()
+    evalReviewTask?.cancel()
     backgroundSyncTask?.cancel()
   }
 
   var browseMessages: [MessageSearchResult] {
     visibleBrowseMessages(in: browseMessagesSummary?.results ?? [])
+  }
+
+  var canLoadMoreBrowseMessages: Bool {
+    guard let browseMessagesSummary else { return false }
+    return browseMessagesSummary.results.count < browseMessagesSummary.totalMatches
+  }
+
+  var canLoadMoreEvalMessages: Bool {
+    guard let evalsSummary else { return false }
+    return evalsSummary.results.count < evalsSummary.totalMatches
   }
 
   var areBrowseMessagesHiddenByOperationalFilters: Bool {
@@ -138,6 +191,36 @@ final class AppModel: ObservableObject {
 
   var searchResults: [MessageSearchResult] {
     visibleSearchResults(in: searchSummary?.results ?? [])
+  }
+
+  var evalMessages: [PromptIntentEvalMessage] {
+    evalsSummary?.results ?? []
+  }
+
+  var selectedEvalMessage: PromptIntentEvalMessage? {
+    guard let selectedEvalMessageID else { return nil }
+    return evalMessages.first { $0.id == selectedEvalMessageID }
+  }
+
+  var promptIntentCategoryOptions: [PromptIntentCategoryOption] {
+    [
+      PromptIntentCategoryOption(key: "feature-design", label: "Feature design"),
+      PromptIntentCategoryOption(key: "implementation", label: "Implementation"),
+      PromptIntentCategoryOption(key: "bug-fixes", label: "Bug fixes"),
+      PromptIntentCategoryOption(key: "git-commands", label: "Git commands"),
+      PromptIntentCategoryOption(key: "deploy-release-run-build", label: "Deploy/release/run/build"),
+      PromptIntentCategoryOption(key: "code-review-qa", label: "Code review/QA"),
+      PromptIntentCategoryOption(key: "planning-strategy", label: "Planning/strategy"),
+      PromptIntentCategoryOption(key: "research", label: "Research"),
+      PromptIntentCategoryOption(key: "documentation", label: "Documentation"),
+      PromptIntentCategoryOption(key: "testing-verification", label: "Testing/verification"),
+      PromptIntentCategoryOption(key: "refactor-cleanup", label: "Refactor/cleanup"),
+      PromptIntentCategoryOption(key: "content-creation", label: "Content creation"),
+      PromptIntentCategoryOption(key: "data-analysis", label: "Data/metrics"),
+      PromptIntentCategoryOption(key: "feedback-context", label: "Context/observation"),
+      PromptIntentCategoryOption(key: "plan-approvals", label: "Plan approvals"),
+      PromptIntentCategoryOption(key: "other", label: "Other")
+    ]
   }
 
   var operationalMessageCategoryOptions: [String] {
@@ -351,6 +434,12 @@ final class AppModel: ObservableObject {
       rebuildCache: rebuildCache
     )
     let project = selectedProject
+    if shouldRefreshCache {
+      clearSessionDetailCache()
+      if mode == .foreground {
+        clearEvals()
+      }
+    }
     beginLogRefresh(mode: mode, showLoadingNotice: shouldShowLoadingNotice, rebuildCache: rebuildCache)
 
     reloadTask = Task {
@@ -504,6 +593,7 @@ final class AppModel: ObservableObject {
         else {
           return
         }
+        storeSessionDetail(detail)
         selectedSessionDetail = detail
         reconcileSelectedUserMessage(in: detail)
       } catch {
@@ -697,6 +787,19 @@ final class AppModel: ObservableObject {
     }
     let target = detailTarget(for: selectionID)
 
+    if let detail = selectedSessionDetail,
+      sessionDetail(detail, matches: target) {
+      applyPendingMessageSelection(to: detail)
+      isDetailLoading = false
+      return
+    }
+    if let cachedDetail = cachedSessionDetail(for: target) {
+      selectedSessionDetail = cachedDetail
+      applyPendingMessageSelection(to: cachedDetail)
+      isDetailLoading = false
+      return
+    }
+
     quietDetailRefreshTask?.cancel()
     quietDetailRefreshRequestID += 1
     detailTask?.cancel()
@@ -716,6 +819,7 @@ final class AppModel: ObservableObject {
           filters: filters
         )
         guard !Task.isCancelled, requestID == detailRequestID else { return }
+        storeSessionDetail(detail)
         selectedSessionDetail = detail
         applyPendingMessageSelection(to: detail)
         isDetailLoading = false
@@ -729,7 +833,7 @@ final class AppModel: ObservableObject {
     }
   }
 
-  func loadBrowseMessages(selectFirstIfNeeded: Bool = false) {
+  func loadBrowseMessages(selectFirstIfNeeded: Bool = false, append: Bool = false) {
     guard let api else {
       browseMessagesSummary = nil
       selectedBrowseMessageID = nil
@@ -737,12 +841,16 @@ final class AppModel: ObservableObject {
       return
     }
 
+    let existingSummary = append ? browseMessagesSummary : nil
+    let offset = existingSummary?.results.count ?? 0
+    guard !append || canLoadMoreBrowseMessages else { return }
+
     browseMessagesTask?.cancel()
     browseMessagesRequestID += 1
     let requestID = browseMessagesRequestID
     let filters = currentFilters()
     let project = selectedProject
-    let limit = max(summary?.totals.userMessages ?? 100, 100)
+    let limit = Self.browseMessagesPageSize
 
     browseMessagesTask = Task {
       do {
@@ -755,19 +863,23 @@ final class AppModel: ObservableObject {
           project: project,
           filters: filters,
           submittedOnly: true,
-          limit: limit
+          limit: limit,
+          offset: offset
         )
         guard !Task.isCancelled, requestID == browseMessagesRequestID else { return }
-        browseMessagesSummary = searchResult.search
+        let updatedSearch = append
+          ? mergedBrowseSearch(existing: existingSummary, incoming: searchResult.search)
+          : searchResult.search
+        browseMessagesSummary = updatedSearch
         cacheMetadata = searchResult.cache ?? cacheMetadata
         isBrowseMessagesLoading = false
-        let visibleResults = visibleBrowseMessages(in: searchResult.search.results)
+        let visibleResults = visibleBrowseMessages(in: updatedSearch.results)
 
         let currentSelectionIsVisible = selectedBrowseMessageID.map { selectedID in
           visibleResults.contains { $0.id == selectedID }
         } ?? false
 
-        if !currentSelectionIsVisible {
+        if !append && !currentSelectionIsVisible {
           selectedBrowseMessageID = nil
           if !showSessionBrowser {
             clearSelectedSession()
@@ -794,8 +906,13 @@ final class AppModel: ObservableObject {
     }
   }
 
+  func loadMoreBrowseMessages() {
+    loadBrowseMessages(append: true)
+  }
+
   func selectBrowseMessage(_ messageID: MessageSearchResult.ID?) {
     selectedBrowseMessageID = messageID
+    beginInteractionSelection(source: "project-message")
     guard let messageID,
       let result = browseMessagesSummary?.results.first(where: { $0.id == messageID })
     else {
@@ -807,14 +924,47 @@ final class AppModel: ObservableObject {
 
     selectedSearchResultID = nil
     pendingSearchResultTarget = SearchResultSelectionTarget(result)
-    selectedUserMessageIndex = nil
-    selectedSessionID = sessionSelectionID(
+    let targetSelectionID = sessionSelectionID(
       sessionID: result.sessionId,
       filePath: result.filePath,
       dateKey: result.dateKey
     ) ?? result.sessionId
+    selectedSessionID = targetSelectionID
+
+    if let detail = selectedSessionDetail,
+      sessionDetail(detail, matches: (sessionID: result.sessionId, filePath: result.filePath, dateKey: result.dateKey)) {
+      detailTask?.cancel()
+      detailRequestID += 1
+      quietDetailRefreshTask?.cancel()
+      quietDetailRefreshRequestID += 1
+      applyPendingMessageSelection(to: detail)
+      isDetailLoading = false
+      prefetchNearbySessionDetails(after: result)
+      return
+    }
+    if let cachedDetail = cachedSessionDetail(
+      for: (sessionID: result.sessionId, filePath: result.filePath, dateKey: result.dateKey)
+    ) {
+      detailTask?.cancel()
+      detailRequestID += 1
+      quietDetailRefreshTask?.cancel()
+      quietDetailRefreshRequestID += 1
+      selectedSessionDetail = cachedDetail
+      applyPendingMessageSelection(to: cachedDetail)
+      isDetailLoading = false
+      prefetchNearbySessionDetails(after: result)
+      return
+    }
+
+    selectedUserMessageIndex = nil
     selectedSessionDetail = nil
     loadSelectedSession()
+    prefetchNearbySessionDetails(after: result)
+  }
+
+  func selectSessionUserMessage(_ index: Int) {
+    beginInteractionSelection(source: "session-message")
+    selectedUserMessageIndex = index
   }
 
   func searchMessages(activateSearch: Bool = true) {
@@ -877,6 +1027,184 @@ final class AppModel: ObservableObject {
     searchMessages(activateSearch: false)
   }
 
+  func loadEvals(
+    selectFirstIfNeeded: Bool = false,
+    append: Bool = false,
+    preserveLoadedCount: Bool = false
+  ) {
+    guard let api else {
+      evalsSummary = nil
+      selectedEvalMessageID = nil
+      evalReviewNote = ""
+      isEvalsLoading = false
+      return
+    }
+
+    let existingSummary = append ? evalsSummary : nil
+    let loadedCount = evalsSummary?.results.count ?? 0
+    let offset = append ? loadedCount : 0
+    let limit = append
+      ? Self.evalMessagesPageSize
+      : (preserveLoadedCount ? max(Self.evalMessagesPageSize, loadedCount) : Self.evalMessagesPageSize)
+    guard !append || canLoadMoreEvalMessages else { return }
+
+    evalsTask?.cancel()
+    evalsRequestID += 1
+    let requestID = evalsRequestID
+    let filters = LogFilters(paths: sourcePaths)
+    let project = AppConstants.allProjectsName
+    let query = evalQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+    let categoryKey = evalCategoryKeyFilter
+    let reviewState = evalReviewStateFilter
+
+    evalsTask = Task {
+      do {
+        isEvalsLoading = true
+        evalsStatusMessage = nil
+        let result = try await api.evalMessagesWithMetadata(
+          query: query,
+          categoryKey: categoryKey,
+          reviewState: reviewState,
+          project: project,
+          filters: filters,
+          limit: limit,
+          offset: offset
+        )
+        guard !Task.isCancelled, requestID == evalsRequestID else { return }
+        let updatedEvals = append
+          ? mergedEvalMessages(existing: existingSummary, incoming: result.evals)
+          : result.evals
+        evalsSummary = updatedEvals
+        cacheMetadata = result.cache ?? cacheMetadata
+        isEvalsLoading = false
+        if let selectedEvalMessageID,
+          !updatedEvals.results.contains(where: { $0.id == selectedEvalMessageID }) {
+          self.selectedEvalMessageID = nil
+          evalReviewNote = ""
+        }
+        if selectFirstIfNeeded || self.selectedEvalMessageID == nil {
+          selectEvalMessage(updatedEvals.results.first?.id)
+        }
+      } catch is CancellationError {
+        return
+      } catch {
+        guard requestID == evalsRequestID else { return }
+        isEvalsLoading = false
+        evalsStatusMessage = error.localizedDescription
+      }
+    }
+  }
+
+  func loadMoreEvals() {
+    loadEvals(append: true)
+  }
+
+  func loadEvalsIfNeeded(selectFirstIfNeeded: Bool = false) {
+    guard evalsSummary == nil else { return }
+    loadEvals(selectFirstIfNeeded: selectFirstIfNeeded)
+  }
+
+  func setEvalCategoryFilter(_ categoryKey: String?) {
+    evalCategoryKeyFilter = categoryKey
+    loadEvals(selectFirstIfNeeded: true)
+  }
+
+  func setEvalReviewStateFilter(_ state: EvalReviewStateFilter) {
+    evalReviewStateFilter = state
+    loadEvals(selectFirstIfNeeded: true)
+  }
+
+  func selectEvalMessage(_ messageID: PromptIntentEvalMessage.ID?) {
+    selectedEvalMessageID = messageID
+    evalReviewNote = selectedEvalMessage?.review?.note ?? ""
+  }
+
+  func markSelectedEvalCorrect() {
+    guard let message = selectedEvalMessage else { return }
+    saveEvalReview(for: message, expectedKey: message.promptIntentKey, note: evalReviewNote)
+  }
+
+  func saveEvalReview(for message: PromptIntentEvalMessage, expectedKey: String, note: String) {
+    guard let api else { return }
+    evalReviewTask?.cancel()
+    evalReviewRequestID += 1
+    let requestID = evalReviewRequestID
+    let trimmedNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
+
+    evalReviewTask = Task {
+      do {
+        _ = try await api.saveEvalReview(
+          evalId: message.evalId,
+          actualKey: message.promptIntentKey,
+          expectedKey: expectedKey,
+          note: trimmedNote.isEmpty ? nil : trimmedNote
+        )
+        guard !Task.isCancelled, requestID == evalReviewRequestID else { return }
+        loadEvals(preserveLoadedCount: true)
+      } catch is CancellationError {
+        return
+      } catch {
+        guard requestID == evalReviewRequestID else { return }
+        evalsStatusMessage = error.localizedDescription
+      }
+    }
+  }
+
+  func clearEvalReview(_ message: PromptIntentEvalMessage) {
+    guard let api else { return }
+    evalReviewTask?.cancel()
+    evalReviewRequestID += 1
+    let requestID = evalReviewRequestID
+
+    evalReviewTask = Task {
+      do {
+        try await api.deleteEvalReview(evalId: message.evalId)
+        guard !Task.isCancelled, requestID == evalReviewRequestID else { return }
+        evalReviewNote = ""
+        loadEvals(preserveLoadedCount: true)
+      } catch is CancellationError {
+        return
+      } catch {
+        guard requestID == evalReviewRequestID else { return }
+        evalsStatusMessage = error.localizedDescription
+      }
+    }
+  }
+
+  func showConversation(for evalMessage: PromptIntentEvalMessage) {
+    pendingSearchConversationResult = MessageSearchResult(
+      id: evalMessage.evalId,
+      sessionId: evalMessage.sessionId,
+      filePath: evalMessage.filePath,
+      dateKey: evalMessage.dateKey,
+      project: evalMessage.project,
+      cwd: evalMessage.cwd,
+      lineNumber: evalMessage.lineNumber,
+      turnId: evalMessage.turnId,
+      model: nil,
+      timestamp: evalMessage.timestamp,
+      role: "user",
+      sourceEvent: "event_msg.user_message",
+      category: nil,
+      promptIntentKey: evalMessage.promptIntentKey,
+      promptIntent: evalMessage.promptIntent,
+      snippet: evalMessage.snippet,
+      content: evalMessage.content
+    )
+    selectedProject = AppConstants.allProjectsName
+    if let date = Self.dateFormatter.date(from: evalMessage.dateKey) {
+      hasSinceFilter = true
+      hasUntilFilter = true
+      sinceDate = date
+      untilDate = date
+      dateRangeMode = .day
+      dateAnchorDate = date
+    }
+    selectedSection = .browse
+    refresh()
+    Self.restoreViewerWindow(activate: true)
+  }
+
   func focusMessageSearch() {
     selectedSection = .search
     messageSearchFocusRequest += 1
@@ -908,6 +1236,7 @@ final class AppModel: ObservableObject {
   }
 
   private func showConversation(for result: MessageSearchResult) {
+    beginInteractionSelection(source: "conversation-jump")
     selectedSection = .browse
     selectedBrowseMessageID = browseMessageID(for: result)
     pendingSearchResultTarget = SearchResultSelectionTarget(result)
@@ -975,6 +1304,33 @@ final class AppModel: ObservableObject {
         status = .ready
       } catch {
         status = .failed(error.localizedDescription)
+      }
+    }
+  }
+
+  func exportEvalFixtureDraft() {
+    guard let api else { return }
+    let panel = NSSavePanel()
+    panel.canCreateDirectories = true
+    panel.nameFieldStringValue = "project-focus-reviewed-fixture-draft.json"
+    panel.directoryURL = defaultExportDirectoryURL()
+    if !confirmEvalFixtureDraftExport() {
+      return
+    }
+    guard panel.runModal() == .OK, let destinationURL = panel.url else { return }
+
+    let filters = currentFilters()
+    Task {
+      do {
+        isEvalsLoading = true
+        evalsStatusMessage = nil
+        let data = try await api.exportEvalFixtureDraft(filters: filters)
+        try data.write(to: destinationURL)
+        rememberExportDirectory(destinationURL.deletingLastPathComponent())
+        isEvalsLoading = false
+      } catch {
+        isEvalsLoading = false
+        evalsStatusMessage = error.localizedDescription
       }
     }
   }
@@ -1171,6 +1527,16 @@ final class AppModel: ObservableObject {
     searchSummary = nil
   }
 
+  private func clearEvals() {
+    evalsTask?.cancel()
+    evalsRequestID += 1
+    evalsSummary = nil
+    selectedEvalMessageID = nil
+    evalReviewNote = ""
+    isEvalsLoading = false
+    evalsStatusMessage = nil
+  }
+
   private func selectLatestSessionIfNeeded(in summary: ProjectSummary) {
     guard selectedSessionID == nil, let latestSession = summary.sessions.first else {
       return
@@ -1314,6 +1680,190 @@ final class AppModel: ObservableObject {
       return (result.sessionId, result.filePath, result.dateKey)
     }
     return (selectionID, nil, nil)
+  }
+
+  private func mergedBrowseSearch(
+    existing: MessageSearchSummary?,
+    incoming: MessageSearchSummary
+  ) -> MessageSearchSummary {
+    guard let existing else { return incoming }
+    var seenIDs = Set(existing.results.map(\.id))
+    let appendedResults = incoming.results.filter { seenIDs.insert($0.id).inserted }
+    let results = existing.results + appendedResults
+    return MessageSearchSummary(
+      query: incoming.query,
+      project: incoming.project,
+      generatedAt: incoming.generatedAt,
+      totalMatches: incoming.totalMatches,
+      limit: results.count,
+      offset: 0,
+      results: results
+    )
+  }
+
+  private func mergedEvalMessages(
+    existing: PromptIntentEvalMessageSummary?,
+    incoming: PromptIntentEvalMessageSummary
+  ) -> PromptIntentEvalMessageSummary {
+    guard let existing else { return incoming }
+    var seenIDs = Set(existing.results.map(\.id))
+    let appendedResults = incoming.results.filter { seenIDs.insert($0.id).inserted }
+    let results = existing.results + appendedResults
+    return PromptIntentEvalMessageSummary(
+      query: incoming.query,
+      project: incoming.project,
+      generatedAt: incoming.generatedAt,
+      totalMatches: incoming.totalMatches,
+      limit: results.count,
+      offset: 0,
+      summary: incoming.summary,
+      results: results
+    )
+  }
+
+  private func sessionDetail(
+    _ detail: SessionDetail,
+    matches target: (sessionID: String, filePath: String?, dateKey: String?)
+  ) -> Bool {
+    detail.file.sessionId == target.sessionID &&
+      (target.filePath == nil || detail.file.filePath == target.filePath)
+  }
+
+  private func sessionDetailCacheKey(
+    for target: (sessionID: String, filePath: String?, dateKey: String?)
+  ) -> SessionDetailCacheKey? {
+    guard let filePath = target.filePath else { return nil }
+    return SessionDetailCacheKey(sessionID: target.sessionID, filePath: filePath)
+  }
+
+  private func sessionDetailCacheKey(for detail: SessionDetail) -> SessionDetailCacheKey {
+    SessionDetailCacheKey(sessionID: detail.file.sessionId, filePath: detail.file.filePath)
+  }
+
+  private func cachedSessionDetail(
+    for target: (sessionID: String, filePath: String?, dateKey: String?)
+  ) -> SessionDetail? {
+    guard let key = sessionDetailCacheKey(for: target),
+      let detail = sessionDetailCache[key]
+    else {
+      return nil
+    }
+    touchSessionDetailCacheKey(key)
+    return detail
+  }
+
+  private func storeSessionDetail(_ detail: SessionDetail) {
+    let key = sessionDetailCacheKey(for: detail)
+    sessionDetailCache[key] = detail
+    touchSessionDetailCacheKey(key)
+    while sessionDetailCacheOrder.count > Self.sessionDetailCacheCapacity,
+      let oldestKey = sessionDetailCacheOrder.first {
+      sessionDetailCacheOrder.removeFirst()
+      sessionDetailCache.removeValue(forKey: oldestKey)
+    }
+  }
+
+  private func touchSessionDetailCacheKey(_ key: SessionDetailCacheKey) {
+    sessionDetailCacheOrder.removeAll { $0 == key }
+    sessionDetailCacheOrder.append(key)
+  }
+
+  private func clearSessionDetailCache() {
+    detailPrefetchTask?.cancel()
+    detailCacheGeneration += 1
+    sessionDetailCache.removeAll()
+    sessionDetailCacheOrder.removeAll()
+  }
+
+  private func prefetchNearbySessionDetails(after result: MessageSearchResult) {
+    guard let api else { return }
+    let messages = visibleBrowseMessages(in: browseMessagesSummary?.results ?? [])
+    guard let selectedIndex = messages.firstIndex(where: { $0.id == result.id }) else { return }
+    let currentKey = SessionDetailCacheKey(sessionID: result.sessionId, filePath: result.filePath)
+    guard let target = messages.dropFirst(selectedIndex + 1).first(where: { candidate in
+      let key = SessionDetailCacheKey(sessionID: candidate.sessionId, filePath: candidate.filePath)
+      return key != currentKey && sessionDetailCache[key] == nil
+    }) else {
+      return
+    }
+
+    detailPrefetchTask?.cancel()
+    let cacheGeneration = detailCacheGeneration
+    let filters = currentFilters()
+    let project = selectedProject
+
+    detailPrefetchTask = Task {
+      do {
+        let detail = try await api.sessionDetail(
+          sessionID: target.sessionId,
+          filePath: target.filePath,
+          dateKey: target.dateKey,
+          project: project,
+          filters: filters
+        )
+        guard !Task.isCancelled,
+          cacheGeneration == detailCacheGeneration
+        else {
+          return
+        }
+        storeSessionDetail(detail)
+      } catch {
+        return
+      }
+    }
+  }
+
+  private func beginInteractionSelection(source: String) {
+    pendingInteractionRenderStartedAt = Date()
+    pendingInteractionRenderSource = source
+    pendingInteractionRenderID = nil
+  }
+
+  private func currentInteractionRenderID() -> String? {
+    guard let detail = selectedSessionDetail,
+      let selectedUserMessageIndex
+    else {
+      return nil
+    }
+    return [
+      detail.file.filePath,
+      detail.file.sessionId,
+      String(selectedUserMessageIndex)
+    ].joined(separator: "#")
+  }
+
+  func recordInteractionRendered(renderID: String) {
+    guard let startedAt = pendingInteractionRenderStartedAt,
+      renderID == currentInteractionRenderID()
+    else {
+      return
+    }
+    let elapsedMs = Date().timeIntervalSince(startedAt) * 1000
+    let roundedElapsedMs = (elapsedMs * 10).rounded() / 10
+    lastInteractionPerformance = InteractionPerformance(
+      renderID: renderID,
+      elapsedMs: roundedElapsedMs,
+      source: pendingInteractionRenderSource,
+      recordedAt: Self.isoDateFormatter.string(from: Date())
+    )
+    pendingInteractionRenderStartedAt = nil
+    pendingInteractionRenderID = nil
+    Self.writeStdout("Interaction rendered in \(roundedElapsedMs) ms (\(pendingInteractionRenderSource)).\n")
+  }
+
+  private func updateSelectedInteraction() {
+    guard let detail = selectedSessionDetail,
+      let selectedUserMessageIndex
+    else {
+      selectedInteraction = nil
+      pendingInteractionRenderID = nil
+      return
+    }
+    selectedInteraction = SessionInteractionBuilder.interaction(
+      in: detail,
+      selectedUserMessageIndex: selectedUserMessageIndex
+    )
+    pendingInteractionRenderID = currentInteractionRenderID()
   }
 
   private func sessionForSelectionID(_ selectionID: SessionSummary.ID) -> SessionSummary? {
@@ -1686,6 +2236,7 @@ final class AppModel: ObservableObject {
           try await Task.sleep(for: .seconds(10))
           try await runUITestWorkflow(api: api, filters: filters)
           Self.writeStdout("Native UI workflow smoke passed.\n")
+          LocalLogEngineServer.shared.stop()
           NSApp.terminate(nil)
         } catch {
           Self.writeStderr("Native UI workflow smoke failed: \(error.localizedDescription)\n")
@@ -1898,6 +2449,53 @@ final class AppModel: ObservableObject {
       throw AppSmokeError.unexpected("The selected-session message filter returned no fixture matches.")
     }
 
+    let evals = try await api.evalMessagesWithMetadata(
+      query: "parser test",
+      categoryKey: nil,
+      reviewState: .all,
+      project: AppConstants.allProjectsName,
+      filters: LogFilters(paths: filters.paths)
+    )
+    guard let evalMessage = evals.evals.results.first,
+      evalMessage.promptIntent == "Testing/verification",
+      evalMessage.ruleKey == "testing-verification"
+    else {
+      throw AppSmokeError.unexpected("The Evals workflow did not expose the fixture prompt classification.")
+    }
+    let review = try await api.saveEvalReview(
+      evalId: evalMessage.evalId,
+      actualKey: evalMessage.promptIntentKey,
+      expectedKey: evalMessage.promptIntentKey,
+      note: nil
+    )
+    guard review.isCorrect else {
+      throw AppSmokeError.unexpected("The Evals workflow did not save a correct review.")
+    }
+    let reviewedEvals = try await api.evalMessagesWithMetadata(
+      query: "parser test",
+      categoryKey: nil,
+      reviewState: .correct,
+      project: AppConstants.allProjectsName,
+      filters: LogFilters(paths: filters.paths)
+    )
+    guard reviewedEvals.evals.totalMatches == 1,
+      reviewedEvals.evals.summary.reviewedMessages == 1,
+      reviewedEvals.evals.summary.correctMessages == 1
+    else {
+      throw AppSmokeError.unexpected("The Evals workflow did not update reviewed counts.")
+    }
+    try await api.deleteEvalReview(evalId: evalMessage.evalId)
+    let clearedEvals = try await api.evalMessagesWithMetadata(
+      query: "parser test",
+      categoryKey: nil,
+      reviewState: .unreviewed,
+      project: AppConstants.allProjectsName,
+      filters: LogFilters(paths: filters.paths)
+    )
+    guard clearedEvals.evals.totalMatches == 1 else {
+      throw AppSmokeError.unexpected("The Evals workflow did not clear the review.")
+    }
+
     let jsonExport = try await api.exportSummary(
       format: .json,
       project: selectedProject,
@@ -2016,6 +2614,16 @@ final class AppModel: ObservableObject {
     alert.informativeText = "The default JSON export redacts local source paths and working directories. Review exports before sharing because project names, timestamps, session IDs, and usage metadata may still be sensitive."
     alert.alertStyle = .informational
     alert.addButton(withTitle: "Export")
+    alert.addButton(withTitle: "Cancel")
+    return alert.runModal() == .alertFirstButtonReturn
+  }
+
+  private func confirmEvalFixtureDraftExport() -> Bool {
+    let alert = NSAlert()
+    alert.messageText = "Export Evals Fixture Draft?"
+    alert.informativeText = "The draft includes reviewed labels, but it does not include raw prompt text. Replace every placeholder with a sanitized synthetic prompt before copying examples into tracked fixtures."
+    alert.alertStyle = .informational
+    alert.addButton(withTitle: "Export Draft")
     alert.addButton(withTitle: "Cancel")
     return alert.runModal() == .alertFirstButtonReturn
   }

@@ -2,6 +2,469 @@
 
 Sanitized audit trail of AI-assisted work on this project.
 
+## 2026-05-29 - Merge Main Evals And Extend Performance Work
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> Actually main has a new feature — the eval interface. I wonder if we can merge main into here and we can apply the performance improvements to that part of the experience as well.
+>
+> Can you evaluate what was changed in main and see if your fixes will work there? See what we need to do to ensure our performance improvements continue to work and that the Evan area also benefits from our performance improvements
+
+### Interpreted Intent
+
+The user wanted the performance branch integrated with the newer `main` Evals feature, with a review of whether the existing performance improvements still apply and whether the Evals workflow needs additional performance treatment.
+
+### Response / Work Done
+
+- Created the `codex/performance-evals-integration` branch from the detached performance commit and merged local `main`.
+- Preserved the new Evals work from `main`, including resizable columns, compact layout, local Evals reporting, and placeholder-only fixture draft export.
+- Extended Evals message loading to use 500-row pages with append-only `Load More` instead of loading a large message batch into SwiftUI up front.
+- Reused the already-loaded Evals page when reopening the Evals window, while clearing stale Evals data on explicit foreground cache refreshes.
+- Preserved the currently loaded Evals page span after saving or clearing a review so reviewers do not jump back to the first page.
+- Added local Evals API timing metadata and an API test assertion so Evals latency remains visible beside browse/search timings.
+- Collapsed very large Evals prompt content in the review inspector until explicitly expanded.
+- Updated `docs/performance.md` to include the Evals performance behavior.
+- Rebuilt, packaged, smoke-tested, and relaunched the native macOS app at build 122 for review.
+
+### Privacy Notes
+
+No raw Codex logs, private prompts, session content, screenshots, recordings, export payloads, credentials, or secrets were added. The Evals fixture draft path remains placeholder-only and omits raw prompt text.
+
+### Verification
+
+- Ran `wt bootstrap`.
+- Ran `npm test`.
+- Ran `npm run lint`.
+- Ran `swift build --package-path apps/macos`.
+- Ran `npm run check:classifier`.
+- Ran `npm run benchmark:search` (`18,000` synthetic messages, `28 ms`, `1,500 ms` budget).
+- Ran `npm run evals:report -- --path fixtures/codex/sample-session.jsonl --evals-dir /tmp/codex-log-viewer-empty-evals`.
+- Ran `npm run evals:export-fixture-draft -- --path fixtures/codex/sample-session.jsonl --evals-dir /tmp/codex-log-viewer-empty-evals --output /tmp/codex-log-viewer-evals-draft-test/draft.json`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`.
+- Ran `npm run smoke:mac-ui`.
+- Ran `npm run privacy:scan`.
+- Ran `git diff --check`.
+- Relaunched `dist/macos/Codex Log Viewer.app`.
+
+## 2026-05-29 - Improve Interaction Loading Performance
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> Maybe our logs have become too big But right now the system performance, the app performance, has really degraded. Anytime I click on a message I see this spinning loading all the time. What can we do to speed this up?
+>
+> Also I want to make sure we're effectively writing these messages. Right now anytime the app is loading, there's a lot of wait. Remember the idea is we're caching all this information available locally so that we can easily and quickly navigate through messages
+>
+> Manually clocked it right now. When I selected a different message, it took over five seconds for the Codex interaction to be displayed. That's unacceptable
+>
+> Cohesive plan to improve overall performance for maintaining the logs and displaying the logs
+
+> Let's optimize the application until it's fully performant. Right now it takes too long between selecting a message and viewing the review. The cache is probably not operating as well as it could. Please take a look at the documentation you created here, the performance.md, and complete all tasks
+
+### Interpreted Intent
+
+The user wanted the local-first cache/navigation model to feel fast again, especially message selection into the Codex interaction pane, and wanted a cohesive performance plan for log maintenance and display.
+
+### Response / Work Done
+
+- Audited the project-level message selection path from native SwiftUI state through the local server session-detail endpoint.
+- Reused already-loaded session details when selecting another message from the same underlying log file, avoiding unnecessary spinner states and local server round trips.
+- Stored the selected interaction in the app model so the interaction range is not rebuilt repeatedly by SwiftUI while rendering one selection.
+- Changed `/api/session` to validate and fetch the requested session directly instead of recomputing the full project summary before returning one session.
+- Reduced local API payload overhead by compacting JSON responses.
+- Added a fast path for empty-query browse snippets so project message browsing does not normalize every message body just to return the first snippet.
+- Added server-side performance timings for corpus load, summary, search/browse, and session detail.
+- Added native click-to-render interaction timing recorded to stdout and the app model.
+- Added a bounded native session-detail cache with nearby-session prefetch.
+- Paged project-message browsing in 500-row chunks with incremental loading instead of loading every submitted message into SwiftUI.
+- Added a private local SQLite message index under the app cache for browse/search queries, with fallback to the existing in-memory search for correctness.
+- Made interaction rendering more incremental with lazy stacks and collapsed very large message cards.
+- Updated `docs/performance.md` from planned tasks to implemented behavior.
+- Rebuilt, packaged, and relaunched the native macOS app for review.
+
+### Privacy Notes
+
+No raw Codex logs, private prompts, session content, screenshots, recordings, export payloads, credentials, or secrets were added. The performance plan is implementation-level only.
+
+### Verification
+
+- Ran `wt bootstrap`.
+- Ran `npm run build:native-engine`.
+- Ran `swift build --package-path apps/macos`.
+- Ran `npm test`.
+- Ran `npm run benchmark:search` (`18,000` synthetic messages, `31 ms`, `1,500 ms` budget).
+- Ran a temporary synthetic warm-session API benchmark (`800` sessions, `38,400` messages, session detail `0-7 ms`).
+- Ran a temporary synthetic indexed browse/session API benchmark (`800` sessions, `38,400` messages, first indexed browse `423 ms`, warm browse `14-15 ms`, session detail `0-1 ms`).
+- Ran an aggregate-only local cache benchmark without printing prompts, paths, project names, or session ids (`4,721` submitted messages, browse page `104-129 ms`, session detail `3-4 ms`).
+- Ran `npm run lint`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`.
+- Ran `npm run smoke:mac-ui`.
+- Ran `git diff --check`.
+- Relaunched `dist/macos/Codex Log Viewer.app`.
+
+## 2026-05-29 - Add Local Evals Reporting And Fixture Drafts
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> What else is left to be done in this work stream?
+
+> Let's implement options three, four, and five above. I'll do the evals later
+
+### Interpreted Intent
+
+The user wanted the next Evals quality-loop pieces implemented before doing the manual review pass: a privacy-safe fixture export path, remembered Evals column widths, and a local report command that scores the classifier against private reviews.
+
+### Response / Work Done
+
+- Added a placeholder-only reviewed fixture draft generator for Project Focus Evals so local human judgments can be turned into manually sanitized gold-label examples without exporting raw prompt text.
+- Added `GET /api/evals/fixture-draft` and an `Evals > Export Fixture Draft...` menu action for saving that draft from the native app.
+- Added `npm run evals:report` to score the current classifier against private local Evals reviews, including reviewed accuracy, per-category precision/recall, and confusion pairs.
+- Added `npm run evals:export-fixture-draft` to write the same placeholder-only draft under `.codex/evals/` by default.
+- Made Evals column widths persist across app launches while keeping the left sidebar anchored during manual resizing.
+- Updated usage documentation and added analytics/server tests for the fixture draft path.
+
+### Privacy Notes
+
+The fixture draft intentionally omits raw prompt text, review notes, local paths, and session content. It contains placeholder messages that must be manually replaced with sanitized synthetic prompts before any example is copied into tracked fixtures.
+
+### Verification
+
+- Ran `wt bootstrap`.
+- Ran `npm run build -w @codex-log-viewer/analytics`.
+- Ran `npm run build -w @codex-log-viewer/server`.
+- Ran `swift build --package-path apps/macos`.
+- Ran `npm run evals:report -- --path fixtures/codex/sample-session.jsonl --evals-dir /tmp/codex-log-viewer-empty-evals`.
+- Ran `npm run evals:export-fixture-draft -- --path fixtures/codex/sample-session.jsonl --evals-dir /tmp/codex-log-viewer-empty-evals --output /tmp/codex-log-viewer-evals-draft-test/draft.json`.
+- Ran `npm test`.
+- Ran `npm run check:classifier`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`.
+- Ran `npm run privacy:scan`.
+- Ran `npm run smoke:mac-ui`.
+- Ran `git diff --check`.
+- Relaunched `dist/macos/Codex Log Viewer.app` at build 120.
+
+## 2026-05-29 - Document Unified AI Log Provider Support Plan
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> I want to investigate what it will take to also support Claude Code and other cloud-related messages
+>
+> Is that possible? Can I incorporate claude support to this log viewer?
+
+> Save this plan To our main branch
+
+### Interpreted Intent
+
+The user wanted to understand whether Claude Code and cloud-related AI messages can fit into the log viewer, then wanted the resulting provider-support plan saved directly on the `main` branch.
+
+### Response / Work Done
+
+- Reviewed the existing parser, analytics, API, CLI, documentation, and native app model to locate Codex-specific assumptions.
+- Inspected local Claude Code transcript metadata at a schema-only level and confirmed Claude local sessions are JSONL with provider-specific top-level records, nested Anthropic messages, usage metadata, and tool content blocks.
+- Recommended a generic provider adapter framework rather than a Claude-only bolt-on.
+- Confirmed the preferred product direction: many providers, unified AI logs, provider filters, and source labels.
+- Added `docs/unified-ai-log-provider-support-plan.md` with the plan name `Unified AI Log Provider Support`.
+- Linked the plan from `docs/research-and-roadmap.md`.
+- Documented that this is a documentation-only change and does not require rebuilding or relaunching the macOS app.
+
+### Privacy Notes
+
+No raw Claude Code transcripts, raw Codex logs, private prompts, session content, screenshots, recordings, export payloads, credentials, or secrets were added to tracked files. Local Claude inspection was limited to aggregate counts and redacted schema shapes.
+
+### Verification
+
+- Ran `wt bootstrap`.
+- Ran `git diff --check`.
+- Ran `npm run privacy:scan`.
+- Did not rebuild or relaunch the macOS app because this was documentation-only.
+
+## 2026-05-29 - Document Optional ChatGPT Message Support Plan
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> can we also add support for chatgpt messages? or would that make the log viewer complicated for the user?
+
+> Let's save this plan in our repository and tell me the plan name
+
+> merge to main
+
+> commit
+
+> Commit this plan to the main branch
+
+### Interpreted Intent
+
+The user wanted a decision-ready plan for optional ChatGPT message support, wanted the plan saved in the repository, and wanted that documentation committed directly on the `main` branch.
+
+### Response / Work Done
+
+- Assessed the current parser, analytics, API, and native app shape to determine whether ChatGPT messages should be modeled as a separate optional source instead of being blended into Codex project/worktree semantics.
+- Checked local ChatGPT desktop storage at a metadata level and found per-conversation `.data` cache files under the ChatGPT app support directory, with no obvious stable JSONL or SQLite source.
+- Confirmed the user preferences for desktop-local first, optional UI source, export fallback, and searchable message text by default.
+- Added `docs/chatgpt-message-support-plan.md` with the plan name `Optional ChatGPT Message Support`.
+- Documented that this is a documentation-only change and does not require rebuilding or relaunching the macOS app.
+
+### Privacy Notes
+
+No raw ChatGPT messages, raw Codex logs, private prompts, session content, screenshots, recordings, export payloads, credentials, or secrets were added to tracked files. The local ChatGPT storage inspection was limited to paths, file counts, file types, and byte-level metadata.
+
+### Verification
+
+- Ran `wt bootstrap`.
+- Ran `git diff --check`.
+- Ran `npm run privacy:scan`.
+- Did not rebuild or relaunch the macOS app because this was documentation-only.
+
+## 2026-05-29 - Fix Evals Window Responsive Layout
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> Notice that the UI is not fitting properly
+
+> Also I want to make sure we allow the user to manually resize the three columns
+
+> You are not handling resizing correctly. As I resize the left column, the text on the left should not be moving, only the things on the right
+
+### Interpreted Intent
+
+The user wanted the native Evals window to fit cleanly when the app opens or restores the window at narrower sizes, and wanted the wide three-column layout to be manually adjustable without the left sidebar content shifting under the window edge.
+
+### Response / Work Done
+
+- Replaced the fixed-width Evals window layout with a responsive layout that keeps the three-column review surface at wider sizes and switches to stacked native split panes at compact widths.
+- Replaced the wide Evals layout's native split view with controlled draggable dividers so sidebar resizing keeps the left pane anchored and moves only the right edge.
+- Allowed the Evals window to resize normally instead of being locked to the old fixed content size.
+- Let longer sidebar category names wrap or scale slightly instead of pushing the row layout out of bounds.
+- Rebuilt and relaunched the packaged macOS app at build 119 for review.
+
+### Privacy Notes
+
+No raw Codex logs, private prompts, session content, screenshots, recordings, export payloads, credentials, or secrets were added to tracked fixtures.
+
+### Verification
+
+- Ran `wt bootstrap`.
+- Ran `swift build --package-path apps/macos`.
+- Ran `npm run check:classifier`.
+- Ran `npm test`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`.
+- Ran `npm run smoke:mac-ui`.
+- Ran `git diff --check`.
+- Visually checked the Evals window at a narrow width and removed the temporary screenshot.
+- Relaunched `dist/macos/Codex Log Viewer.app` and opened the Evals window.
+
+## 2026-05-29 - Add In-App Project Focus Evals
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> PLEASE IMPLEMENT THIS PLAN:
+> # In-App Project Focus Evals
+>
+> ## Summary
+> Build a local-first Evals system for judging Project Focus classifier quality across all submitted user messages. Add a top-level macOS menu named `Evals` that opens a dedicated evaluation window. The default source is all `event_msg.user_message` records across all projects/all time, with filters for classifier category so each class can be reviewed independently. Human judgments are saved to a private local file, not committed.
+>
+> ## Key Changes
+> - Add a dedicated Evals data path:
+>   - Server endpoint: `GET /api/evals/messages`
+>   - Returns submitted user messages only, with current classifier label, classifier key, rule key, rule label, confidence, signals, project, timestamp, session/file/date identifiers, and stable `evalId`.
+>   - Supports filters: `categoryKey`, `reviewState`, `project`, `since`, `until`, `q`, `limit`, `offset`.
+>   - Default query: all projects, all time, submitted user messages only.
+> - Add private local review storage:
+>   - Store at `~/Library/Application Support/Codex Log Viewer/Evals/reviews-v1.json`.
+>   - Each record keyed by `evalId`.
+>   - Fields: `actualKey`, `expectedKey`, `isCorrect`, `reviewedAt`, optional `note`.
+>   - Never write real prompt text into repo fixtures automatically.
+> - Add native UI:
+>   - Top-level menu: `Evals`.
+>   - Menu item: `Open Evals`.
+>   - Dedicated window titled `Evals`.
+>   - Layout: left category/filter sidebar, center message list, right review inspector.
+>   - Category sidebar shows counts for all classifier labels plus review counts: unreviewed, correct, incorrect.
+>   - Message list shows message snippet, current label, confidence, rule key, project, and date.
+>   - Inspector shows full message text, classifier explanation, session metadata, and review controls.
+> - Add review controls:
+>   - `Correct` button marks expected label equal to current classifier label.
+>   - Category picker marks a corrected expected label.
+>   - Optional note field for why the classifier was wrong.
+>   - `Clear Review` removes the local judgment.
+>   - `Show Conversation` jumps to Browse for that message.
+>
+> ## Evaluation Behavior
+> - Evals should compute:
+>   - total messages in current filters
+>   - reviewed count
+>   - correct count
+>   - incorrect count
+>   - reviewed accuracy
+>   - per-category reviewed precision/recall where enough reviewed judgments exist
+>   - confusion pairs, such as `Bug fixes -> Feature design`
+> - The app should clearly separate:
+>   - classifier output: what the system currently thinks
+>   - human judgment: what we reviewed as correct
+> - Filtering by category should use the current classifier label by default, with an additional review-state filter for `All`, `Unreviewed`, `Correct`, and `Incorrect`.
+> - “Push them all together” means the Evals window has an `All Categories` view that combines every submitted message into one review queue, while still allowing per-category drilldown.
+>
+> ## Tests
+> - Analytics/server tests:
+>   - `/api/evals/messages` returns only submitted user messages.
+>   - Category filtering returns only matching current classifier labels.
+>   - Explanation fields are present and match `explainPromptIntent`.
+>   - Pagination is stable and deterministic.
+>   - Stable `evalId` does not depend on result order.
+> - Native smoke tests:
+>   - `Evals > Open Evals` opens the Evals window.
+>   - The fixture prompt appears in the eval message list.
+>   - Category filtering changes visible rows.
+>   - Marking a row correct updates local reviewed counts.
+>   - Clearing the review restores the unreviewed state.
+> - Verification:
+>   - `npm run check:classifier`
+>   - `npm test`
+>   - `npm run package:mac`
+>   - `npm run smoke:mac-package`
+>   - `npm run smoke:mac-ui`
+>   - Relaunch packaged app for review.
+>
+> ## Assumptions
+> - Evals v1 is local-private review, not repo fixture authoring.
+> - Source material is all submitted user messages, not assistant/system/developer messages.
+> - The first implementation uses current deterministic classifier output plus human review state; it does not retrain or rewrite classifier rules automatically.
+> - Exporting sanitized reviewed examples into tracked fixtures can be a follow-up after the local judging workflow is solid.
+
+### Interpreted Intent
+
+The user wanted classifier quality review to move into the native app, using every submitted user message as source material while keeping human judgments private and local.
+
+### Response / Work Done
+
+- Added a Project Focus Evals analytics path that returns submitted user messages with stable eval ids, classifier labels, explanation rule metadata, confidence, signals, review state, summaries, per-category reviewed precision/recall, and confusions.
+- Added local server endpoints for eval message browsing and private review save/delete operations.
+- Stored reviews in the app support Evals directory and passed that private path to the bundled local engine.
+- Added a top-level `Evals` menu, an `Open Evals` command, and a dedicated native Evals window with category/review-state filters, message list, inspector, review controls, notes, and `Show Conversation`.
+- Added server and native smoke coverage for eval message loading, category filtering, explanations, pagination, save/clear review flows, and opening the Evals window from the menu.
+- Documented Evals usage and private review storage.
+
+### Privacy Notes
+
+No raw Codex logs, private prompts, screenshots, recordings, export payloads, credentials, or secrets were added to tracked fixtures. Human eval judgments are stored locally under Application Support and are not committed.
+
+### Verification
+
+- Ran `wt bootstrap`.
+- Ran `npm run build -w @codex-log-viewer/server`.
+- Ran `swift build --package-path apps/macos`.
+- Ran `npm test`.
+- Ran `npm run check:classifier`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`.
+- Ran `npm run smoke:mac-ui`.
+- Ran `git diff --check`.
+- Relaunched `dist/macos/Codex Log Viewer.app`.
+
+## 2026-05-29 - Add Project Focus Classifier Evaluation Loop
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> /plan How can we improve the quality of our classifier?
+
+> Is that something you can do?
+
+> All right execute
+
+### Interpreted Intent
+
+The user wanted a practical quality loop for Project Focus classifier improvements, including measurable evaluation instead of ad hoc rule tuning.
+
+### Response / Work Done
+
+- Added explainable Project Focus classification output with category, rule key, confidence, and matched signal names.
+- Added a sanitized gold-label fixture covering every Project Focus category plus tricky mixed-intent examples.
+- Added `npm run check:classifier`, which reports accuracy, per-category precision/recall, rule coverage, known previous-label changes, confusions, and mismatches.
+- Used the new evaluator to catch and fix an additional precedence issue where explicit feature-option requests containing `hide` were classified as cleanup.
+- Documented the classifier check in the usage guide.
+- Rebuilt, repackaged, smoke-tested, and relaunched the native macOS app.
+
+### Privacy Notes
+
+No raw Codex logs, private prompts, session content, screenshots, recordings, export payloads, credentials, or secrets were added. The gold-label fixture uses sanitized synthetic examples and the user-provided mixed-intent classifier case.
+
+### Verification
+
+- Ran `wt bootstrap`.
+- Ran `npm run check:classifier`.
+- Ran `npm test`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`.
+- Ran `npm run smoke:mac-ui`.
+- Ran `git diff --check`.
+- Relaunched `dist/macos/Codex Log Viewer.app`.
+
+## 2026-05-29 - Improve Mixed Intent Project Focus Classification
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> Look this message is clearly saying I want to work on new features but we classified that as a bug fix. Why is that?
+
+> Can we fix our classifier? And can we look to improve the classifier so these types of problems do not occur again in the future? And again we run the classifier against all of our logs and update their labels as needed
+
+### Interpreted Intent
+
+The user wanted Project Focus classification to recognize explicit feature-work prompts even when the user includes incidental bug language as rationale, and wanted the updated classifier applied across the local log corpus.
+
+### Response / Work Done
+
+- Added a mixed-intent guardrail so direct bug-fix requests still classify as `Bug fixes`, while explicit product/feature requests can beat incidental bug rationale such as `broken` or `problem`.
+- Added regression coverage for the loading-dialog/background-sync prompt and related feature-vs-bug conflict cases.
+- Ran the updated classifier over the local Codex log corpus using aggregate-only output; the target prompt now resolves to `Feature design`.
+- Fixed the native UI smoke-test cleanup path so the packaged app stops its local engine before termination and force-cleans it if it does not exit promptly.
+- Rebuilt, repackaged, smoke-tested, and relaunched the native macOS app.
+
+### Privacy Notes
+
+No raw Codex logs, private prompts beyond the user-provided classifier example, session content, screenshots, recordings, export payloads, credentials, or secrets were added. The local corpus reclassification check reported aggregate category counts only.
+
+### Verification
+
+- Ran `wt bootstrap`.
+- Ran `npm run test -w @codex-log-viewer/analytics`.
+- Ran `npm test`.
+- Ran aggregate local log reclassification over 4,691 submitted messages; the target prompt matched `Feature design`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-ui`.
+- Ran `npm run smoke:mac-package`.
+- Ran `git diff --check`.
+- Relaunched `dist/macos/Codex Log Viewer.app`.
+
 ## 2026-05-28 - Add Loading Notice And Background Sync
 
 Status: Completed

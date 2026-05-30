@@ -138,6 +138,7 @@ export interface MessageSearchOptions extends SummaryOptions {
   submittedOnly?: boolean;
   hiddenCategories?: string[];
   limit?: number;
+  offset?: number;
 }
 
 export interface MessageSearchResult {
@@ -166,7 +167,119 @@ export interface MessageSearchSummary {
   generatedAt: string;
   totalMatches: number;
   limit: number;
+  offset: number;
   results: MessageSearchResult[];
+}
+
+export type PromptIntentEvalReviewState = "all" | "unreviewed" | "correct" | "incorrect";
+
+export interface PromptIntentEvalReview {
+  evalId: string;
+  actualKey: string;
+  expectedKey: string;
+  isCorrect: boolean;
+  reviewedAt: string;
+  note?: string;
+}
+
+export interface PromptIntentEvalMessage {
+  evalId: string;
+  sessionId: string;
+  filePath: string;
+  dateKey: string;
+  project: string;
+  cwd?: string;
+  lineNumber?: number;
+  turnId?: string;
+  timestamp?: string;
+  promptIntentKey: string;
+  promptIntent: string;
+  ruleKey: string;
+  ruleLabel: string;
+  confidence: "high" | "medium" | "low";
+  signals: string[];
+  snippet: string;
+  content: string;
+  review?: PromptIntentEvalReview;
+}
+
+export interface PromptIntentEvalCategorySummary {
+  key: string;
+  label: string;
+  total: number;
+  reviewed: number;
+  correct: number;
+  incorrect: number;
+  unreviewed: number;
+  precision: number | null;
+  recall: number | null;
+}
+
+export interface PromptIntentEvalConfusion {
+  actualKey: string;
+  actualLabel: string;
+  expectedKey: string;
+  expectedLabel: string;
+  count: number;
+}
+
+export interface PromptIntentEvalSummary {
+  totalMessages: number;
+  reviewedMessages: number;
+  correctMessages: number;
+  incorrectMessages: number;
+  reviewedAccuracy: number | null;
+  categories: PromptIntentEvalCategorySummary[];
+  confusions: PromptIntentEvalConfusion[];
+}
+
+export interface PromptIntentEvalMessageOptions extends SummaryOptions {
+  q?: string;
+  categoryKey?: string;
+  reviewState?: PromptIntentEvalReviewState;
+  limit?: number;
+  offset?: number;
+  reviews?: Record<string, PromptIntentEvalReview>;
+}
+
+export interface PromptIntentEvalMessageSummary {
+  query: string;
+  project: string;
+  generatedAt: string;
+  totalMatches: number;
+  limit: number;
+  offset: number;
+  summary: PromptIntentEvalSummary;
+  results: PromptIntentEvalMessage[];
+}
+
+export interface PromptIntentEvalFixtureDraftOptions extends PromptIntentEvalMessageOptions {
+  includeCorrect?: boolean;
+  includeIncorrect?: boolean;
+}
+
+export interface PromptIntentEvalFixtureDraftExample {
+  id: string;
+  message: string;
+  expectedKey: string;
+  previousKey?: string;
+  notes: string;
+}
+
+export interface PromptIntentEvalFixtureDraft {
+  version: 1;
+  description: string;
+  generatedAt: string;
+  privacy: {
+    mode: "placeholder-messages";
+    instructions: string[];
+  };
+  source: {
+    reviewedMessages: number;
+    correctExamples: number;
+    incorrectExamples: number;
+  };
+  examples: PromptIntentEvalFixtureDraftExample[];
 }
 
 export interface ProjectListItem {

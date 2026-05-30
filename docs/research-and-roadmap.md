@@ -154,7 +154,7 @@ Milestone 4: public polish
 
 ## Open Questions And Follow-Ups
 
-- Should the tool focus only on Codex at first, or design the data model to support Claude/Gemini later?
+- Use the [Unified AI Log Provider Support](unified-ai-log-provider-support-plan.md) plan when expanding beyond Codex to Claude Code, cloud-imported transcripts, and future providers.
 - Should we eventually ship a VS Code extension in addition to the native macOS app?
 - Do we want to estimate API-equivalent cost, even though Codex product/subscription billing can differ?
 - How aggressively should we redact message contents by default in exports?

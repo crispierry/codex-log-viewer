@@ -1,0 +1,184 @@
+{
+  "version": 1,
+  "description": "Sanitized Project Focus classifier gold-label examples. Keep real local logs out of this file.",
+  "minimumAccuracy": 1,
+  "examples": [
+    {
+      "id": "feature-mixed-loading-sync",
+      "message": "There's a couple of features we need to add: 1. When we're loading the latest logs, we need to put a dialog box letting the user know that we are loading. I actually thought the app was broken because there was no feedback and it wasn't getting the latest information. Also if the app is running, I want it to periodically synchronize so that the data is always fresh.",
+      "expectedKey": "feature-design",
+      "previousKey": "bug-fixes",
+      "notes": "Explicit feature work should beat incidental broken/problem rationale."
+    },
+    {
+      "id": "feature-loading-indicator",
+      "message": "Please add a loading indicator because the app feels broken",
+      "expectedKey": "feature-design"
+    },
+    {
+      "id": "feature-operational-filter",
+      "message": "Can we add an option to hide operational messages by category?",
+      "expectedKey": "feature-design"
+    },
+    {
+      "id": "feature-designer-visibility",
+      "message": "Act as a principal designer and improve the visibility of this section",
+      "expectedKey": "feature-design"
+    },
+    {
+      "id": "bug-broken-dialog",
+      "message": "Can we fix the broken loading dialog?",
+      "expectedKey": "bug-fixes"
+    },
+    {
+      "id": "bug-date-picker",
+      "message": "Fix this broken date picker bug",
+      "expectedKey": "bug-fixes"
+    },
+    {
+      "id": "git-commit",
+      "message": "commit",
+      "expectedKey": "git-commands"
+    },
+    {
+      "id": "git-status-question",
+      "message": "Are all files committed?",
+      "expectedKey": "git-commands"
+    },
+    {
+      "id": "deploy-production",
+      "message": "Deploy to production",
+      "expectedKey": "deploy-release-run-build"
+    },
+    {
+      "id": "deploy-publish-release",
+      "message": "publish the release",
+      "expectedKey": "deploy-release-run-build"
+    },
+    {
+      "id": "run-relaunch-package",
+      "message": "relaunch the packaged app",
+      "expectedKey": "deploy-release-run-build"
+    },
+    {
+      "id": "run-build-native",
+      "message": "build the native app",
+      "expectedKey": "deploy-release-run-build"
+    },
+    {
+      "id": "review-direct",
+      "message": "do a code review",
+      "expectedKey": "code-review-qa"
+    },
+    {
+      "id": "review-diff-regression",
+      "message": "Review the diff for regressions",
+      "expectedKey": "code-review-qa"
+    },
+    {
+      "id": "plan-implementation",
+      "message": "Create an implementation plan for audit exports",
+      "expectedKey": "planning-strategy"
+    },
+    {
+      "id": "plan-sessions-question",
+      "message": "Should we keep the sessions column?",
+      "expectedKey": "planning-strategy"
+    },
+    {
+      "id": "research-cache-stale",
+      "message": "investigate why the cache is stale",
+      "expectedKey": "research"
+    },
+    {
+      "id": "research-parser-explain",
+      "message": "explain how the parser groups sessions",
+      "expectedKey": "research"
+    },
+    {
+      "id": "docs-usage-guide",
+      "message": "update the usage guide",
+      "expectedKey": "documentation"
+    },
+    {
+      "id": "docs-release-notes",
+      "message": "write release notes for the new classifier",
+      "expectedKey": "documentation"
+    },
+    {
+      "id": "test-accessibility",
+      "message": "run the accessibility check",
+      "expectedKey": "testing-verification"
+    },
+    {
+      "id": "test-search-results",
+      "message": "verify the search results in the app",
+      "expectedKey": "testing-verification"
+    },
+    {
+      "id": "refactor-sidebar",
+      "message": "declutter the sidebar",
+      "expectedKey": "refactor-cleanup"
+    },
+    {
+      "id": "refactor-rename-label",
+      "message": "rename Feedback/context to Context/observation",
+      "expectedKey": "refactor-cleanup"
+    },
+    {
+      "id": "content-logo",
+      "message": "Generate a logo image",
+      "expectedKey": "content-creation"
+    },
+    {
+      "id": "content-linkedin",
+      "message": "Draft a LinkedIn post about local-first logs",
+      "expectedKey": "content-creation"
+    },
+    {
+      "id": "data-pie-chart",
+      "message": "Show the metrics as a pie chart",
+      "expectedKey": "data-analysis"
+    },
+    {
+      "id": "data-daily-breakdown",
+      "message": "Calculate the daily message breakdown",
+      "expectedKey": "data-analysis"
+    },
+    {
+      "id": "context-thanks",
+      "message": "thanks for the update",
+      "expectedKey": "feedback-context"
+    },
+    {
+      "id": "context-screenshot",
+      "message": "For context, the screenshot shows the label at the top",
+      "expectedKey": "feedback-context"
+    },
+    {
+      "id": "approval-do-that",
+      "message": "Do that",
+      "expectedKey": "plan-approvals"
+    },
+    {
+      "id": "approval-sounds-good",
+      "message": "sounds good",
+      "expectedKey": "plan-approvals"
+    },
+    {
+      "id": "implementation-direct",
+      "message": "Please implement this",
+      "expectedKey": "implementation"
+    },
+    {
+      "id": "implementation-parser-line-order",
+      "message": "change the parser to preserve line order",
+      "expectedKey": "implementation"
+    },
+    {
+      "id": "other-empty",
+      "message": "",
+      "expectedKey": "other"
+    }
+  ]
+}
