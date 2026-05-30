@@ -136,6 +136,7 @@ final class AppModel: ObservableObject {
   private static let backgroundSyncInterval: Duration = .seconds(60)
   private static let sessionDetailCacheCapacity = 12
   private static let browseMessagesPageSize = 500
+  private static let evalMessagesPageSize = 500
 
   private enum RefreshMode {
     case foreground
@@ -166,6 +167,11 @@ final class AppModel: ObservableObject {
   var canLoadMoreBrowseMessages: Bool {
     guard let browseMessagesSummary else { return false }
     return browseMessagesSummary.results.count < browseMessagesSummary.totalMatches
+  }
+
+  var canLoadMoreEvalMessages: Bool {
+    guard let evalsSummary else { return false }
+    return evalsSummary.results.count < evalsSummary.totalMatches
   }
 
   var areBrowseMessagesHiddenByOperationalFilters: Bool {
@@ -430,6 +436,9 @@ final class AppModel: ObservableObject {
     let project = selectedProject
     if shouldRefreshCache {
       clearSessionDetailCache()
+      if mode == .foreground {
+        clearEvals()
+      }
     }
     beginLogRefresh(mode: mode, showLoadingNotice: shouldShowLoadingNotice, rebuildCache: rebuildCache)
 
@@ -1018,7 +1027,11 @@ final class AppModel: ObservableObject {
     searchMessages(activateSearch: false)
   }
 
-  func loadEvals(selectFirstIfNeeded: Bool = false) {
+  func loadEvals(
+    selectFirstIfNeeded: Bool = false,
+    append: Bool = false,
+    preserveLoadedCount: Bool = false
+  ) {
     guard let api else {
       evalsSummary = nil
       selectedEvalMessageID = nil
@@ -1026,6 +1039,14 @@ final class AppModel: ObservableObject {
       isEvalsLoading = false
       return
     }
+
+    let existingSummary = append ? evalsSummary : nil
+    let loadedCount = evalsSummary?.results.count ?? 0
+    let offset = append ? loadedCount : 0
+    let limit = append
+      ? Self.evalMessagesPageSize
+      : (preserveLoadedCount ? max(Self.evalMessagesPageSize, loadedCount) : Self.evalMessagesPageSize)
+    guard !append || canLoadMoreEvalMessages else { return }
 
     evalsTask?.cancel()
     evalsRequestID += 1
@@ -1046,19 +1067,23 @@ final class AppModel: ObservableObject {
           reviewState: reviewState,
           project: project,
           filters: filters,
-          limit: 1_000
+          limit: limit,
+          offset: offset
         )
         guard !Task.isCancelled, requestID == evalsRequestID else { return }
-        evalsSummary = result.evals
+        let updatedEvals = append
+          ? mergedEvalMessages(existing: existingSummary, incoming: result.evals)
+          : result.evals
+        evalsSummary = updatedEvals
         cacheMetadata = result.cache ?? cacheMetadata
         isEvalsLoading = false
         if let selectedEvalMessageID,
-          !result.evals.results.contains(where: { $0.id == selectedEvalMessageID }) {
+          !updatedEvals.results.contains(where: { $0.id == selectedEvalMessageID }) {
           self.selectedEvalMessageID = nil
           evalReviewNote = ""
         }
         if selectFirstIfNeeded || self.selectedEvalMessageID == nil {
-          selectEvalMessage(result.evals.results.first?.id)
+          selectEvalMessage(updatedEvals.results.first?.id)
         }
       } catch is CancellationError {
         return
@@ -1068,6 +1093,15 @@ final class AppModel: ObservableObject {
         evalsStatusMessage = error.localizedDescription
       }
     }
+  }
+
+  func loadMoreEvals() {
+    loadEvals(append: true)
+  }
+
+  func loadEvalsIfNeeded(selectFirstIfNeeded: Bool = false) {
+    guard evalsSummary == nil else { return }
+    loadEvals(selectFirstIfNeeded: selectFirstIfNeeded)
   }
 
   func setEvalCategoryFilter(_ categoryKey: String?) {
@@ -1106,7 +1140,7 @@ final class AppModel: ObservableObject {
           note: trimmedNote.isEmpty ? nil : trimmedNote
         )
         guard !Task.isCancelled, requestID == evalReviewRequestID else { return }
-        loadEvals()
+        loadEvals(preserveLoadedCount: true)
       } catch is CancellationError {
         return
       } catch {
@@ -1127,7 +1161,7 @@ final class AppModel: ObservableObject {
         try await api.deleteEvalReview(evalId: message.evalId)
         guard !Task.isCancelled, requestID == evalReviewRequestID else { return }
         evalReviewNote = ""
-        loadEvals()
+        loadEvals(preserveLoadedCount: true)
       } catch is CancellationError {
         return
       } catch {
@@ -1270,6 +1304,33 @@ final class AppModel: ObservableObject {
         status = .ready
       } catch {
         status = .failed(error.localizedDescription)
+      }
+    }
+  }
+
+  func exportEvalFixtureDraft() {
+    guard let api else { return }
+    let panel = NSSavePanel()
+    panel.canCreateDirectories = true
+    panel.nameFieldStringValue = "project-focus-reviewed-fixture-draft.json"
+    panel.directoryURL = defaultExportDirectoryURL()
+    if !confirmEvalFixtureDraftExport() {
+      return
+    }
+    guard panel.runModal() == .OK, let destinationURL = panel.url else { return }
+
+    let filters = currentFilters()
+    Task {
+      do {
+        isEvalsLoading = true
+        evalsStatusMessage = nil
+        let data = try await api.exportEvalFixtureDraft(filters: filters)
+        try data.write(to: destinationURL)
+        rememberExportDirectory(destinationURL.deletingLastPathComponent())
+        isEvalsLoading = false
+      } catch {
+        isEvalsLoading = false
+        evalsStatusMessage = error.localizedDescription
       }
     }
   }
@@ -1466,6 +1527,16 @@ final class AppModel: ObservableObject {
     searchSummary = nil
   }
 
+  private func clearEvals() {
+    evalsTask?.cancel()
+    evalsRequestID += 1
+    evalsSummary = nil
+    selectedEvalMessageID = nil
+    evalReviewNote = ""
+    isEvalsLoading = false
+    evalsStatusMessage = nil
+  }
+
   private func selectLatestSessionIfNeeded(in summary: ProjectSummary) {
     guard selectedSessionID == nil, let latestSession = summary.sessions.first else {
       return
@@ -1626,6 +1697,26 @@ final class AppModel: ObservableObject {
       totalMatches: incoming.totalMatches,
       limit: results.count,
       offset: 0,
+      results: results
+    )
+  }
+
+  private func mergedEvalMessages(
+    existing: PromptIntentEvalMessageSummary?,
+    incoming: PromptIntentEvalMessageSummary
+  ) -> PromptIntentEvalMessageSummary {
+    guard let existing else { return incoming }
+    var seenIDs = Set(existing.results.map(\.id))
+    let appendedResults = incoming.results.filter { seenIDs.insert($0.id).inserted }
+    let results = existing.results + appendedResults
+    return PromptIntentEvalMessageSummary(
+      query: incoming.query,
+      project: incoming.project,
+      generatedAt: incoming.generatedAt,
+      totalMatches: incoming.totalMatches,
+      limit: results.count,
+      offset: 0,
+      summary: incoming.summary,
       results: results
     )
   }
@@ -2523,6 +2614,16 @@ final class AppModel: ObservableObject {
     alert.informativeText = "The default JSON export redacts local source paths and working directories. Review exports before sharing because project names, timestamps, session IDs, and usage metadata may still be sensitive."
     alert.alertStyle = .informational
     alert.addButton(withTitle: "Export")
+    alert.addButton(withTitle: "Cancel")
+    return alert.runModal() == .alertFirstButtonReturn
+  }
+
+  private func confirmEvalFixtureDraftExport() -> Bool {
+    let alert = NSAlert()
+    alert.messageText = "Export Evals Fixture Draft?"
+    alert.informativeText = "The draft includes reviewed labels, but it does not include raw prompt text. Replace every placeholder with a sanitized synthetic prompt before copying examples into tracked fixtures."
+    alert.alertStyle = .informational
+    alert.addButton(withTitle: "Export Draft")
     alert.addButton(withTitle: "Cancel")
     return alert.runModal() == .alertFirstButtonReturn
   }

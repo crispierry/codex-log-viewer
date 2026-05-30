@@ -10,6 +10,7 @@ import {
   loadCorpus,
   mergeAuditMarkdown,
   projectContextForFile,
+  promptIntentEvalFixtureDraft,
   promptIntentEvalMessages,
   searchMessages,
   summaryToCsv,
@@ -51,6 +52,7 @@ interface PerformanceTiming {
   summaryMs?: number;
   searchMs?: number;
   sessionDetailMs?: number;
+  evalsMs?: number;
 }
 
 export async function startServer(options: ServerOptions = {}): Promise<{ url: string; close: () => Promise<void> }> {
@@ -230,19 +232,48 @@ async function handleRequest(
   }
 
   if (url.pathname === "/api/evals/messages") {
+    const corpusStartedAt = performance.now();
+    const loaded = await loadCachedCorpus(url, options, corpusCache);
+    const corpusLoadMs = elapsedMs(corpusStartedAt);
+    const evalsStartedAt = performance.now();
+    const reviews = await readEvalReviews(options);
+    const evals = promptIntentEvalMessages(loaded.corpus, {
+      ...summaryOptionsFromQuery(url, options.paths),
+      q: url.searchParams.get("q") ?? "",
+      categoryKey: url.searchParams.get("categoryKey") ?? undefined,
+      reviewState: reviewStateFromQuery(url.searchParams.get("reviewState")),
+      limit: Number(url.searchParams.get("limit") ?? 200),
+      offset: Number(url.searchParams.get("offset") ?? 0),
+      reviews
+    });
+    sendJson(response, 200, withPerformanceMetadata(withCacheMetadata({
+      evals
+    }, loaded.cache), {
+      totalMs: elapsedMs(requestStartedAt),
+      corpusLoadMs,
+      evalsMs: elapsedMs(evalsStartedAt)
+    }));
+    return;
+  }
+
+  if (url.pathname === "/api/evals/fixture-draft") {
     const loaded = await loadCachedCorpus(url, options, corpusCache);
     const reviews = await readEvalReviews(options);
-    sendJson(response, 200, withCacheMetadata({
-      evals: promptIntentEvalMessages(loaded.corpus, {
-        ...summaryOptionsFromQuery(url, options.paths),
-        q: url.searchParams.get("q") ?? "",
-        categoryKey: url.searchParams.get("categoryKey") ?? undefined,
-        reviewState: reviewStateFromQuery(url.searchParams.get("reviewState")),
-        limit: Number(url.searchParams.get("limit") ?? 200),
-        offset: Number(url.searchParams.get("offset") ?? 0),
-        reviews
-      })
-    }, loaded.cache));
+    const draft = promptIntentEvalFixtureDraft(loaded.corpus, {
+      ...summaryOptionsFromQuery(url, options.paths),
+      q: url.searchParams.get("q") ?? "",
+      categoryKey: url.searchParams.get("categoryKey") ?? undefined,
+      reviews,
+      includeCorrect: url.searchParams.get("includeCorrect") !== "false",
+      includeIncorrect: url.searchParams.get("includeIncorrect") !== "false"
+    });
+    sendText(
+      response,
+      200,
+      `${JSON.stringify(draft, null, 2)}\n`,
+      "application/json; charset=utf-8",
+      "project-focus-reviewed-fixture-draft.json"
+    );
     return;
   }
 

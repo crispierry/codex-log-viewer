@@ -1,6 +1,6 @@
 # Performance Notes
 
-Codex Log Viewer keeps a local parsed-session cache so normal navigation does not repeatedly reprocess every Codex log file. The local server also maintains a private SQLite FTS5 message index beside the parsed cache so message browsing and text search can page through large histories without shipping every message to the native UI at once.
+Codex Log Viewer keeps a local parsed-session cache so normal navigation does not repeatedly reprocess every Codex log file. The local server also maintains a private SQLite FTS5 message index beside the parsed cache so message browsing and text search can page through large histories without shipping every message to the native UI at once. The Browse and Evals message lists both use bounded pages so large local histories remain navigable.
 
 ## Interaction Navigation Plan
 
@@ -21,6 +21,7 @@ Implemented staged work:
 6. Paginate browse results. Project browse loads submitted messages in 500-row pages with a `Load More` row instead of shipping every submitted message to SwiftUI at once.
 7. Move message search and browse indexes to SQLite. The local server writes a private SQLite FTS5 index under the app cache for large histories, keyed by the active source set and parsed corpus fingerprint, and falls back to the original in-memory search for smaller or stale indexes.
 8. Keep rendering incremental. Heavy interaction lists use lazy stacks, collapsed system/tool context remains behind disclosure groups, and very large message cards are collapsed until explicitly expanded.
+9. Keep Evals review responsive. Evals messages load in 500-row pages with append-only `Load More`, the Evals window reuses an already-loaded page when reopened, review saves preserve the loaded page span, the API reports local Evals timing, and very large reviewed prompts render as a collapsed preview until expanded.
 
 ## Local Parsed Cache
 

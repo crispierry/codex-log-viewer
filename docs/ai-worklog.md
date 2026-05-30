@@ -2,6 +2,54 @@
 
 Sanitized audit trail of AI-assisted work on this project.
 
+## 2026-05-29 - Merge Main Evals And Extend Performance Work
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> Actually main has a new feature — the eval interface. I wonder if we can merge main into here and we can apply the performance improvements to that part of the experience as well.
+>
+> Can you evaluate what was changed in main and see if your fixes will work there? See what we need to do to ensure our performance improvements continue to work and that the Evan area also benefits from our performance improvements
+
+### Interpreted Intent
+
+The user wanted the performance branch integrated with the newer `main` Evals feature, with a review of whether the existing performance improvements still apply and whether the Evals workflow needs additional performance treatment.
+
+### Response / Work Done
+
+- Created the `codex/performance-evals-integration` branch from the detached performance commit and merged local `main`.
+- Preserved the new Evals work from `main`, including resizable columns, compact layout, local Evals reporting, and placeholder-only fixture draft export.
+- Extended Evals message loading to use 500-row pages with append-only `Load More` instead of loading a large message batch into SwiftUI up front.
+- Reused the already-loaded Evals page when reopening the Evals window, while clearing stale Evals data on explicit foreground cache refreshes.
+- Preserved the currently loaded Evals page span after saving or clearing a review so reviewers do not jump back to the first page.
+- Added local Evals API timing metadata and an API test assertion so Evals latency remains visible beside browse/search timings.
+- Collapsed very large Evals prompt content in the review inspector until explicitly expanded.
+- Updated `docs/performance.md` to include the Evals performance behavior.
+- Rebuilt, packaged, smoke-tested, and relaunched the native macOS app at build 122 for review.
+
+### Privacy Notes
+
+No raw Codex logs, private prompts, session content, screenshots, recordings, export payloads, credentials, or secrets were added. The Evals fixture draft path remains placeholder-only and omits raw prompt text.
+
+### Verification
+
+- Ran `wt bootstrap`.
+- Ran `npm test`.
+- Ran `npm run lint`.
+- Ran `swift build --package-path apps/macos`.
+- Ran `npm run check:classifier`.
+- Ran `npm run benchmark:search` (`18,000` synthetic messages, `28 ms`, `1,500 ms` budget).
+- Ran `npm run evals:report -- --path fixtures/codex/sample-session.jsonl --evals-dir /tmp/codex-log-viewer-empty-evals`.
+- Ran `npm run evals:export-fixture-draft -- --path fixtures/codex/sample-session.jsonl --evals-dir /tmp/codex-log-viewer-empty-evals --output /tmp/codex-log-viewer-evals-draft-test/draft.json`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`.
+- Ran `npm run smoke:mac-ui`.
+- Ran `npm run privacy:scan`.
+- Ran `git diff --check`.
+- Relaunched `dist/macos/Codex Log Viewer.app`.
+
 ## 2026-05-29 - Improve Interaction Loading Performance
 
 Status: Completed
@@ -60,6 +108,171 @@ No raw Codex logs, private prompts, session content, screenshots, recordings, ex
 - Ran `npm run smoke:mac-ui`.
 - Ran `git diff --check`.
 - Relaunched `dist/macos/Codex Log Viewer.app`.
+
+## 2026-05-29 - Add Local Evals Reporting And Fixture Drafts
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> What else is left to be done in this work stream?
+
+> Let's implement options three, four, and five above. I'll do the evals later
+
+### Interpreted Intent
+
+The user wanted the next Evals quality-loop pieces implemented before doing the manual review pass: a privacy-safe fixture export path, remembered Evals column widths, and a local report command that scores the classifier against private reviews.
+
+### Response / Work Done
+
+- Added a placeholder-only reviewed fixture draft generator for Project Focus Evals so local human judgments can be turned into manually sanitized gold-label examples without exporting raw prompt text.
+- Added `GET /api/evals/fixture-draft` and an `Evals > Export Fixture Draft...` menu action for saving that draft from the native app.
+- Added `npm run evals:report` to score the current classifier against private local Evals reviews, including reviewed accuracy, per-category precision/recall, and confusion pairs.
+- Added `npm run evals:export-fixture-draft` to write the same placeholder-only draft under `.codex/evals/` by default.
+- Made Evals column widths persist across app launches while keeping the left sidebar anchored during manual resizing.
+- Updated usage documentation and added analytics/server tests for the fixture draft path.
+
+### Privacy Notes
+
+The fixture draft intentionally omits raw prompt text, review notes, local paths, and session content. It contains placeholder messages that must be manually replaced with sanitized synthetic prompts before any example is copied into tracked fixtures.
+
+### Verification
+
+- Ran `wt bootstrap`.
+- Ran `npm run build -w @codex-log-viewer/analytics`.
+- Ran `npm run build -w @codex-log-viewer/server`.
+- Ran `swift build --package-path apps/macos`.
+- Ran `npm run evals:report -- --path fixtures/codex/sample-session.jsonl --evals-dir /tmp/codex-log-viewer-empty-evals`.
+- Ran `npm run evals:export-fixture-draft -- --path fixtures/codex/sample-session.jsonl --evals-dir /tmp/codex-log-viewer-empty-evals --output /tmp/codex-log-viewer-evals-draft-test/draft.json`.
+- Ran `npm test`.
+- Ran `npm run check:classifier`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`.
+- Ran `npm run privacy:scan`.
+- Ran `npm run smoke:mac-ui`.
+- Ran `git diff --check`.
+- Relaunched `dist/macos/Codex Log Viewer.app` at build 120.
+
+## 2026-05-29 - Document Unified AI Log Provider Support Plan
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> I want to investigate what it will take to also support Claude Code and other cloud-related messages
+>
+> Is that possible? Can I incorporate claude support to this log viewer?
+
+> Save this plan To our main branch
+
+### Interpreted Intent
+
+The user wanted to understand whether Claude Code and cloud-related AI messages can fit into the log viewer, then wanted the resulting provider-support plan saved directly on the `main` branch.
+
+### Response / Work Done
+
+- Reviewed the existing parser, analytics, API, CLI, documentation, and native app model to locate Codex-specific assumptions.
+- Inspected local Claude Code transcript metadata at a schema-only level and confirmed Claude local sessions are JSONL with provider-specific top-level records, nested Anthropic messages, usage metadata, and tool content blocks.
+- Recommended a generic provider adapter framework rather than a Claude-only bolt-on.
+- Confirmed the preferred product direction: many providers, unified AI logs, provider filters, and source labels.
+- Added `docs/unified-ai-log-provider-support-plan.md` with the plan name `Unified AI Log Provider Support`.
+- Linked the plan from `docs/research-and-roadmap.md`.
+- Documented that this is a documentation-only change and does not require rebuilding or relaunching the macOS app.
+
+### Privacy Notes
+
+No raw Claude Code transcripts, raw Codex logs, private prompts, session content, screenshots, recordings, export payloads, credentials, or secrets were added to tracked files. Local Claude inspection was limited to aggregate counts and redacted schema shapes.
+
+### Verification
+
+- Ran `wt bootstrap`.
+- Ran `git diff --check`.
+- Ran `npm run privacy:scan`.
+- Did not rebuild or relaunch the macOS app because this was documentation-only.
+
+## 2026-05-29 - Document Optional ChatGPT Message Support Plan
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> can we also add support for chatgpt messages? or would that make the log viewer complicated for the user?
+
+> Let's save this plan in our repository and tell me the plan name
+
+> merge to main
+
+> commit
+
+> Commit this plan to the main branch
+
+### Interpreted Intent
+
+The user wanted a decision-ready plan for optional ChatGPT message support, wanted the plan saved in the repository, and wanted that documentation committed directly on the `main` branch.
+
+### Response / Work Done
+
+- Assessed the current parser, analytics, API, and native app shape to determine whether ChatGPT messages should be modeled as a separate optional source instead of being blended into Codex project/worktree semantics.
+- Checked local ChatGPT desktop storage at a metadata level and found per-conversation `.data` cache files under the ChatGPT app support directory, with no obvious stable JSONL or SQLite source.
+- Confirmed the user preferences for desktop-local first, optional UI source, export fallback, and searchable message text by default.
+- Added `docs/chatgpt-message-support-plan.md` with the plan name `Optional ChatGPT Message Support`.
+- Documented that this is a documentation-only change and does not require rebuilding or relaunching the macOS app.
+
+### Privacy Notes
+
+No raw ChatGPT messages, raw Codex logs, private prompts, session content, screenshots, recordings, export payloads, credentials, or secrets were added to tracked files. The local ChatGPT storage inspection was limited to paths, file counts, file types, and byte-level metadata.
+
+### Verification
+
+- Ran `wt bootstrap`.
+- Ran `git diff --check`.
+- Ran `npm run privacy:scan`.
+- Did not rebuild or relaunch the macOS app because this was documentation-only.
+
+## 2026-05-29 - Fix Evals Window Responsive Layout
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> Notice that the UI is not fitting properly
+
+> Also I want to make sure we allow the user to manually resize the three columns
+
+> You are not handling resizing correctly. As I resize the left column, the text on the left should not be moving, only the things on the right
+
+### Interpreted Intent
+
+The user wanted the native Evals window to fit cleanly when the app opens or restores the window at narrower sizes, and wanted the wide three-column layout to be manually adjustable without the left sidebar content shifting under the window edge.
+
+### Response / Work Done
+
+- Replaced the fixed-width Evals window layout with a responsive layout that keeps the three-column review surface at wider sizes and switches to stacked native split panes at compact widths.
+- Replaced the wide Evals layout's native split view with controlled draggable dividers so sidebar resizing keeps the left pane anchored and moves only the right edge.
+- Allowed the Evals window to resize normally instead of being locked to the old fixed content size.
+- Let longer sidebar category names wrap or scale slightly instead of pushing the row layout out of bounds.
+- Rebuilt and relaunched the packaged macOS app at build 119 for review.
+
+### Privacy Notes
+
+No raw Codex logs, private prompts, session content, screenshots, recordings, export payloads, credentials, or secrets were added to tracked fixtures.
+
+### Verification
+
+- Ran `wt bootstrap`.
+- Ran `swift build --package-path apps/macos`.
+- Ran `npm run check:classifier`.
+- Ran `npm test`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`.
+- Ran `npm run smoke:mac-ui`.
+- Ran `git diff --check`.
+- Visually checked the Evals window at a narrow width and removed the temporary screenshot.
+- Relaunched `dist/macos/Codex Log Viewer.app` and opened the Evals window.
 
 ## 2026-05-29 - Add In-App Project Focus Evals
 

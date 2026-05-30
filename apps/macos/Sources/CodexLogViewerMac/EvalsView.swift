@@ -16,22 +16,157 @@ struct EvalsWindowRootView: View {
 
 struct EvalsPanelView: View {
   @ObservedObject var model: AppModel
+  @AppStorage("evalsSidebarWidth") private var persistedSidebarWidth = 260.0
+  @AppStorage("evalsInspectorWidth") private var persistedInspectorWidth = 380.0
+  @State private var sidebarDragStart: CGFloat?
+  @State private var inspectorDragStart: CGFloat?
+
+  private let regularLayoutMinimumWidth: CGFloat = 860
+  private let splitDividerWidth: CGFloat = 8
+  private let minimumSidebarWidth: CGFloat = 200
+  private let minimumMessageWidth: CGFloat = 300
+  private let minimumInspectorWidth: CGFloat = 260
 
   var body: some View {
-    HStack(spacing: 0) {
-      EvalsCategorySidebar(model: model)
-        .frame(width: 260)
-      Divider()
-      EvalsMessageList(model: model)
-        .frame(minWidth: 420)
-      Divider()
-      EvalsInspector(model: model)
-        .frame(width: 380)
+    GeometryReader { proxy in
+      if proxy.size.width < regularLayoutMinimumWidth {
+        compactLayout
+      } else {
+        regularLayout(width: proxy.size.width)
+      }
     }
-    .frame(minWidth: 1_080, minHeight: 660)
+    .frame(minWidth: 720, minHeight: 560)
     .task {
-      model.loadEvals(selectFirstIfNeeded: true)
+      model.loadEvalsIfNeeded(selectFirstIfNeeded: true)
     }
+  }
+
+  private func regularLayout(width: CGFloat) -> some View {
+    let columnWidths = regularColumnWidths(for: width)
+
+    return HStack(spacing: 0) {
+      EvalsCategorySidebar(model: model)
+        .frame(width: columnWidths.sidebar, alignment: .topLeading)
+        .frame(maxHeight: .infinity, alignment: .topLeading)
+        .clipped()
+
+      EvalsSplitDivider()
+        .frame(width: splitDividerWidth)
+        .gesture(sidebarResizeGesture(containerWidth: width))
+
+      EvalsMessageList(model: model)
+        .frame(width: columnWidths.message, alignment: .topLeading)
+        .frame(maxHeight: .infinity, alignment: .topLeading)
+        .clipped()
+
+      EvalsSplitDivider()
+        .frame(width: splitDividerWidth)
+        .gesture(inspectorResizeGesture(containerWidth: width))
+
+      EvalsInspector(model: model)
+        .frame(width: columnWidths.inspector, alignment: .topLeading)
+        .frame(maxHeight: .infinity, alignment: .topLeading)
+        .clipped()
+    }
+  }
+
+  private var compactLayout: some View {
+    VSplitView {
+      EvalsCategorySidebar(model: model)
+        .frame(maxWidth: .infinity, minHeight: 170, idealHeight: 220, alignment: .topLeading)
+
+      EvalsMessageList(model: model)
+        .frame(maxWidth: .infinity, minHeight: 230, alignment: .topLeading)
+
+      EvalsInspector(model: model)
+        .frame(maxWidth: .infinity, minHeight: 230, alignment: .topLeading)
+    }
+  }
+
+  private func sidebarResizeGesture(containerWidth: CGFloat) -> some Gesture {
+    DragGesture(minimumDistance: 0)
+      .onChanged { value in
+        if sidebarDragStart == nil {
+          sidebarDragStart = regularColumnWidths(for: containerWidth).sidebar
+        }
+        guard let startWidth = sidebarDragStart else { return }
+        let widths = regularColumnWidths(for: containerWidth, sidebar: startWidth + value.translation.width)
+        persistedSidebarWidth = Double(widths.sidebar)
+      }
+      .onEnded { _ in
+        let widths = regularColumnWidths(for: containerWidth)
+        persistedSidebarWidth = Double(widths.sidebar)
+        sidebarDragStart = nil
+      }
+  }
+
+  private func inspectorResizeGesture(containerWidth: CGFloat) -> some Gesture {
+    DragGesture(minimumDistance: 0)
+      .onChanged { value in
+        if inspectorDragStart == nil {
+          inspectorDragStart = regularColumnWidths(for: containerWidth).inspector
+        }
+        guard let startWidth = inspectorDragStart else { return }
+        let widths = regularColumnWidths(for: containerWidth, inspector: startWidth - value.translation.width)
+        persistedInspectorWidth = Double(widths.inspector)
+      }
+      .onEnded { _ in
+        let widths = regularColumnWidths(for: containerWidth)
+        persistedInspectorWidth = Double(widths.inspector)
+        inspectorDragStart = nil
+      }
+  }
+
+  private func regularColumnWidths(
+    for containerWidth: CGFloat,
+    sidebar proposedSidebar: CGFloat? = nil,
+    inspector proposedInspector: CGFloat? = nil
+  ) -> (sidebar: CGFloat, message: CGFloat, inspector: CGFloat) {
+    let contentWidth = max(0, containerWidth - (2 * splitDividerWidth))
+    let minimumContentWidth = minimumSidebarWidth + minimumMessageWidth + minimumInspectorWidth
+    guard contentWidth > minimumContentWidth else {
+      let scale = max(0, contentWidth / minimumContentWidth)
+      let sidebar = floor(minimumSidebarWidth * scale)
+      let inspector = floor(minimumInspectorWidth * scale)
+      return (sidebar, max(0, contentWidth - sidebar - inspector), inspector)
+    }
+
+    var sidebar = clamp(
+      proposedSidebar ?? CGFloat(persistedSidebarWidth),
+      min: minimumSidebarWidth,
+      max: contentWidth - minimumMessageWidth - minimumInspectorWidth
+    )
+    var inspector = clamp(
+      proposedInspector ?? CGFloat(persistedInspectorWidth),
+      min: minimumInspectorWidth,
+      max: contentWidth - sidebar - minimumMessageWidth
+    )
+    var message = contentWidth - sidebar - inspector
+
+    if message < minimumMessageWidth {
+      let deficit = minimumMessageWidth - message
+      let inspectorReduction = min(deficit, inspector - minimumInspectorWidth)
+      inspector -= inspectorReduction
+      let remainingDeficit = deficit - inspectorReduction
+      sidebar -= min(remainingDeficit, sidebar - minimumSidebarWidth)
+      message = contentWidth - sidebar - inspector
+    }
+
+    return (sidebar, message, inspector)
+  }
+
+  private func clamp(_ value: CGFloat, min minimum: CGFloat, max maximum: CGFloat) -> CGFloat {
+    Swift.min(Swift.max(value, minimum), Swift.max(minimum, maximum))
+  }
+}
+
+private struct EvalsSplitDivider: View {
+  var body: some View {
+    Rectangle()
+      .fill(Color.primary.opacity(0.16))
+      .frame(width: 1)
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+      .contentShape(Rectangle())
   }
 }
 
@@ -121,7 +256,9 @@ private struct EvalsSidebarButton: View {
           Text(title)
             .font(.subheadline)
             .fontWeight(.semibold)
-            .lineLimit(1)
+            .lineLimit(2)
+            .minimumScaleFactor(0.85)
+            .layoutPriority(1)
           Spacer(minLength: 8)
           Text(count.formatted())
             .font(.caption.monospacedDigit())
@@ -192,7 +329,7 @@ private struct EvalsMessageList: View {
       .accessibilityIdentifier("eval-search-field")
 
       if let evals = model.evalsSummary {
-        Text("\(evals.totalMatches.formatted()) visible of \(evals.summary.totalMessages.formatted()) submitted messages")
+        Text("\(model.evalMessages.count.formatted()) of \(evals.totalMatches.formatted()) matching messages loaded; \(evals.summary.totalMessages.formatted()) submitted messages")
           .font(.caption)
           .foregroundStyle(.secondary)
       }
@@ -207,14 +344,26 @@ private struct EvalsMessageList: View {
         ContentUnavailableView("No Eval Messages", systemImage: "checklist", description: Text("No submitted messages match the current filters."))
           .frame(maxWidth: .infinity, maxHeight: .infinity)
       } else {
-        List(model.evalMessages, selection: $model.selectedEvalMessageID) { message in
-          EvalsMessageRow(message: message)
-            .tag(message.id)
-        }
-        .listStyle(.plain)
-        .accessibilityIdentifier("eval-message-list")
-        .onChange(of: model.selectedEvalMessageID) { _, newValue in
-          model.selectEvalMessage(newValue)
+        VStack(spacing: 8) {
+          List(model.evalMessages, selection: $model.selectedEvalMessageID) { message in
+            EvalsMessageRow(message: message)
+              .tag(message.id)
+          }
+          .listStyle(.plain)
+          .accessibilityIdentifier("eval-message-list")
+          .onChange(of: model.selectedEvalMessageID) { _, newValue in
+            model.selectEvalMessage(newValue)
+          }
+
+          if model.canLoadMoreEvalMessages {
+            Button {
+              model.loadMoreEvals()
+            } label: {
+              Label("Load More", systemImage: "arrow.down.circle")
+            }
+            .disabled(model.isEvalsLoading)
+            .accessibilityIdentifier("eval-load-more-button")
+          }
         }
       }
     }
@@ -264,6 +413,40 @@ private struct EvalsMessageRow: View {
   }
 }
 
+private struct EvalsContentPreview: View {
+  let content: String
+  @State private var isExpanded = false
+
+  private let previewCharacterCount = 4_000
+
+  private var isLong: Bool {
+    content.count > previewCharacterCount
+  }
+
+  private var displayedContent: String {
+    guard isLong, !isExpanded else { return content }
+    return String(content.prefix(previewCharacterCount)) + "..."
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      Text(displayedContent)
+        .textSelection(.enabled)
+        .frame(maxWidth: .infinity, alignment: .leading)
+
+      if isLong {
+        Button {
+          isExpanded.toggle()
+        } label: {
+          Label(isExpanded ? "Show Less" : "Show Full Message", systemImage: isExpanded ? "chevron.up.circle" : "chevron.down.circle")
+        }
+        .buttonStyle(.borderless)
+        .accessibilityIdentifier("eval-message-content-toggle")
+      }
+    }
+  }
+}
+
 private struct EvalsInspector: View {
   @ObservedObject var model: AppModel
   @State private var expectedKey = ""
@@ -289,9 +472,8 @@ private struct EvalsInspector: View {
                 .foregroundStyle(.secondary)
             }
 
-            Text(selected.content)
-              .textSelection(.enabled)
-              .frame(maxWidth: .infinity, alignment: .leading)
+            EvalsContentPreview(content: selected.content)
+              .id(selected.id)
 
             Divider()
 

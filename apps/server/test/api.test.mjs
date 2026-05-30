@@ -337,6 +337,8 @@ test("evals API exposes submitted messages with explanations, filters, paginatio
     const allBody = await all.json();
     assert.equal(allBody.evals.totalMatches, 2);
     assert.equal(allBody.evals.summary.totalMessages, 2);
+    assert.equal(typeof allBody.performance?.totalMs, "number");
+    assert.equal(typeof allBody.performance?.evalsMs, "number");
     assert.equal(allBody.evals.results.some((message) => message.content.includes("Internal user context")), false);
 
     const feature = allBody.evals.results.find((message) => message.content === featureMessage);
@@ -377,6 +379,17 @@ test("evals API exposes submitted messages with explanations, filters, paginatio
     assert.equal(review.status, 200);
     const reviewBody = await review.json();
     assert.equal(reviewBody.review.isCorrect, true);
+
+    const draft = await fetch(`${server.url}/api/evals/fixture-draft`, { headers });
+    assert.equal(draft.status, 200);
+    assert.match(draft.headers.get("content-disposition") ?? "", /project-focus-reviewed-fixture-draft\.json/);
+    const draftText = await draft.text();
+    const draftBody = JSON.parse(draftText);
+    assert.equal(draftBody.examples.length, 1);
+    assert.equal(draftBody.examples[0]?.expectedKey, "feature-design");
+    assert.equal(draftBody.examples[0]?.message.includes("TODO: Replace"), true);
+    assert.equal(draftText.includes(featureMessage), false);
+    assert.equal(draftText.includes("Looks right"), false);
 
     const correct = await fetch(`${server.url}/api/evals/messages?reviewState=correct`, { headers });
     const unreviewed = await fetch(`${server.url}/api/evals/messages?reviewState=unreviewed`, { headers });
