@@ -1,15 +1,32 @@
 export type JsonObject = Record<string, unknown>;
 
+export type ProviderId = "codex" | "claude" | (string & {});
+export type ProviderFilter = "all" | ProviderId;
+export type InputKind =
+  | "codex-jsonl"
+  | "claude-jsonl"
+  | (string & {});
+
+export interface ProviderMetadata {
+  provider: ProviderId;
+  inputKind?: InputKind;
+  sourceLabel?: string;
+  title?: string;
+  providerConversationId?: string;
+}
+
 export interface TokenUsage {
   inputTokens: number;
   cachedInputTokens: number;
+  cacheCreationInputTokens: number;
+  cacheReadInputTokens: number;
   freshInputTokens: number;
   outputTokens: number;
   reasoningOutputTokens: number;
   totalTokens: number;
 }
 
-export interface SessionRecord {
+export interface SessionRecord extends ProviderMetadata {
   filePath: string;
   sessionId: string;
   timestamp?: string;
@@ -20,7 +37,7 @@ export interface SessionRecord {
   modelProvider?: string;
 }
 
-export interface TurnRecord {
+export interface TurnRecord extends ProviderMetadata {
   filePath: string;
   sessionId: string;
   turnId: string;
@@ -35,7 +52,7 @@ export interface TurnRecord {
 
 export type MessageRole = "user" | "assistant" | "system" | "developer" | "automation" | "unknown";
 
-export interface MessageRecord {
+export interface MessageRecord extends ProviderMetadata {
   filePath: string;
   sessionId: string;
   lineNumber?: number;
@@ -49,7 +66,7 @@ export interface MessageRecord {
   localImagesCount: number;
 }
 
-export interface TokenUsageRecord {
+export interface TokenUsageRecord extends ProviderMetadata {
   filePath: string;
   sessionId: string;
   lineNumber?: number;
@@ -61,7 +78,7 @@ export interface TokenUsageRecord {
   rateLimits?: unknown;
 }
 
-export interface TaskTimingRecord {
+export interface TaskTimingRecord extends ProviderMetadata {
   filePath: string;
   sessionId: string;
   turnId: string;
@@ -72,7 +89,7 @@ export interface TaskTimingRecord {
   lastAgentMessage?: string;
 }
 
-export interface ToolEventRecord {
+export interface ToolEventRecord extends ProviderMetadata {
   filePath: string;
   sessionId: string;
   lineNumber?: number;
@@ -87,7 +104,7 @@ export interface ToolEventRecord {
   durationMs?: number;
 }
 
-export interface UnknownEventRecord {
+export interface UnknownEventRecord extends ProviderMetadata {
   filePath: string;
   sessionId: string;
   lineNumber: number;
@@ -97,14 +114,14 @@ export interface UnknownEventRecord {
   raw: JsonObject;
 }
 
-export interface ParseWarning {
+export interface ParseWarning extends ProviderMetadata {
   filePath: string;
   lineNumber: number;
   code: string;
   message: string;
 }
 
-export interface ParsedCodexFile {
+export interface ParsedCodexFile extends ProviderMetadata {
   filePath: string;
   sessionId: string;
   lineCount: number;
@@ -130,6 +147,9 @@ export interface ParsedCodexCorpus {
   warnings: ParseWarning[];
 }
 
+export type ParsedLogFile = ParsedCodexFile;
+export type ParsedLogCorpus = ParsedCodexCorpus;
+
 export type ParseCacheStatus = "ready" | "checking" | "updated" | "rebuilt";
 
 export interface ParseCacheMetadata {
@@ -146,8 +166,11 @@ export interface CachedParsedCodexCorpus {
   cache: ParseCacheMetadata;
 }
 
+export type CachedParsedLogCorpus = CachedParsedCodexCorpus;
+
 export interface ParseOptions {
   paths?: string[];
+  provider?: ProviderFilter;
   homeDir?: string;
   cacheDir?: string;
   refreshCache?: boolean;

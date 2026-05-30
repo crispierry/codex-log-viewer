@@ -10,6 +10,7 @@ import { startServer } from "../dist/index.js";
 const testDir = dirname(fileURLToPath(import.meta.url));
 const fixturePath = resolve(testDir, "../../../fixtures/codex/sample-session.jsonl");
 const interactionDetailFixturePath = resolve(testDir, "../../../fixtures/codex/interaction-detail.jsonl");
+const claudeFixturePath = resolve(testDir, "../../../fixtures/claude/basic-session.jsonl");
 
 test("local API requires bearer token when auth is enabled", async () => {
   const server = await startServer({ port: 0, authToken: "test-token", paths: [fixturePath] });
@@ -37,6 +38,34 @@ test("local API requires bearer token when auth is enabled", async () => {
     const body = await authorized.json();
     assert.equal(body.projects[0]?.project, "sample-app");
     assert.equal(body.projects[0]?.lastSeen, "2026-04-27T19:01:12.000Z");
+  } finally {
+    await server.close();
+  }
+});
+
+test("local API exposes provider filters for mixed sources", async () => {
+  const server = await startServer({
+    port: 0,
+    authToken: "test-token",
+    paths: [fixturePath, claudeFixturePath]
+  });
+  const headers = { authorization: "Bearer test-token" };
+
+  try {
+    const summary = await fetch(`${server.url}/api/summary?provider=claude`, { headers });
+    assert.equal(summary.status, 200);
+    const summaryBody = await summary.json();
+    assert.equal(summaryBody.summary.providers[0]?.provider, "claude");
+    assert.equal(summaryBody.summary.totals.userMessages, 1);
+
+    const search = await fetch(`${server.url}/api/messages/search?provider=claude&submittedOnly=true&role=user`, {
+      headers
+    });
+    assert.equal(search.status, 200);
+    const searchBody = await search.json();
+    assert.equal(searchBody.search.totalMatches, 1);
+    assert.equal(searchBody.search.results[0]?.provider, "claude");
+    assert.equal(searchBody.search.results[0]?.content, "Add Claude fixture support");
   } finally {
     await server.close();
   }
@@ -741,6 +770,7 @@ test("audit endpoints preview smart merges and write approved Markdown", async (
   const tempDir = await mkdtemp(`${tmpdir()}/codex-log-viewer-audit-api-`);
   const repoPath = resolve(tempDir, "sample-app");
   const fixture = resolve(tempDir, "audit-session.jsonl");
+  const claudeFixture = resolve(tempDir, "claude-audit-session.jsonl");
 
   await mkdir(repoPath, { recursive: true });
   await writeFile(
@@ -775,18 +805,49 @@ test("audit endpoints preview smart merges and write approved Markdown", async (
     ].join("\n") + "\n",
     "utf8"
   );
+  await writeFile(
+    claudeFixture,
+    [
+      JSON.stringify({
+        type: "user",
+        timestamp: "2026-05-19T12:00:03.000Z",
+        sessionId: "claude-audit-api-session",
+        uuid: "claude-audit-turn-1",
+        cwd: repoPath,
+        message: {
+          role: "user",
+          content: [{ type: "text", text: "Add Claude audit coverage." }]
+        }
+      }),
+      JSON.stringify({
+        type: "assistant",
+        timestamp: "2026-05-19T12:00:04.000Z",
+        sessionId: "claude-audit-api-session",
+        uuid: "claude-audit-turn-1",
+        cwd: repoPath,
+        message: {
+          role: "assistant",
+          content: [{ type: "text", text: "Claude audit response included." }]
+        }
+      })
+    ].join("\n") + "\n",
+    "utf8"
+  );
 
-  const server = await startServer({ port: 0, authToken: "test-token", paths: [fixture] });
+  const server = await startServer({ port: 0, authToken: "test-token", paths: [fixture, claudeFixture] });
   const headers = { authorization: "Bearer test-token" };
 
   try {
     const preview = await fetch(`${server.url}/api/audit?repoPath=${encodeURIComponent(repoPath)}`, { headers });
     assert.equal(preview.status, 200);
     const previewBody = await preview.json();
-    assert.equal(previewBody.audit.appendedSections, 1);
+    assert.equal(previewBody.audit.appendedSections, 2);
     assert.equal(previewBody.audit.targetPath, resolve(repoPath, "docs/ai-worklog.md"));
+    assert.match(previewBody.audit.mergedMarkdown, /Providers: Claude Code, Codex/);
     assert.match(previewBody.audit.mergedMarkdown, /Generate the repo audit trail/);
     assert.match(previewBody.audit.mergedMarkdown, /Prepared the audit preview/);
+    assert.match(previewBody.audit.mergedMarkdown, /Add Claude audit coverage/);
+    assert.match(previewBody.audit.mergedMarkdown, /Claude audit response included/);
 
     const targetOverride = await fetch(
       `${server.url}/api/audit?repoPath=${encodeURIComponent(repoPath)}&targetPath=${encodeURIComponent(resolve(tempDir, "elsewhere.md"))}`,
@@ -816,7 +877,7 @@ test("audit endpoints preview smart merges and write approved Markdown", async (
     assert.equal(duplicatePreview.status, 200);
     const duplicateBody = await duplicatePreview.json();
     assert.equal(duplicateBody.audit.appendedSections, 0);
-    assert.equal(duplicateBody.audit.skippedSections, 1);
+    assert.equal(duplicateBody.audit.skippedSections, 2);
     assert.match(duplicateBody.audit.mergedMarkdown, /Reviewed: yes/);
 
     const outsideWrite = await fetch(`${server.url}/api/audit`, {

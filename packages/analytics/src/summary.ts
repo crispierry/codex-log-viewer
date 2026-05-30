@@ -1,15 +1,16 @@
 import { createHash } from "node:crypto";
-import { parseCodexCorpus, parseCodexCorpusWithCache } from "@codex-log-viewer/parser";
+import { parseLogCorpus, parseLogCorpusWithCache } from "@codex-log-viewer/parser";
 import type {
   MessageRecord,
   ParsedCodexCorpus,
   ParsedCodexFile,
+  ProviderFilter,
   TokenUsageRecord,
   TurnRecord
 } from "@codex-log-viewer/parser";
 import { defaultCodexLogRoots } from "@codex-log-viewer/parser";
 import { classifyPromptIntent, promptIntentCategories } from "./prompt-intents.js";
-import { listProjects, projectContextForFile, projectNameForCwd } from "./project.js";
+import { listProjects, projectContextForFile } from "./project.js";
 import type {
   DateBucket,
   LoadedCorpus,
@@ -22,6 +23,7 @@ import type {
   ProjectAlias,
   ProjectListItem,
   ProjectSummary,
+  ProviderBucket,
   RepeatedUserMessage,
   SessionSummary,
   SummaryOptions
@@ -39,8 +41,9 @@ const operationalPromptIntentCategoryKeys = new Set<string>([
 
 export async function loadCorpus(options: SummaryOptions = {}): Promise<LoadedCorpus> {
   if (options.cacheDir) {
-    const loaded = await parseCodexCorpusWithCache({
+    const loaded = await parseLogCorpusWithCache({
       paths: options.paths,
+      provider: options.provider,
       cacheDir: options.cacheDir,
       refreshCache: options.refreshCache,
       rebuildCache: options.rebuildCache
@@ -52,7 +55,7 @@ export async function loadCorpus(options: SummaryOptions = {}): Promise<LoadedCo
     };
   }
 
-  const corpus = await parseCodexCorpus({ paths: options.paths });
+  const corpus = await parseLogCorpus({ paths: options.paths, provider: options.provider });
   return {
     corpus,
     projects: listProjects(corpus, options.aliases)
@@ -69,6 +72,9 @@ export function summarizeParsedCorpus(corpus: ParsedCodexCorpus, options: Summar
   const project = options.project ?? "All Projects";
   const range = dateRange(options);
   const visibleFiles = corpus.files.filter((file) => {
+    if (!providerInScope(recordProvider(file), options.provider)) {
+      return false;
+    }
     const context = projectContextForFile(file, corpus, aliases);
     return project === "All Projects" || context.project === project;
   });
@@ -79,7 +85,8 @@ export function summarizeParsedCorpus(corpus: ParsedCodexCorpus, options: Summar
     turns.map((turn) => [turnModelKey(turn.filePath, turn.sessionId, turn.turnId), turn.model ?? "unknown"])
   );
   const messages = corpus.messages.filter((message) => recordInScope(message, visibleFilePaths, range));
-  const submittedUserMessages = messages.filter((message) => message.sourceEvent === "event_msg.user_message");
+  const submittedUserMessages = messages.filter(isSubmittedUserMessage);
+  const codexSubmittedUserMessages = submittedUserMessages.filter(isCodexSubmittedUserMessage);
   const automationMessages = messages.filter((message) => message.sourceEvent === "event_msg.automation_message");
   const assistantMessages = messages.filter((message) => message.role === "assistant");
   const tokenUsage = corpus.tokenUsage.filter((token) => recordInScope(token, visibleFilePaths, range));
@@ -97,9 +104,10 @@ export function summarizeParsedCorpus(corpus: ParsedCodexCorpus, options: Summar
   const tokensByDay = bucketTokens(tokenUsage, "day");
   const models = modelBuckets(turns, tokenUsage, turnModels);
   const sessions = sessionSummaries(corpus, visibleFiles, aliases, range);
+  const providers = providerBuckets(visibleFiles, submittedUserMessages, tokenUsage);
   const activity = activityRange(sessions);
-  const repeatedUserMessages = repeatedUserMessageGroups(submittedUserMessages, corpus, aliases);
-  const promptIntents = promptIntentSummary(submittedUserMessages, corpus, aliases);
+  const repeatedUserMessages = repeatedUserMessageGroups(codexSubmittedUserMessages, corpus, aliases);
+  const promptIntents = promptIntentSummary(codexSubmittedUserMessages, corpus, aliases);
   const visibleSessionFilePaths = new Set(sessions.map((session) => session.filePath));
   const parseWarnings = corpus.warnings.filter((warning) => visibleSessionFilePaths.has(warning.filePath));
 
@@ -110,6 +118,7 @@ export function summarizeParsedCorpus(corpus: ParsedCodexCorpus, options: Summar
     filters: {
       since: options.since,
       until: options.until,
+      provider: options.provider,
       paths: options.paths ?? defaultCodexLogRoots()
     },
     totals: {
@@ -128,6 +137,7 @@ export function summarizeParsedCorpus(corpus: ParsedCodexCorpus, options: Summar
     messagesByHour,
     tokensByDay,
     models,
+    providers,
     sessions,
     promptIntents,
     repeatedUserMessages
@@ -150,6 +160,48 @@ function activityRange(sessions: SessionSummary[]): ProjectSummary["activity"] {
   };
 }
 
+function providerBuckets(
+  files: ParsedCodexFile[],
+  messages: MessageRecord[],
+  tokenUsage: TokenUsageRecord[]
+): ProviderBucket[] {
+  const buckets = new Map<string, ProviderBucket>();
+  for (const file of files) {
+    const provider = recordProvider(file);
+    const bucket = buckets.get(provider) ?? {
+      provider,
+      sessions: 0,
+      messages: 0,
+      totalTokens: 0
+    };
+    bucket.sessions += 1;
+    buckets.set(provider, bucket);
+  }
+  for (const message of messages) {
+    const provider = recordProvider(message);
+    const bucket = buckets.get(provider) ?? {
+      provider,
+      sessions: 0,
+      messages: 0,
+      totalTokens: 0
+    };
+    bucket.messages += 1;
+    buckets.set(provider, bucket);
+  }
+  for (const token of dedupeTokenEvents(tokenUsage)) {
+    const provider = recordProvider(token);
+    const bucket = buckets.get(provider) ?? {
+      provider,
+      sessions: 0,
+      messages: 0,
+      totalTokens: 0
+    };
+    bucket.totalTokens += token.usage.totalTokens;
+    buckets.set(provider, bucket);
+  }
+  return [...buckets.values()].sort((a, b) => b.messages - a.messages || a.provider.localeCompare(b.provider));
+}
+
 export function projectsFromCorpus(corpus: ParsedCodexCorpus, aliases: ProjectAlias[] = []): ProjectListItem[] {
   return listProjects(corpus, aliases);
 }
@@ -165,6 +217,7 @@ export function searchMessages(corpus: ParsedCodexCorpus, options: MessageSearch
   const sessionFilter = options.sessionId?.trim();
   const filePathFilter = options.filePath?.trim();
   const dateKeyFilter = options.dateKey?.trim();
+  const providerFilter = options.provider;
   const hiddenCategories = new Set((options.hiddenCategories ?? []).map((category) => category.trim()).filter(Boolean));
 
   const range = dateRange(options);
@@ -175,6 +228,9 @@ export function searchMessages(corpus: ParsedCodexCorpus, options: MessageSearch
   const matches: MessageSearchResult[] = [];
 
   for (const message of corpus.messages) {
+    if (!providerInScope(recordProvider(message), providerFilter)) {
+      continue;
+    }
     if (sessionFilter && message.sessionId !== sessionFilter) {
       continue;
     }
@@ -194,7 +250,7 @@ export function searchMessages(corpus: ParsedCodexCorpus, options: MessageSearch
       continue;
     }
 
-    if (options.submittedOnly && message.sourceEvent !== "event_msg.user_message") {
+    if (options.submittedOnly && !isSubmittedUserMessage(message)) {
       continue;
     }
 
@@ -218,13 +274,13 @@ export function searchMessages(corpus: ParsedCodexCorpus, options: MessageSearch
       continue;
     }
 
-    const category = message.sourceEvent === "event_msg.user_message"
+    const category = isCodexSubmittedUserMessage(message)
       ? userMessageCategoryLabel(message.content)
       : undefined;
     if (category && hiddenCategories.has(category)) {
       continue;
     }
-    const promptIntent = message.sourceEvent === "event_msg.user_message"
+    const promptIntent = isCodexSubmittedUserMessage(message)
       ? classifyPromptIntent(message.content)
       : undefined;
 
@@ -239,6 +295,10 @@ export function searchMessages(corpus: ParsedCodexCorpus, options: MessageSearch
         message.sourceEvent,
         matches.length
       ].join("#"),
+      provider: recordProvider(message),
+      sourceLabel: message.sourceLabel,
+      title: message.title,
+      providerConversationId: message.providerConversationId,
       sessionId: message.sessionId,
       filePath: message.filePath,
       dateKey,
@@ -832,22 +892,26 @@ function sessionSummaries(
     }
 
     return [...buckets.entries()].flatMap(([dateKey, bucket]) => {
-      const userMessages = bucket.messages.filter((message) => message.sourceEvent === "event_msg.user_message");
-      if (userMessages.length === 0) {
+      const submittedUserMessages = bucket.messages.filter(isSubmittedUserMessage);
+      if (submittedUserMessages.length === 0) {
         return [];
       }
 
       const sortedTimestamps = bucket.timestamps.sort();
 
       return {
+        provider: recordProvider(file),
+        sourceLabel: file.sourceLabel,
+        title: file.title ?? session?.title,
+        providerConversationId: file.providerConversationId ?? session?.providerConversationId,
         sessionId,
         filePath: file.filePath,
         dateKey,
-        project: projectNameForCwd(cwd, aliases),
+        project: projectContextForFile(file, corpus, aliases).project,
         cwd,
         firstSeen: sortedTimestamps[0],
         lastSeen: sortedTimestamps.at(-1),
-        userMessages: userMessages.length,
+        userMessages: submittedUserMessages.length,
         automationMessages: bucket.messages.filter((message) => message.sourceEvent === "event_msg.automation_message").length,
         assistantMessages: bucket.messages.filter((message) => message.role === "assistant").length,
         totalTokens: bucket.tokens.reduce((sum, token) => sum + token.usage.totalTokens, 0),
@@ -875,4 +939,23 @@ function sameSessionFile(record: { filePath: string; sessionId: string }, file: 
 
 function sessionRecordKey(filePath: string, sessionId: string, suffix?: string): string {
   return suffix === undefined ? `${filePath}\n${sessionId}` : `${filePath}\n${sessionId}\n${suffix}`;
+}
+
+export function isSubmittedUserMessage(message: MessageRecord): boolean {
+  return message.role === "user" && (
+    message.sourceEvent === "event_msg.user_message" ||
+    message.sourceEvent === "claude.user_message"
+  );
+}
+
+function isCodexSubmittedUserMessage(message: MessageRecord): boolean {
+  return recordProvider(message) === "codex" && message.sourceEvent === "event_msg.user_message";
+}
+
+function providerInScope(provider: string, filter: ProviderFilter | undefined): boolean {
+  return !filter || filter === "all" || provider === filter;
+}
+
+function recordProvider(record: { provider?: string }): string {
+  return record.provider ?? "codex";
 }

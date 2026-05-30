@@ -263,6 +263,9 @@ struct LogEngineAPI {
     for path in filters.paths {
       items.append(URLQueryItem(name: "path", value: path))
     }
+    if filters.provider != .all {
+      items.append(URLQueryItem(name: "provider", value: filters.provider.rawValue))
+    }
     if includeDateRange {
       if let since = filters.since {
         items.append(URLQueryItem(name: "since", value: since))

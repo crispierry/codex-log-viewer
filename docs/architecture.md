@@ -7,9 +7,9 @@ Codex Log Viewer is a native macOS app backed by a local TypeScript parsing engi
 - `apps/macos`: native SwiftUI macOS app
 - `apps/server`: private local HTTP API engine launched by the app
 - `apps/cli`: command-line access to parser and analytics for automation
-- `packages/parser`: Codex JSONL parsing and normalization
-- `packages/analytics`: project grouping, aggregation, bucketing, search, and exports
-- `fixtures/codex`: sanitized JSONL fixtures
+- `packages/parser`: provider-aware log parsing and normalization
+- `packages/analytics`: provider/project grouping, aggregation, bucketing, search, and exports
+- `fixtures/codex`, `fixtures/claude`: sanitized provider fixtures
 
 There is intentionally no browser dashboard or Electron shell. Codex logs live on the user's machine, so the product surface is the native app. The local HTTP engine is an implementation detail used to reuse the tested parser and analytics packages.
 
@@ -32,8 +32,8 @@ The CLI remains available for automation and test smoke checks, but it is not th
 
 ```mermaid
 flowchart LR
-  A["Codex JSONL files"] --> B["Line reader"]
-  B --> C["Event classifier"]
+  A["Codex JSONL, Claude JSONL"] --> B["Provider discovery"]
+  B --> C["Provider adapter"]
   C --> D["Normalized records"]
   C --> E["Parse warnings"]
   D --> F["Analytics engine"]
@@ -49,9 +49,10 @@ flowchart LR
 
 Responsibilities:
 
-- read JSONL files safely
-- parse one line at a time
-- classify known event types
+- discover supported local provider files
+- parse JSONL safely
+- classify known provider event types
+- keep Codex compatibility APIs while exposing provider-neutral APIs
 - preserve unknown event payloads
 - emit normalized records and warnings
 - avoid throwing away raw fields needed for future support
@@ -60,7 +61,7 @@ Responsibilities:
 
 Responsibilities:
 
-- group sessions by project
+- group sessions by provider and project
 - bucket activity by time window
 - count user messages and unique normalized messages
 - aggregate token usage
@@ -85,7 +86,7 @@ Responsibilities:
 Responsibilities:
 
 - expose `/api/projects`, `/api/summary`, `/api/sessions`, `/api/session`, `/api/messages/search`, and `/api/export`
-- read local Codex files from Node inside the user's machine
+- read local/imported AI log files from Node inside the user's machine
 - bind only to loopback by default
 - require the per-run bearer token for data endpoints
 - avoid serving a web UI

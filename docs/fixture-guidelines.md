@@ -11,6 +11,8 @@ fixtures/
     session-meta.jsonl
     turn-with-token-count.jsonl
     malformed-line.jsonl
+  claude/
+    basic-session.jsonl
 ```
 
 ## Rules
@@ -31,6 +33,7 @@ fixtures/
 - `turn-context-model.jsonl`
 - `exec-command-end.jsonl`
 - `unknown-event.jsonl`
+- `basic-session.jsonl`
 
 ## Review Checklist
 

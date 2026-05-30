@@ -1,14 +1,18 @@
 import { createReadStream } from "node:fs";
 import { basename } from "node:path";
 import { createInterface } from "node:readline";
-import { discoverCodexLogFiles } from "./discover.js";
+import { discoverCodexLogFiles, discoverLogFiles } from "./discover.js";
 import type {
   JsonObject,
   MessageRecord,
   ParsedCodexCorpus,
   ParsedCodexFile,
+  ParsedLogFile,
   ParseOptions,
   ParseWarning,
+  ProviderFilter,
+  ProviderId,
+  ProviderMetadata,
   SessionRecord,
   TaskTimingRecord,
   TokenUsage,
@@ -18,11 +22,24 @@ import type {
   UnknownEventRecord
 } from "./types.js";
 
-interface ParseState {
+interface ParseState extends ProviderMetadata {
   sessionId: string;
   currentTurnId?: string;
   sessionCwd?: string;
+  sessionAdded?: boolean;
 }
+
+const CODEX_METADATA: ProviderMetadata = {
+  provider: "codex",
+  inputKind: "codex-jsonl",
+  sourceLabel: "Codex"
+};
+
+const CLAUDE_METADATA: ProviderMetadata = {
+  provider: "claude",
+  inputKind: "claude-jsonl",
+  sourceLabel: "Claude Code"
+};
 
 const KNOWN_EVENT_TYPES = new Set([
   "session_meta",
@@ -48,27 +65,48 @@ const KNOWN_PAYLOAD_TYPES = new Set([
   "user_message"
 ]);
 
+const CLAUDE_KNOWN_RECORD_TYPES = new Set([
+  "assistant",
+  "attachment",
+  "queue-operation",
+  "summary",
+  "system",
+  "title",
+  "user"
+]);
+
 const USER_REQUEST_MARKER = "## My request for Codex:";
 
 export async function parseCodexCorpus(options: ParseOptions = {}): Promise<ParsedCodexCorpus> {
   const files = await discoverCodexLogFiles(options.paths);
   const parsedFiles = await Promise.all(files.map((file) => parseCodexLogFile(file)));
+  return corpusFromFiles(parsedFiles);
+}
 
-  return {
-    files: parsedFiles,
-    sessions: parsedFiles.flatMap((file) => file.sessions),
-    turns: parsedFiles.flatMap((file) => file.turns),
-    messages: parsedFiles.flatMap((file) => file.messages),
-    tokenUsage: parsedFiles.flatMap((file) => file.tokenUsage),
-    taskTimings: parsedFiles.flatMap((file) => file.taskTimings),
-    toolEvents: parsedFiles.flatMap((file) => file.toolEvents),
-    unknownEvents: parsedFiles.flatMap((file) => file.unknownEvents),
-    warnings: parsedFiles.flatMap((file) => file.warnings)
-  };
+export async function parseLogCorpus(options: ParseOptions = {}): Promise<ParsedCodexCorpus> {
+  const provider = providerForDiscovery(options);
+  const files = await discoverLogFiles(options.paths, provider);
+  const parsedFileGroups = await Promise.all(files.map((file) => parseLogFile(file, provider)));
+  return corpusFromFiles(parsedFileGroups.flat().filter((file) => providerMatches(file.provider, provider)));
+}
+
+export async function parseLogFile(filePath: string, provider: ProviderFilter = "all"): Promise<ParsedLogFile[]> {
+  if (provider === "codex") {
+    return [await parseCodexLogFile(filePath)];
+  }
+  if (provider === "claude") {
+    return [await parseClaudeLogFile(filePath)];
+  }
+
+  if (await looksLikeClaudeJsonl(filePath)) {
+    return [await parseClaudeLogFile(filePath)];
+  }
+
+  return [await parseCodexLogFile(filePath)];
 }
 
 export async function parseCodexLogFile(filePath: string): Promise<ParsedCodexFile> {
-  const state: ParseState = { sessionId: sessionIdFromFile(filePath) };
+  const state: ParseState = { ...CODEX_METADATA, sessionId: sessionIdFromFile(filePath) };
   const sessions: SessionRecord[] = [];
   const turns: TurnRecord[] = [];
   const messages: MessageRecord[] = [];
@@ -90,12 +128,12 @@ export async function parseCodexLogFile(filePath: string): Promise<ParsedCodexFi
       continue;
     }
 
-    const raw = parseLine(line, filePath, lineCount, warnings);
+    const raw = parseLine(line, filePath, lineCount, warnings, CODEX_METADATA);
     if (!raw) {
       continue;
     }
 
-    classifyEvent({
+    classifyCodexEvent({
       raw,
       filePath,
       lineNumber: lineCount,
@@ -111,6 +149,7 @@ export async function parseCodexLogFile(filePath: string): Promise<ParsedCodexFi
   }
 
   return {
+    ...CODEX_METADATA,
     filePath,
     sessionId: state.sessionId,
     lineCount,
@@ -125,21 +164,85 @@ export async function parseCodexLogFile(filePath: string): Promise<ParsedCodexFi
   };
 }
 
+async function parseClaudeLogFile(filePath: string): Promise<ParsedCodexFile> {
+  const state: ParseState = { ...CLAUDE_METADATA, sessionId: sessionIdFromFile(filePath) };
+  const sessions: SessionRecord[] = [];
+  const turns: TurnRecord[] = [];
+  const messages: MessageRecord[] = [];
+  const tokenUsage: TokenUsageRecord[] = [];
+  const toolEvents: ToolEventRecord[] = [];
+  const unknownEvents: UnknownEventRecord[] = [];
+  const warnings: ParseWarning[] = [];
+  let lineCount = 0;
+
+  const reader = createInterface({
+    input: createReadStream(filePath, { encoding: "utf8" }),
+    crlfDelay: Infinity
+  });
+
+  for await (const line of reader) {
+    lineCount += 1;
+    if (!line.trim()) {
+      continue;
+    }
+
+    const raw = parseLine(line, filePath, lineCount, warnings, CLAUDE_METADATA);
+    if (!raw) {
+      continue;
+    }
+
+    classifyClaudeRecord({
+      raw,
+      filePath,
+      lineNumber: lineCount,
+      state,
+      sessions,
+      turns,
+      messages,
+      tokenUsage,
+      taskTimings: new Map<string, TaskTimingRecord>(),
+      toolEvents,
+      unknownEvents
+    });
+  }
+
+  if (!state.sessionAdded) {
+    ensureProviderSession(filePath, state, sessions);
+  }
+
+  return {
+    ...CLAUDE_METADATA,
+    filePath,
+    sessionId: state.sessionId,
+    lineCount,
+    sessions,
+    turns,
+    messages,
+    tokenUsage,
+    taskTimings: [],
+    toolEvents,
+    unknownEvents,
+    warnings
+  };
+}
+
 function parseLine(
   line: string,
   filePath: string,
   lineNumber: number,
-  warnings: ParseWarning[]
+  warnings: ParseWarning[],
+  metadata: ProviderMetadata
 ): JsonObject | undefined {
   try {
     const parsed = JSON.parse(line);
     return isObject(parsed) ? parsed : undefined;
   } catch (error) {
     warnings.push({
+      ...metadata,
       filePath,
       lineNumber,
       code: "malformed_json",
-      message: error instanceof Error ? error.message : "Malformed JSON"
+      message: errorMessage(error)
     });
     return undefined;
   }
@@ -159,7 +262,7 @@ interface ClassifyContext {
   unknownEvents: UnknownEventRecord[];
 }
 
-function classifyEvent(context: ClassifyContext): void {
+function classifyCodexEvent(context: ClassifyContext): void {
   const { raw, filePath, lineNumber, state } = context;
   const timestamp = stringValue(raw.timestamp);
   const topLevelType = stringValue(raw.type);
@@ -180,6 +283,7 @@ function classifyEvent(context: ClassifyContext): void {
     state.sessionId = sessionId;
     state.sessionCwd = stringValue(payload.cwd);
     context.sessions.push({
+      ...CODEX_METADATA,
       filePath,
       sessionId,
       timestamp: stringValue(payload.timestamp) ?? timestamp,
@@ -197,6 +301,7 @@ function classifyEvent(context: ClassifyContext): void {
     if (turnId) {
       state.currentTurnId = turnId;
       context.turns.push({
+        ...CODEX_METADATA,
         filePath,
         sessionId: state.sessionId,
         turnId,
@@ -221,7 +326,7 @@ function classifyEvent(context: ClassifyContext): void {
     const turnId = stringValue(payload.turn_id);
     if (turnId) {
       state.currentTurnId = turnId;
-      const current = timingFor(context.taskTimings, filePath, state.sessionId, turnId);
+      const current = timingFor(context.taskTimings, filePath, state.sessionId, turnId, CODEX_METADATA);
       current.startedAt = numberValue(payload.started_at);
     }
     return;
@@ -230,7 +335,7 @@ function classifyEvent(context: ClassifyContext): void {
   if (payloadType === "task_complete") {
     const turnId = stringValue(payload.turn_id) ?? state.currentTurnId;
     if (turnId) {
-      const current = timingFor(context.taskTimings, filePath, state.sessionId, turnId);
+      const current = timingFor(context.taskTimings, filePath, state.sessionId, turnId, CODEX_METADATA);
       current.completedAt = numberValue(payload.completed_at);
       current.durationMs = numberValue(payload.duration_ms);
       current.timeToFirstTokenMs = numberValue(payload.time_to_first_token_ms);
@@ -243,6 +348,7 @@ function classifyEvent(context: ClassifyContext): void {
     const content = submittedUserMessageContent(payload.message);
     const isAutomation = isAutomationMessageContent(content);
     context.messages.push({
+      ...CODEX_METADATA,
       filePath,
       sessionId: state.sessionId,
       lineNumber,
@@ -259,6 +365,7 @@ function classifyEvent(context: ClassifyContext): void {
 
   if (payloadType === "agent_message") {
     context.messages.push({
+      ...CODEX_METADATA,
       filePath,
       sessionId: state.sessionId,
       lineNumber,
@@ -279,6 +386,7 @@ function classifyEvent(context: ClassifyContext): void {
     const usage = usageFromObject(objectValue(info?.last_token_usage));
     if (usage) {
       context.tokenUsage.push({
+        ...CODEX_METADATA,
         filePath,
         sessionId: state.sessionId,
         lineNumber,
@@ -296,6 +404,7 @@ function classifyEvent(context: ClassifyContext): void {
   if (topLevelType === "response_item" && payloadType === "message") {
     const role = messageRole(stringValue(payload.role));
     context.messages.push({
+      ...CODEX_METADATA,
       filePath,
       sessionId: state.sessionId,
       lineNumber,
@@ -313,6 +422,7 @@ function classifyEvent(context: ClassifyContext): void {
 
   if (isToolEvent(topLevelType, payloadType)) {
     context.toolEvents.push({
+      ...CODEX_METADATA,
       filePath,
       sessionId: state.sessionId,
       lineNumber,
@@ -329,18 +439,158 @@ function classifyEvent(context: ClassifyContext): void {
   }
 }
 
+function classifyClaudeRecord(context: ClassifyContext): void {
+  const { raw, filePath, lineNumber, state } = context;
+  const topLevelType = stringValue(raw.type);
+  const timestamp = stringValue(raw.timestamp);
+  const sessionId = stringValue(raw.sessionId) ?? stringValue(raw.session_id);
+  if (sessionId) {
+    state.sessionId = sessionId;
+    state.providerConversationId = sessionId;
+  }
+  state.sessionCwd = stringValue(raw.cwd) ?? state.sessionCwd;
+
+  if (topLevelType === "summary" || topLevelType === "title") {
+    state.title = stringValue(raw.summary) ?? stringValue(raw.title) ?? state.title;
+  }
+
+  ensureProviderSession(filePath, state, context.sessions, timestamp);
+
+  if (topLevelType && !CLAUDE_KNOWN_RECORD_TYPES.has(topLevelType)) {
+    addUnknown(context, timestamp, topLevelType, undefined);
+    return;
+  }
+
+  const message = objectValue(raw.message);
+  const turnId = stringValue(raw.uuid) ?? stringValue(message?.id) ?? `${state.sessionId}:${lineNumber}`;
+  state.currentTurnId = turnId;
+
+  if (message) {
+    const model = stringValue(message.model);
+    if (model) {
+      context.turns.push({
+        ...CLAUDE_METADATA,
+        filePath,
+        sessionId: state.sessionId,
+        providerConversationId: state.providerConversationId,
+        title: state.title,
+        turnId,
+        timestamp,
+        cwd: state.sessionCwd,
+        model
+      });
+    }
+
+    const usage = usageFromObject(objectValue(message.usage));
+    if (usage) {
+      context.tokenUsage.push({
+        ...CLAUDE_METADATA,
+        filePath,
+        sessionId: state.sessionId,
+        providerConversationId: state.providerConversationId,
+        title: state.title,
+        lineNumber,
+        turnId,
+        timestamp,
+        usage
+      });
+    }
+
+    const role = messageRole(stringValue(message.role) ?? topLevelType);
+    const textContent = claudeMessageText(message.content).trim();
+    if (textContent || role === "assistant" || role === "system") {
+      context.messages.push({
+        ...CLAUDE_METADATA,
+        filePath,
+        sessionId: state.sessionId,
+        providerConversationId: state.providerConversationId,
+        title: state.title,
+        lineNumber,
+        turnId,
+        timestamp,
+        role,
+        sourceEvent: `claude.${role}_message`,
+        content: textContent,
+        imagesCount: contentBlockCount(message.content, "image"),
+        localImagesCount: 0
+      });
+    }
+
+    for (const block of arrayValue(message.content)) {
+      if (!isObject(block)) {
+        continue;
+      }
+      const blockType = stringValue(block.type);
+      if (blockType === "tool_use") {
+        context.toolEvents.push({
+          ...CLAUDE_METADATA,
+          filePath,
+          sessionId: state.sessionId,
+          providerConversationId: state.providerConversationId,
+          title: state.title,
+          lineNumber,
+          turnId,
+          timestamp,
+          eventType: "tool_use",
+          name: stringValue(block.name),
+          callId: stringValue(block.id),
+          content: jsonContent(block.input)
+        });
+      } else if (blockType === "tool_result") {
+        context.toolEvents.push({
+          ...CLAUDE_METADATA,
+          filePath,
+          sessionId: state.sessionId,
+          providerConversationId: state.providerConversationId,
+          title: state.title,
+          lineNumber,
+          turnId,
+          timestamp,
+          eventType: "tool_result",
+          callId: stringValue(block.tool_use_id),
+          content: contentToText(block.content)
+        });
+      }
+    }
+    return;
+  }
+
+  if (topLevelType === "system") {
+    const content = stringValue(raw.content) ?? contentToText(raw.content);
+    context.messages.push({
+      ...CLAUDE_METADATA,
+      filePath,
+      sessionId: state.sessionId,
+      providerConversationId: state.providerConversationId,
+      title: state.title,
+      lineNumber,
+      turnId,
+      timestamp,
+      role: "system",
+      sourceEvent: "claude.system_message",
+      content,
+      imagesCount: 0,
+      localImagesCount: 0
+    });
+    return;
+  }
+
+  addUnknown(context, timestamp, topLevelType, undefined);
+}
+
 function timingFor(
   taskTimings: Map<string, TaskTimingRecord>,
   filePath: string,
   sessionId: string,
-  turnId: string
+  turnId: string,
+  metadata: ProviderMetadata
 ): TaskTimingRecord {
   const key = `${filePath}:${turnId}`;
   const existing = taskTimings.get(key);
   if (existing) {
     return existing;
   }
-  const created: TaskTimingRecord = { filePath, sessionId, turnId };
+  const created: TaskTimingRecord = { ...metadata, filePath, sessionId, turnId };
   taskTimings.set(key, created);
   return created;
 }
@@ -352,6 +602,11 @@ function addUnknown(
   payloadType?: string
 ): void {
   context.unknownEvents.push({
+    provider: context.state.provider,
+    inputKind: context.state.inputKind,
+    sourceLabel: context.state.sourceLabel,
+    title: context.state.title,
+    providerConversationId: context.state.providerConversationId,
     filePath: context.filePath,
     sessionId: context.state.sessionId,
     lineNumber: context.lineNumber,
@@ -359,6 +614,33 @@ function addUnknown(
     topLevelType,
     payloadType,
     raw: context.raw
+  });
+}
+
+function ensureProviderSession(
+  filePath: string,
+  state: ParseState,
+  sessions: SessionRecord[],
+  timestamp?: string
+): void {
+  const existing = sessions.find((session) => session.sessionId === state.sessionId && session.filePath === filePath);
+  if (existing) {
+    existing.cwd = existing.cwd ?? state.sessionCwd;
+    existing.title = existing.title ?? state.title;
+    existing.providerConversationId = existing.providerConversationId ?? state.providerConversationId;
+    return;
+  }
+  state.sessionAdded = true;
+  sessions.push({
+    provider: state.provider,
+    inputKind: state.inputKind,
+    sourceLabel: state.sourceLabel,
+    title: state.title,
+    providerConversationId: state.providerConversationId,
+    filePath,
+    sessionId: state.sessionId,
+    timestamp,
+    cwd: state.sessionCwd
   });
 }
 
@@ -373,7 +655,7 @@ function isToolEvent(topLevelType?: string, payloadType?: string): boolean {
 }
 
 function sessionIdFromFile(filePath: string): string {
-  return basename(filePath).replace(/^rollout-/, "").replace(/\.jsonl$/, "");
+  return basename(filePath).replace(/^rollout-/, "").replace(/\.(jsonl|json|zip|data)$/, "");
 }
 
 function usageFromObject(value?: JsonObject): TokenUsage | undefined {
@@ -381,17 +663,24 @@ function usageFromObject(value?: JsonObject): TokenUsage | undefined {
     return undefined;
   }
   const inputTokens = numberValue(value.input_tokens) ?? 0;
-  const cachedInputTokens = numberValue(value.cached_input_tokens) ?? 0;
+  const explicitCachedInputTokens = numberValue(value.cached_input_tokens);
+  const cacheCreationInputTokens = numberValue(value.cache_creation_input_tokens) ?? 0;
+  const cacheReadInputTokens = numberValue(value.cache_read_input_tokens) ?? explicitCachedInputTokens ?? 0;
+  const cachedInputTokens = explicitCachedInputTokens ?? cacheCreationInputTokens + cacheReadInputTokens;
   const outputTokens = numberValue(value.output_tokens) ?? 0;
   const reasoningOutputTokens = numberValue(value.reasoning_output_tokens) ?? 0;
   const totalTokens =
     numberValue(value.total_tokens) ??
-    inputTokens + outputTokens;
+    inputTokens + cacheCreationInputTokens + cacheReadInputTokens + outputTokens + reasoningOutputTokens;
 
   return {
     inputTokens,
     cachedInputTokens,
-    freshInputTokens: Math.max(0, inputTokens - cachedInputTokens),
+    cacheCreationInputTokens,
+    cacheReadInputTokens,
+    freshInputTokens: explicitCachedInputTokens === undefined
+      ? inputTokens
+      : Math.max(0, inputTokens - explicitCachedInputTokens),
     outputTokens,
     reasoningOutputTokens,
     totalTokens
@@ -407,10 +696,34 @@ function contentToText(value: unknown): string {
   }
   return value
     .map((item) => {
+      if (typeof item === "string") {
+        return item;
+      }
       if (!isObject(item)) {
         return "";
       }
-      return stringValue(item.text) ?? stringValue(item.output_text) ?? "";
+      return stringValue(item.text) ??
+        stringValue(item.output_text) ??
+        stringValue(item.content) ??
+        contentToText(item.content);
+    })
+    .filter(Boolean)
+    .join("\n");
+}
+
+function claudeMessageText(value: unknown): string {
+  if (typeof value === "string") {
+    return value;
+  }
+  return arrayValue(value)
+    .map((item) => {
+      if (typeof item === "string") {
+        return item;
+      }
+      if (!isObject(item) || item.type !== "text") {
+        return "";
+      }
+      return stringValue(item.text) ?? "";
     })
     .filter(Boolean)
     .join("\n");
@@ -484,6 +797,83 @@ function messageRole(value?: string): MessageRecord["role"] {
     return value;
   }
   return "unknown";
+}
+
+function contentBlockCount(value: unknown, type: string): number {
+  return arrayValue(value).filter((item) => isObject(item) && item.type === type).length;
+}
+
+function jsonContent(value: unknown): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value === "string") {
+    return value;
+  }
+  return JSON.stringify(value);
+}
+
+async function looksLikeClaudeJsonl(filePath: string): Promise<boolean> {
+  if (filePath.includes("/.claude/projects/")) {
+    return true;
+  }
+  const record = await firstJsonRecord(filePath);
+  if (!record) {
+    return false;
+  }
+  const type = stringValue(record.type);
+  return Boolean(
+    type &&
+    CLAUDE_KNOWN_RECORD_TYPES.has(type) &&
+    (record.message || record.uuid || record.sessionId || record.session_id)
+  );
+}
+
+async function firstJsonRecord(filePath: string): Promise<JsonObject | undefined> {
+  const reader = createInterface({
+    input: createReadStream(filePath, { encoding: "utf8" }),
+    crlfDelay: Infinity
+  });
+  try {
+    for await (const line of reader) {
+      if (!line.trim()) {
+        continue;
+      }
+      const parsed = JSON.parse(line);
+      return isObject(parsed) ? parsed : undefined;
+    }
+  } catch {
+    return undefined;
+  } finally {
+    reader.close();
+  }
+  return undefined;
+}
+
+function corpusFromFiles(parsedFiles: ParsedCodexFile[]): ParsedCodexCorpus {
+  return {
+    files: parsedFiles,
+    sessions: parsedFiles.flatMap((file) => file.sessions),
+    turns: parsedFiles.flatMap((file) => file.turns),
+    messages: parsedFiles.flatMap((file) => file.messages),
+    tokenUsage: parsedFiles.flatMap((file) => file.tokenUsage),
+    taskTimings: parsedFiles.flatMap((file) => file.taskTimings),
+    toolEvents: parsedFiles.flatMap((file) => file.toolEvents),
+    unknownEvents: parsedFiles.flatMap((file) => file.unknownEvents),
+    warnings: parsedFiles.flatMap((file) => file.warnings)
+  };
+}
+
+function providerForDiscovery(options: ParseOptions): ProviderFilter {
+  return options.provider ?? (options.paths && options.paths.length > 0 ? "all" : "codex");
+}
+
+function providerMatches(provider: ProviderId, filter: ProviderFilter): boolean {
+  return filter === "all" || provider === filter;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Unexpected parse error";
 }
 
 function isObject(value: unknown): value is JsonObject {

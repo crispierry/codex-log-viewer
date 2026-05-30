@@ -30,7 +30,7 @@ The product should answer:
 4. As a maintainer, I want sanitized fixtures so parser behavior can improve without leaking private logs.
 5. As a contributor, I want clear schema notes so I can add support for new Codex event shapes.
 6. As a developer, I want to search every message across all projects and filter results by project or date range.
-7. As a developer, I want to generate a reviewed audit worklog for each repository so user intent and Codex responses remain traceable.
+7. As a developer, I want to generate a reviewed audit worklog for each repository so user intent and AI responses remain traceable across enabled providers.
 
 ## MVP Requirements
 
@@ -48,7 +48,7 @@ The product should answer:
 - [x] Select data sources, projects, date ranges, exports, and sessions from the native app
 - [x] Browse projects, sent messages, and Codex interactions in a native split-column layout, with sessions available as an optional view
 - [x] Inspect session details from the native app
-- [x] Select a submitted user message and inspect the related Codex response, tool activity, context, token usage, and timing in organized native sections
+- [x] Select a submitted user message and inspect the related AI response, tool activity, context, token usage, and timing in organized native sections
 - [x] Search parsed messages across all projects with project and date filters
 - [x] Generate sanitized Markdown audit worklogs from local logs for in-app review and approval
 

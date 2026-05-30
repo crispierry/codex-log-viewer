@@ -2,6 +2,114 @@
 
 Sanitized audit trail of AI-assisted work on this project.
 
+## 2026-05-30 - Make Audit Worklogs Provider-Aware
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> Why is .data unsupported and what can we do about it?
+
+> The audit work log should include all systems not just codec
+
+> Commit
+
+> Since ChatGPT requires processing your exports, it is really not useful. Let’s remove it
+
+### Interpreted Intent
+
+The user wanted the audit worklog generator to stop treating Codex as the only auditable AI system, then decided ChatGPT export-based support should be removed before committing.
+
+### Response / Work Done
+
+- Explained that ChatGPT desktop `.data` cache files remain unsupported because they are opaque desktop cache material, while ChatGPT export zips and `conversations.json` are the dependable import path.
+- Updated audit generation to use provider-specific submitted user-message records for Codex and Claude Code.
+- Updated audit response grouping to stop at the next provider-specific submitted user message and to label output as AI responses instead of Codex responses.
+- Added provider metadata to audit Markdown, including provider labels, optional titles, and provider conversation ids.
+- Removed ChatGPT parser/import support, fixtures, provider filter options, tests, and documentation from the unified provider milestone before committing.
+- Updated CLI help, API coverage, documentation, and privacy notes for provider-aware audit worklogs.
+
+### Privacy Notes
+
+No raw Codex or Claude transcripts were added. New test coverage uses synthetic records only. ChatGPT export and desktop cache support is out of scope for this milestone.
+
+### Verification
+
+- Ran `npm run build`.
+- Ran `npm run test -w @codex-log-viewer/analytics`.
+- Ran `npm run test -w @codex-log-viewer/server`.
+- Ran `npm test`.
+- Ran `npm run lint`.
+- Ran `npm run privacy:scan`.
+- Ran `npm run build:mac`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`.
+- Ran `npm run smoke:mac-ui`.
+- Ran `git diff --check`.
+- Relaunched `dist/macos/Codex Log Viewer.app`.
+
+## 2026-05-30 - Implement Unified AI Log Provider Support
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> Can you take a look at the two plans we have?
+>
+> docs/unified-ai-log-provider-support-plan.md
+> docs/chatgpt-message-support-plan.md
+>
+> And reconcile them into one single plan
+
+> PLEASE IMPLEMENT THIS PLAN:
+> # Unified AI Log Provider Support Plan
+>
+> [The user pasted the unified implementation plan covering provider-aware parser APIs, Claude Code support, ChatGPT import support, provider filters, native UI updates, fixtures, tests, documentation, and verification.]
+
+> Are we in a branch?
+
+> Notice that main has been updated, so I want to start this work from the new baseline in main
+
+> Execute our plan then
+
+### Interpreted Intent
+
+The user wanted the two provider-support planning docs reconciled into one implementation plan, then wanted that plan implemented from the updated local `main` baseline on a new branch.
+
+### Response / Work Done
+
+- Created `codex/unified-ai-provider-support` from the updated local `main` baseline.
+- Added provider metadata to normalized parser records and kept existing Codex parser/cache APIs compatible.
+- Added provider-neutral parser/cache APIs for mixed local sources.
+- Added Claude Code JSONL parsing for user, assistant, system, usage, tool use/result, unknown records, and malformed lines.
+- Added provider filters and provider breakdowns across analytics, local API, CLI, search, exports, and the native macOS app.
+- Updated the native app with provider decoding, provider badges, a provider segmented control, and AI Interaction/AI Response copy.
+- Added sanitized Claude fixtures and provider-focused parser, analytics, and API tests.
+- Updated provider documentation, removed the separate ChatGPT plan, and removed ChatGPT implementation from this milestone.
+
+### Privacy Notes
+
+No raw Codex or Claude transcripts were added. New fixtures are synthetic and sanitized.
+
+### Verification
+
+- Ran `wt bootstrap`.
+- Ran `npm run build`.
+- Ran `npm run test -w @codex-log-viewer/analytics`.
+- Ran `npm run test -w @codex-log-viewer/server`.
+- Ran `npm test`.
+- Ran `npm run lint`.
+- Ran `npm run privacy:scan`.
+- Ran `swift build --package-path apps/macos`.
+- Ran `npm run build:mac`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`.
+- Ran `npm run smoke:mac-ui`.
+- Ran `git diff --check`.
+- Relaunched `dist/macos/Codex Log Viewer.app`.
+
 ## 2026-05-29 - Merge Main Evals And Extend Performance Work
 
 Status: Completed

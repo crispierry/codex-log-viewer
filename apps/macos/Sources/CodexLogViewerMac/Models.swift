@@ -40,6 +40,25 @@ enum MessageRoleFilter: String, CaseIterable, Identifiable {
   }
 }
 
+enum ProviderFilter: String, CaseIterable, Identifiable {
+  case all
+  case codex
+  case claude
+
+  var id: String { rawValue }
+
+  var label: String {
+    switch self {
+    case .all:
+      return "All"
+    case .codex:
+      return "Codex"
+    case .claude:
+      return "Claude"
+    }
+  }
+}
+
 enum AppSection: String, CaseIterable, Identifiable {
   case browse
   case overview
@@ -171,6 +190,7 @@ struct PromptIntentCategoryOption: Identifiable, Hashable {
 
 struct LogFilters: Equatable {
   var paths: [String] = []
+  var provider: ProviderFilter = .all
   var since: String?
   var until: String?
   var refreshToken = 0
@@ -341,6 +361,7 @@ struct CacheMetadata: Decodable, Equatable {
 
 struct ProjectListItem: Decodable, Identifiable, Hashable {
   let project: String
+  let providers: [String]
   let cwdSamples: [String]
   let sessions: Int
   let turns: Int
@@ -362,6 +383,7 @@ struct ProjectSummary: Decodable {
   let messagesByHour: [DateBucket]
   let tokensByDay: [DateBucket]
   let models: [ModelBucket]
+  let providers: [ProviderBucket]
   let sessions: [SessionSummary]
   let promptIntents: PromptIntentSummary
   let repeatedUserMessages: [RepeatedUserMessage]
@@ -387,6 +409,8 @@ struct SummaryTotals: Decodable {
 struct TokenUsage: Decodable, Hashable {
   let inputTokens: Int
   let cachedInputTokens: Int
+  let cacheCreationInputTokens: Int?
+  let cacheReadInputTokens: Int?
   let freshInputTokens: Int
   let outputTokens: Int
   let reasoningOutputTokens: Int
@@ -406,7 +430,18 @@ struct ModelBucket: Decodable, Hashable {
   let tokens: TokenUsage
 }
 
+struct ProviderBucket: Decodable, Hashable {
+  let provider: String
+  let sessions: Int
+  let messages: Int
+  let totalTokens: Int
+}
+
 struct SessionSummary: Decodable, Identifiable, Hashable {
+  let provider: String
+  let sourceLabel: String?
+  let title: String?
+  let providerConversationId: String?
   let sessionId: String
   let filePath: String
   let dateKey: String
@@ -476,6 +511,10 @@ struct MessageSearchSummary: Decodable {
 
 struct MessageSearchResult: Decodable, Identifiable, Hashable {
   let id: String
+  let provider: String
+  let sourceLabel: String?
+  let title: String?
+  let providerConversationId: String?
   let sessionId: String
   let filePath: String
   let dateKey: String?
@@ -583,6 +622,10 @@ struct SessionDetail: Decodable {
 }
 
 struct SessionDetailFile: Decodable {
+  let provider: String?
+  let sourceLabel: String?
+  let title: String?
+  let providerConversationId: String?
   let filePath: String
   let sessionId: String
   let lineCount: Int
@@ -597,6 +640,10 @@ struct TurnDetail: Decodable, Hashable {
 }
 
 struct MessageDetail: Decodable, Hashable {
+  let provider: String?
+  let sourceLabel: String?
+  let title: String?
+  let providerConversationId: String?
   let role: String
   let sourceEvent: String
   let category: String?

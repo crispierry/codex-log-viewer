@@ -1,6 +1,6 @@
 # Privacy And Redaction
 
-Codex session logs are sensitive. They may contain prompts, code, file paths, command output, screenshots, local image paths, diffs, credentials, cookies, API keys, and private business context.
+AI session logs are sensitive. Codex and Claude Code logs may contain prompts, code, file paths, command output, screenshots, local image paths, diffs, credentials, cookies, API keys, and private business context.
 
 ## Default Privacy Stance
 
@@ -9,6 +9,7 @@ Codex session logs are sensitive. They may contain prompts, code, file paths, co
 - Do not include raw logs in GitHub issues.
 - Do not commit unsanitized fixtures.
 - Treat unknown fields as sensitive.
+- Treat provider imports as private local files unless explicitly reviewed.
 
 ## Redaction Targets
 
@@ -63,9 +64,11 @@ Raw JSON can be requested through the CLI with `--raw` or through the local API 
 
 ## AI Worklog Audits
 
-Audit worklogs are detailed Markdown exports intended to preserve user intent. They can include every submitted user message for a project and captured Codex responses, so they are more sensitive than aggregate summaries.
+Audit worklogs are detailed Markdown exports intended to preserve user intent. They can include every submitted user message for a project and captured AI responses across enabled providers, so they are more sensitive than aggregate summaries.
 
-The app Audit section and audit command default to public mode. Public mode preserves message text while redacting obvious local home paths, email addresses, and token-like strings. This is a safety net, not a complete privacy review.
+The app Audit section and audit command default to public mode. Public mode preserves AI message text while redacting obvious local home paths, email addresses, and token-like strings. This is a safety net, not a complete privacy review.
+
+Audit worklog generation is provider-aware. Codex and Claude Code entries can be repository-scoped through working-directory metadata and must be reviewed before committing.
 
 The app writes an audit worklog only after the user approves the reviewed Markdown preview. Smart merge mode preserves existing reviewed entries and appends only generated sections that are not already present.
 

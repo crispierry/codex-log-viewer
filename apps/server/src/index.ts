@@ -176,6 +176,10 @@ async function handleRequest(
     sendJson(response, 200, withPerformanceMetadata({
       session,
       file: {
+        provider: file.provider,
+        sourceLabel: file.sourceLabel,
+        title: file.title,
+        providerConversationId: file.providerConversationId,
         filePath: file.filePath,
         sessionId: file.sessionId,
         lineCount: file.lineCount
@@ -393,8 +397,9 @@ function loadCachedCorpus(
   const paths = pathsFromQuery(url, options.paths);
   const refreshCache = url.searchParams.has("refresh");
   const rebuildCache = url.searchParams.get("rebuild") === "1";
+  const provider = providerFromQuery(url);
   const cacheDir = options.cacheDir ?? serverCacheDir();
-  const key = cacheKey(paths, cacheDir);
+  const key = cacheKey(paths, cacheDir, provider);
   const cached = corpusCache.get(key);
 
   if (cached && !cached.loaded) {
@@ -411,6 +416,7 @@ function loadCachedCorpus(
   const entry: CorpusCacheEntry = {
     promise: loadCorpus({
       paths,
+      provider,
       cacheDir,
       refreshCache,
       rebuildCache
@@ -441,7 +447,7 @@ function searchMessagesWithLocalIndex(
   }
 
   const paths = pathsFromQuery(url, options.paths);
-  const key = cacheKey(paths, cacheDir);
+  const key = cacheKey(paths, cacheDir, searchOptions.provider);
   if (loaded.corpus.messages.length < searchIndexMinMessages()) {
     searchIndexCache.get(key)?.handle.close();
     searchIndexCache.delete(key);
@@ -512,13 +518,19 @@ function summaryOptionsFromQuery(url: URL, fallbackPaths?: string[]): SummaryOpt
     paths: pathsFromQuery(url, fallbackPaths),
     project: projectFromQuery(url),
     since: url.searchParams.get("since") ?? undefined,
-    until: url.searchParams.get("until") ?? undefined
+    until: url.searchParams.get("until") ?? undefined,
+    provider: providerFromQuery(url)
   };
 }
 
 function projectFromQuery(url: URL): string | undefined {
   const project = url.searchParams.get("project")?.trim();
   return project && project !== "All Projects" ? project : undefined;
+}
+
+function providerFromQuery(url: URL): SummaryOptions["provider"] {
+  const provider = url.searchParams.get("provider")?.trim();
+  return provider && provider !== "all" ? provider : undefined;
 }
 
 function pathsFromQuery(url: URL, fallbackPaths?: string[]): string[] | undefined {
@@ -607,6 +619,9 @@ function findVisibleSessionFile(
     if (filePath && file.filePath !== filePath) {
       return false;
     }
+    if (options.provider && options.provider !== "all" && file.provider !== options.provider) {
+      return false;
+    }
     if (project && projectContextForFile(file, corpus).project !== project) {
       return false;
     }
@@ -635,7 +650,7 @@ function fileHasSubmittedUserMessageOnDate(
 ): boolean {
   return file.messages.some(
     (message) =>
-      message.sourceEvent === "event_msg.user_message" &&
+      isSubmittedUserMessageShape(message) &&
       localDateKey(message.timestamp) === dateKey &&
       timestampInRange(message.timestamp, range)
   );
@@ -699,9 +714,16 @@ function localDateKey(timestamp: string | undefined): string {
   return `${year}-${month}-${day}`;
 }
 
-function cacheKey(paths: string[] | undefined, cacheDir: string | undefined): string {
+function isSubmittedUserMessageShape(message: { role: string; sourceEvent: string }): boolean {
+  return message.role === "user" && (
+    message.sourceEvent === "event_msg.user_message" ||
+    message.sourceEvent === "claude.user_message"
+  );
+}
+
+function cacheKey(paths: string[] | undefined, cacheDir: string | undefined, provider?: string): string {
   const sourceKey = paths && paths.length > 0 ? [...paths].sort().join("\n") : "__default__";
-  return `${cacheDir ?? "__no_cache__"}\n${sourceKey}`;
+  return `${cacheDir ?? "__no_cache__"}\n${provider ?? "all"}\n${sourceKey}`;
 }
 
 function serverCacheDir(): string | undefined {

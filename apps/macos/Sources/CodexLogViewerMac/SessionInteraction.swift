@@ -34,7 +34,7 @@ enum SessionInteractionBuilder {
   static func userMessageOffsets(in detail: SessionDetail, dateKey: String? = nil) -> [(offset: Int, element: MessageDetail)] {
     Array(detail.messages.enumerated())
       .filter {
-        $0.element.sourceEvent == "event_msg.user_message" &&
+        isSubmittedUserMessage($0.element) &&
           (dateKey == nil || codexLocalDateKey($0.element.timestamp) == dateKey)
       }
   }
@@ -43,7 +43,7 @@ enum SessionInteractionBuilder {
     guard detail.messages.indices.contains(selectedUserMessageIndex) else { return nil }
 
     let selectedMessage = detail.messages[selectedUserMessageIndex]
-    guard selectedMessage.sourceEvent == "event_msg.user_message" else { return nil }
+    guard isSubmittedUserMessage(selectedMessage) else { return nil }
 
     let nextPromptIndex = detail.messages
       .dropFirst(selectedUserMessageIndex + 1)
@@ -139,7 +139,7 @@ enum SessionInteractionBuilder {
   }
 
   private static func isPromptBoundary(_ message: MessageDetail) -> Bool {
-    message.sourceEvent == "event_msg.user_message" || message.sourceEvent == "event_msg.automation_message"
+    isSubmittedUserMessage(message) || message.sourceEvent == "event_msg.automation_message"
   }
 
   private static func uniqueMessages(_ messages: [MessageDetail]) -> [MessageDetail] {
@@ -148,6 +148,13 @@ enum SessionInteractionBuilder {
       seen.insert(messageDisplayText(message)).inserted
     }
   }
+}
+
+func isSubmittedUserMessage(_ message: MessageDetail) -> Bool {
+  message.role == "user" && (
+    message.sourceEvent == "event_msg.user_message" ||
+      message.sourceEvent == "claude.user_message"
+  )
 }
 
 func messageDisplayText(_ message: MessageDetail) -> String {

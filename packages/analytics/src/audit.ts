@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { basename, isAbsolute, normalize, relative } from "node:path";
-import type { MessageRecord, ParsedCodexCorpus, ParsedCodexFile } from "@codex-log-viewer/parser";
+import type { MessageRecord, ParsedLogCorpus, ParsedLogFile } from "@codex-log-viewer/parser";
 import { projectContextForFile, projectNameForCwd } from "./project.js";
 import type { ProjectAlias, SummaryOptions } from "./types.js";
 
@@ -23,7 +23,7 @@ export interface AuditMergeResult {
 }
 
 interface AuditSessionEntry {
-  file: ParsedCodexFile;
+  file: ParsedLogFile;
   project: string;
   cwd?: string;
   firstSeen?: string;
@@ -37,7 +37,7 @@ interface AuditInteraction {
   responses: MessageRecord[];
 }
 
-export function generateAuditMarkdown(corpus: ParsedCodexCorpus, options: AuditMarkdownOptions = {}): string {
+export function generateAuditMarkdown(corpus: ParsedLogCorpus, options: AuditMarkdownOptions = {}): string {
   const privacy = options.privacy ?? "public";
   const includeResponses = options.includeResponses !== false;
   const generatedAt = options.generatedAt ?? new Date().toISOString();
@@ -52,14 +52,16 @@ export function generateAuditMarkdown(corpus: ParsedCodexCorpus, options: AuditM
   const lines: string[] = [
     `# ${title}`,
     "",
-    "Sanitized audit trail of AI-assisted work reconstructed from local Codex session logs.",
+    "Sanitized audit trail of AI-assisted work reconstructed from local AI system logs.",
     "",
     `Generated: ${generatedAt}`,
     `Project filter: ${projectLabel}`,
+    `Provider filter: ${options.provider ?? "all"}`,
+    `Providers: ${providerSummary(entries)}`,
     `Privacy mode: ${privacy}`,
     `Sessions: ${entries.length}`,
     `User messages: ${userMessageCount}`,
-    `Codex responses: ${includeResponses ? responseCount : "not included"}`,
+    `AI responses: ${includeResponses ? responseCount : "not included"}`,
     "",
     "> Review this file before committing it. Public mode preserves user intent while redacting obvious local home paths and contact or secret-like strings.",
     ""
@@ -74,6 +76,13 @@ export function generateAuditMarkdown(corpus: ParsedCodexCorpus, options: AuditM
     lines.push(`<!-- codex-log-viewer:audit-session ${auditSessionMarker(entry.file.filePath, entry.file.sessionId)} -->`);
     const dateLabel = localDateKey(entry.firstSeen ?? entry.lastSeen);
     lines.push(`## ${dateLabel} - ${entry.project}`, "");
+    lines.push(`Provider: \`${redactInline(providerLabel(entry.file), privacy)}\``);
+    if (entry.file.title) {
+      lines.push(`Title: \`${redactInline(entry.file.title, privacy)}\``);
+    }
+    if (entry.file.providerConversationId && entry.file.providerConversationId !== entry.file.sessionId) {
+      lines.push(`Provider conversation: \`${redactInline(entry.file.providerConversationId, privacy)}\``);
+    }
     lines.push(`Session: \`${redactInline(entry.file.sessionId, privacy)}\``);
     if (entry.firstSeen) {
       lines.push(`First seen: ${entry.firstSeen}`);
@@ -101,14 +110,14 @@ export function generateAuditMarkdown(corpus: ParsedCodexCorpus, options: AuditM
       }
 
       if (interaction.responses.length === 0) {
-        lines.push("_No Codex response was captured for this message in the parsed log._", "");
+        lines.push("_No AI response was captured for this message in the parsed log._", "");
         return;
       }
 
       interaction.responses.forEach((response, responseIndex) => {
         const responseTitle = interaction.responses.length === 1
-          ? "Codex Response"
-          : `Codex Response ${responseIndex + 1}`;
+          ? "AI Response"
+          : `AI Response ${responseIndex + 1}`;
         lines.push(`#### ${responseTitle}`, "");
         if (response.timestamp) {
           lines.push(`Timestamp: ${response.timestamp}`, "");
@@ -171,7 +180,7 @@ export function mergeAuditMarkdown(existingMarkdown: string | undefined, generat
 }
 
 function auditSessionEntries(
-  corpus: ParsedCodexCorpus,
+  corpus: ParsedLogCorpus,
   options: AuditMarkdownOptions,
   includeResponses: boolean
 ): AuditSessionEntry[] {
@@ -180,8 +189,12 @@ function auditSessionEntries(
   const entries: AuditSessionEntry[] = [];
 
   for (const file of corpus.files) {
+    if (!providerInScope(recordProvider(file), options.provider)) {
+      continue;
+    }
+
     const context = projectContextForFile(file, corpus, aliases);
-    if (!projectInScope(context.project, context.cwd, options, aliases)) {
+    if (!projectInScope(file, context.project, context.cwd, options, aliases)) {
       continue;
     }
 
@@ -189,7 +202,7 @@ function auditSessionEntries(
       .filter((message) => sameSessionFile(message, file))
       .sort(compareMessages);
     const scopedUserMessages = sessionMessages.filter(
-      (message) => message.sourceEvent === "event_msg.user_message" && timestampInRange(message.timestamp, range)
+      (message) => isSubmittedUserMessage(message) && timestampInRange(message.timestamp, range)
     );
     if (scopedUserMessages.length === 0) {
       continue;
@@ -237,6 +250,7 @@ function auditSessionEntries(
 }
 
 function projectInScope(
+  file: ParsedLogFile,
   project: string,
   cwd: string | undefined,
   options: AuditMarkdownOptions,
@@ -248,7 +262,10 @@ function projectInScope(
   if (!options.repoPath) {
     return true;
   }
-  return repoPathMatches(cwd, project, options.repoPath, aliases);
+  if (repoPathMatches(cwd, project, options.repoPath, aliases)) {
+    return true;
+  }
+  return !cwd && recordProvider(file) !== "codex" && hasExplicitSourcePaths(options);
 }
 
 function repoPathMatches(
@@ -280,12 +297,50 @@ function assistantResponsesForUserMessage(
     return [];
   }
   const nextUserIndex = sessionMessages.findIndex(
-    (message, index) => index > userIndex && message.sourceEvent === "event_msg.user_message"
+    (message, index) => index > userIndex && isSubmittedUserMessage(message)
   );
   const upperBound = nextUserIndex < 0 ? sessionMessages.length : nextUserIndex;
   return sessionMessages
     .slice(userIndex + 1, upperBound)
     .filter((message) => message.role === "assistant" && message.content.trim().length > 0);
+}
+
+function isSubmittedUserMessage(message: MessageRecord): boolean {
+  return message.role === "user" && (
+    message.sourceEvent === "event_msg.user_message" ||
+    message.sourceEvent === "claude.user_message"
+  );
+}
+
+function providerInScope(provider: string, filter: SummaryOptions["provider"]): boolean {
+  return !filter || filter === "all" || provider === filter;
+}
+
+function recordProvider(record: { provider?: string }): string {
+  return record.provider ?? "codex";
+}
+
+function providerLabel(record: { provider?: string; sourceLabel?: string }): string {
+  if (record.sourceLabel) {
+    return record.sourceLabel;
+  }
+  switch (recordProvider(record)) {
+    case "codex":
+      return "Codex";
+    case "claude":
+      return "Claude Code";
+    default:
+      return recordProvider(record);
+  }
+}
+
+function providerSummary(entries: AuditSessionEntry[]): string {
+  const providers = [...new Set(entries.map((entry) => providerLabel(entry.file)))].sort((a, b) => a.localeCompare(b));
+  return providers.length > 0 ? providers.join(", ") : "none";
+}
+
+function hasExplicitSourcePaths(options: AuditMarkdownOptions): boolean {
+  return Array.isArray(options.paths) && options.paths.length > 0;
 }
 
 function dateRange(options: SummaryOptions): { since?: number; until?: number } {

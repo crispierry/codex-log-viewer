@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { parseCodexLogFile } from "../dist/index.js";
+import { parseCodexLogFile, parseLogCorpus, parseLogFile } from "../dist/index.js";
 
 const testDir = dirname(fileURLToPath(import.meta.url));
 const fixturePath = resolve(testDir, "../../../fixtures/codex/sample-session.jsonl");
@@ -10,11 +10,14 @@ const eventShapesFixturePath = resolve(testDir, "../../../fixtures/codex/event-s
 const visualCommentWrapperFixturePath = resolve(testDir, "../../../fixtures/codex/visual-comment-wrapper.jsonl");
 const visualCommentImageEvidenceFixturePath = resolve(testDir, "../../../fixtures/codex/visual-comment-image-evidence.jsonl");
 const interactionDetailFixturePath = resolve(testDir, "../../../fixtures/codex/interaction-detail.jsonl");
+const claudeFixturePath = resolve(testDir, "../../../fixtures/claude/basic-session.jsonl");
 
 test("parseCodexLogFile normalizes known Codex rollout events and preserves warnings", async () => {
   const parsed = await parseCodexLogFile(fixturePath);
 
   assert.equal(parsed.sessionId, "sample-session-1");
+  assert.equal(parsed.provider, "codex");
+  assert.equal(parsed.sessions[0]?.provider, "codex");
   assert.equal(parsed.sessions.length, 1);
   assert.equal(parsed.turns.length, 1);
   assert.equal(parsed.turns[0]?.model, "gpt-5.5");
@@ -25,6 +28,32 @@ test("parseCodexLogFile normalizes known Codex rollout events and preserves warn
   assert.equal(parsed.taskTimings[0]?.durationMs, 13000);
   assert.equal(parsed.unknownEvents.length, 1);
   assert.equal(parsed.warnings.length, 1);
+});
+
+test("parseLogFile normalizes Claude Code JSONL records", async () => {
+  const [parsed] = await parseLogFile(claudeFixturePath, "claude");
+
+  assert.equal(parsed?.provider, "claude");
+  assert.equal(parsed?.sessionId, "claude-session-1");
+  assert.equal(parsed?.sessions[0]?.cwd, "/Users/example/projects/claude-app");
+  assert.equal(parsed?.messages.find((message) => message.role === "user")?.content, "Add Claude fixture support");
+  assert.equal(parsed?.messages.find((message) => message.role === "assistant")?.content, "I will add the adapter.");
+  assert.equal(parsed?.toolEvents.find((event) => event.eventType === "tool_use")?.name, "Bash");
+  assert.equal(parsed?.toolEvents.find((event) => event.eventType === "tool_result")?.content, "tests passed");
+  assert.equal(parsed?.tokenUsage[0]?.usage.inputTokens, 10);
+  assert.equal(parsed?.tokenUsage[0]?.usage.cacheCreationInputTokens, 2);
+  assert.equal(parsed?.tokenUsage[0]?.usage.cacheReadInputTokens, 3);
+  assert.equal(parsed?.tokenUsage[0]?.usage.totalTokens, 20);
+  assert.equal(parsed?.unknownEvents[0]?.topLevelType, "attachment");
+  assert.equal(parsed?.warnings[0]?.code, "malformed_json");
+});
+
+test("parseLogCorpus can parse mixed provider sources", async () => {
+  const corpus = await parseLogCorpus({ paths: [fixturePath, claudeFixturePath] });
+
+  assert.deepEqual([...new Set(corpus.files.map((file) => file.provider))].sort(), ["claude", "codex"]);
+  assert.equal(corpus.sessions.some((session) => session.provider === "codex"), true);
+  assert.equal(corpus.sessions.some((session) => session.provider === "claude"), true);
 });
 
 test("parseCodexLogFile normalizes response items and tool events", async () => {

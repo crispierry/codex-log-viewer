@@ -71,6 +71,7 @@ final class AppModel: ObservableObject {
   @Published var pathDraft = ""
   @Published var sourcePaths: [String] = []
   @Published var recentSourcePaths: [String] = []
+  @Published var providerFilter: ProviderFilter = .all
   @Published var hasSinceFilter = false
   @Published var hasUntilFilter = false
   @Published var sinceDate = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
@@ -347,7 +348,7 @@ final class AppModel: ObservableObject {
   }
 
   var sourceMenuLabel: String {
-    "Source: \(sourceSummaryText)"
+    "Source: \(sourceSummaryText) · Provider: \(providerFilter.label)"
   }
 
   var auditTargetPathText: String {
@@ -392,7 +393,7 @@ final class AppModel: ObservableObject {
   var dateRangeDetailText: String {
     switch dateRangeMode {
     case .all:
-      return "Showing all local Codex activity."
+      return "Showing all local AI activity."
     default:
       return "Showing \(Self.displayDateOnly(sinceDate)) through \(Self.displayDateOnly(untilDate))."
     }
@@ -653,6 +654,15 @@ final class AppModel: ObservableObject {
   }
 
   func filtersChanged() {
+    saveSettings()
+    clearAuditPreview()
+    clearSelectionState()
+    refresh()
+  }
+
+  func setProviderFilter(_ provider: ProviderFilter) {
+    guard providerFilter != provider else { return }
+    providerFilter = provider
     saveSettings()
     clearAuditPreview()
     clearSelectionState()
@@ -1051,7 +1061,7 @@ final class AppModel: ObservableObject {
     evalsTask?.cancel()
     evalsRequestID += 1
     let requestID = evalsRequestID
-    let filters = LogFilters(paths: sourcePaths)
+    let filters = LogFilters(paths: sourcePaths, provider: .codex)
     let project = AppConstants.allProjectsName
     let query = evalQuery.trimmingCharacters(in: .whitespacesAndNewlines)
     let categoryKey = evalCategoryKeyFilter
@@ -1174,6 +1184,10 @@ final class AppModel: ObservableObject {
   func showConversation(for evalMessage: PromptIntentEvalMessage) {
     pendingSearchConversationResult = MessageSearchResult(
       id: evalMessage.evalId,
+      provider: "codex",
+      sourceLabel: "Codex",
+      title: nil,
+      providerConversationId: nil,
       sessionId: evalMessage.sessionId,
       filePath: evalMessage.filePath,
       dateKey: evalMessage.dateKey,
@@ -1908,7 +1922,7 @@ final class AppModel: ObservableObject {
   }
 
   private func browseMessageID(for result: MessageSearchResult) -> MessageSearchResult.ID? {
-    guard result.sourceEvent == "event_msg.user_message" else { return nil }
+    guard isSubmittedUserMessage(result) else { return nil }
     return visibleBrowseMessages(in: browseMessagesSummary?.results ?? [])
       .first { browseResultRepresentsSameUserMessage($0, as: result) }?
       .id
@@ -1918,7 +1932,7 @@ final class AppModel: ObservableObject {
     for message: MessageDetail,
     in detail: SessionDetail
   ) -> MessageSearchResult.ID? {
-    guard message.sourceEvent == "event_msg.user_message" else { return nil }
+    guard isSubmittedUserMessage(message) else { return nil }
     return visibleBrowseMessages(in: browseMessagesSummary?.results ?? [])
       .first { result in
         browseResultRepresentsUserMessage(result, message: message, detail: detail)
@@ -1930,7 +1944,7 @@ final class AppModel: ObservableObject {
     _ browseResult: MessageSearchResult,
     as target: MessageSearchResult
   ) -> Bool {
-    guard browseResult.sourceEvent == "event_msg.user_message",
+    guard isSubmittedUserMessage(browseResult),
       browseResult.sessionId == target.sessionId,
       browseResult.filePath == target.filePath,
       browseResult.dateKey == target.dateKey,
@@ -1954,7 +1968,7 @@ final class AppModel: ObservableObject {
     message: MessageDetail,
     detail: SessionDetail
   ) -> Bool {
-    guard result.sourceEvent == "event_msg.user_message",
+    guard isSubmittedUserMessage(result),
       result.sessionId == detail.file.sessionId,
       result.filePath == detail.file.filePath,
       result.dateKey == codexLocalDateKey(message.timestamp),
@@ -1977,7 +1991,7 @@ final class AppModel: ObservableObject {
     let userMessageOffsets = SessionInteractionBuilder.userMessageOffsets(in: detail)
     guard !userMessageOffsets.isEmpty else { return nil }
 
-    if target.sourceEvent == "event_msg.user_message" {
+    if isSubmittedUserMessage(target) {
       if let lineNumber = target.lineNumber,
         let exactMatch = userMessageOffsets.first(where: { $0.element.lineNumber == lineNumber }) {
         return exactMatch.offset
@@ -2120,6 +2134,10 @@ final class AppModel: ObservableObject {
       let sortOption = ProjectSortOption(rawValue: savedProjectSort) {
       projectSortOption = sortOption
     }
+    if let savedProvider = UserDefaults.standard.string(forKey: DefaultsKeys.providerFilter),
+      let provider = ProviderFilter(rawValue: savedProvider) {
+      providerFilter = provider
+    }
     let savedHiddenOperationalCategories = Set(Self.stringArray(forKey: DefaultsKeys.hiddenOperationalMessageCategories))
     let savedOperationalCategoryVersion = UserDefaults.standard.integer(
       forKey: DefaultsKeys.operationalMessageCategoriesVersion
@@ -2158,6 +2176,7 @@ final class AppModel: ObservableObject {
     UserDefaults.standard.set(dateRangeMode.rawValue, forKey: DefaultsKeys.dateRangeMode)
     UserDefaults.standard.set(Self.dateFormatter.string(from: dateAnchorDate), forKey: DefaultsKeys.dateAnchorDate)
     UserDefaults.standard.set(projectSortOption.rawValue, forKey: DefaultsKeys.projectSortOption)
+    UserDefaults.standard.set(providerFilter.rawValue, forKey: DefaultsKeys.providerFilter)
     UserDefaults.standard.set(Array(hiddenOperationalMessageCategories).sorted(), forKey: DefaultsKeys.hiddenOperationalMessageCategories)
     UserDefaults.standard.set(Self.operationalMessageCategoriesVersion, forKey: DefaultsKeys.operationalMessageCategoriesVersion)
     UserDefaults.standard.removeObject(forKey: DefaultsKeys.showOperationalMessages)
@@ -2405,7 +2424,7 @@ final class AppModel: ObservableObject {
       ),
       !interaction.assistantMessages.isEmpty
     else {
-      throw AppSmokeError.unexpected("The selected user message did not reconstruct its Codex response.")
+      throw AppSmokeError.unexpected("The selected user message did not reconstruct its AI response.")
     }
     let assistantSearch = try await api.searchMessages(
       query: "parser test fixture",
@@ -2539,6 +2558,7 @@ final class AppModel: ObservableObject {
   private func currentFilters(refreshToken: Int = 0, rebuildCache: Bool = false) -> LogFilters {
     LogFilters(
       paths: sourcePaths,
+      provider: providerFilter,
       since: hasSinceFilter ? Self.dateFormatter.string(from: sinceDate) : nil,
       until: hasUntilFilter ? Self.dateFormatter.string(from: untilDate) : nil,
       refreshToken: refreshToken,
@@ -2827,7 +2847,7 @@ final class AppModel: ObservableObject {
     alert.messageText = "Codex Log Viewer Help"
     alert.informativeText = """
     Browse
-    Choose a project, pick a submitted message, and read the matching Codex interaction.
+    Choose a project, pick a submitted message, and read the matching AI interaction.
 
     Overview
     Project Focus shows the main types of work in the current project and date range.
@@ -2916,6 +2936,20 @@ private struct SearchResultSelectionTarget {
   }
 }
 
+private func isSubmittedUserMessage(_ result: MessageSearchResult) -> Bool {
+  result.role == "user" && (
+    result.sourceEvent == "event_msg.user_message" ||
+      result.sourceEvent == "claude.user_message"
+  )
+}
+
+private func isSubmittedUserMessage(_ target: SearchResultSelectionTarget) -> Bool {
+  target.role == "user" && (
+    target.sourceEvent == "event_msg.user_message" ||
+      target.sourceEvent == "claude.user_message"
+  )
+}
+
 private enum DefaultsKeys {
   static let sourcePaths = "sourcePaths"
   static let recentSourcePaths = "recentSourcePaths"
@@ -2927,6 +2961,7 @@ private enum DefaultsKeys {
   static let dateRangeMode = "dateRangeMode"
   static let dateAnchorDate = "dateAnchorDate"
   static let projectSortOption = "projectSortOption"
+  static let providerFilter = "providerFilter"
   static let showOperationalMessages = "showOperationalMessages"
   static let hiddenOperationalMessageCategories = "hiddenOperationalMessageCategories"
   static let operationalMessageCategoriesVersion = "operationalMessageCategoriesVersion"

@@ -1,18 +1,20 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
-import { defaultCodexLogRoots, discoverCodexLogFiles } from "./discover.js";
-import { parseCodexLogFile } from "./parser.js";
+import { defaultCodexLogRoots, discoverLogFiles } from "./discover.js";
+import { parseLogFile } from "./parser.js";
 import type {
   CachedParsedCodexCorpus,
+  CachedParsedLogCorpus,
   ParsedCodexCorpus,
   ParsedCodexFile,
   ParseCacheMetadata,
-  ParseOptions
+  ParseOptions,
+  ProviderFilter
 } from "./types.js";
 
 const CACHE_SCHEMA_VERSION = 1;
-const PARSER_CACHE_VERSION = "parser-v5";
+const PARSER_CACHE_VERSION = "parser-v6";
 
 interface CacheManifest {
   schemaVersion: number;
@@ -44,9 +46,14 @@ interface SourceScope {
 }
 
 export async function parseCodexCorpusWithCache(options: ParseOptions = {}): Promise<CachedParsedCodexCorpus> {
+  return parseLogCorpusWithCache({ ...options, provider: "codex" });
+}
+
+export async function parseLogCorpusWithCache(options: ParseOptions = {}): Promise<CachedParsedLogCorpus> {
+  const provider = providerForDiscovery(options);
   if (!options.cacheDir) {
-    const files = await discoverCodexLogFiles(options.paths);
-    const parsedFiles = await Promise.all(files.map((file) => parseCodexLogFile(file)));
+    const files = await discoverLogFiles(options.paths, provider);
+    const parsedFiles = (await Promise.all(files.map((file) => parseLogFile(file, provider)))).flat();
     return {
       corpus: corpusFromParsedFiles(parsedFiles),
       cache: cacheMetadata("updated", 0, parsedFiles.length, 0, parsedFiles.length)
@@ -57,7 +64,7 @@ export async function parseCodexCorpusWithCache(options: ParseOptions = {}): Pro
   const filesDirectory = resolve(cacheDirectory, "files");
   await mkdir(filesDirectory, { recursive: true });
 
-  const discoveredFiles = await canonicalLogFiles(await discoverCodexLogFiles(options.paths));
+  const discoveredFiles = await canonicalLogFiles(await discoverLogFiles(options.paths, provider));
   const fingerprints = await Promise.all(discoveredFiles.map((filePath) => fingerprintFor(filePath)));
   const activeKeys = new Set(fingerprints.map((fingerprint) => fingerprint.cacheKey));
   const sourceScopes = await scopesFor(options.paths ?? defaultCodexLogRoots());
@@ -89,20 +96,20 @@ export async function parseCodexCorpusWithCache(options: ParseOptions = {}): Pro
 
     if (cached) {
       reusedFiles += 1;
-      parsedFiles.push(cached);
+      parsedFiles.push(...cached);
       continue;
     }
 
-    const parsed = await parseCodexLogFile(fingerprint.filePath);
+    const parsed = await parseLogFile(fingerprint.filePath, provider);
     reparsedFiles += 1;
-    parsedFiles.push(parsed);
+    parsedFiles.push(...parsed);
     manifest.entries[fingerprint.cacheKey] = {
       filePath: fingerprint.filePath,
       cacheFile: fingerprint.cacheFile,
       size: fingerprint.size,
       mtimeMs: fingerprint.mtimeMs,
-      sessionId: parsed.sessionId,
-      lineCount: parsed.lineCount,
+      sessionId: parsed.length === 1 ? parsed[0]?.sessionId ?? "" : `${parsed.length} logical sessions`,
+      lineCount: parsed.reduce((sum, file) => sum + file.lineCount, 0),
       updatedAt: new Date().toISOString()
     };
     await writeCachedParsedFile(filesDirectory, fingerprint.cacheFile, parsed);
@@ -164,11 +171,12 @@ async function writeManifest(cacheDirectory: string, manifest: CacheManifest): P
   await writeFile(resolve(cacheDirectory, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
 }
 
-async function readCachedParsedFile(filesDirectory: string, cacheFile: string): Promise<ParsedCodexFile | undefined> {
+async function readCachedParsedFile(filesDirectory: string, cacheFile: string): Promise<ParsedCodexFile[] | undefined> {
   try {
-    const parsed = JSON.parse(await readFile(resolve(filesDirectory, cacheFile), "utf8")) as ParsedCodexFile;
-    if (typeof parsed.filePath === "string" && typeof parsed.sessionId === "string") {
-      return parsed;
+    const parsed = JSON.parse(await readFile(resolve(filesDirectory, cacheFile), "utf8")) as ParsedCodexFile | ParsedCodexFile[];
+    const files = Array.isArray(parsed) ? parsed : [parsed];
+    if (files.every((file) => typeof file.filePath === "string" && typeof file.sessionId === "string")) {
+      return files;
     }
   } catch {
     return undefined;
@@ -176,7 +184,7 @@ async function readCachedParsedFile(filesDirectory: string, cacheFile: string): 
   return undefined;
 }
 
-async function writeCachedParsedFile(filesDirectory: string, cacheFile: string, parsed: ParsedCodexFile): Promise<void> {
+async function writeCachedParsedFile(filesDirectory: string, cacheFile: string, parsed: ParsedCodexFile[]): Promise<void> {
   await writeFile(resolve(filesDirectory, cacheFile), `${JSON.stringify(parsed)}\n`, "utf8");
 }
 
@@ -222,7 +230,7 @@ async function scopesFor(paths: string[]): Promise<SourceScope[]> {
         const info = await stat(canonical);
         return { path: canonical, isFile: info.isFile() };
       } catch {
-        return { path: resolved, isFile: resolved.endsWith(".jsonl") };
+        return { path: resolved, isFile: isSupportedLogPath(resolved) };
       }
     })
   );
@@ -261,4 +269,12 @@ function cacheMetadata(
     totalFiles,
     updatedAt: new Date().toISOString()
   };
+}
+
+function providerForDiscovery(options: ParseOptions): ProviderFilter {
+  return options.provider ?? (options.paths && options.paths.length > 0 ? "all" : "codex");
+}
+
+function isSupportedLogPath(path: string): boolean {
+  return path.endsWith(".jsonl");
 }

@@ -2,6 +2,7 @@ import type {
   MessageRole,
   ParseCacheMetadata,
   ParsedCodexCorpus,
+  ProviderFilter,
   SessionRecord,
   TokenUsage
 } from "@codex-log-viewer/parser";
@@ -18,6 +19,7 @@ export interface SummaryOptions {
   project?: string;
   since?: string;
   until?: string;
+  provider?: ProviderFilter;
   aliases?: ProjectAlias[];
   cacheDir?: string;
   refreshCache?: boolean;
@@ -37,7 +39,18 @@ export interface ModelBucket {
   tokens: TokenUsage;
 }
 
+export interface ProviderBucket {
+  provider: string;
+  sessions: number;
+  messages: number;
+  totalTokens: number;
+}
+
 export interface SessionSummary {
+  provider: string;
+  sourceLabel?: string;
+  title?: string;
+  providerConversationId?: string;
   sessionId: string;
   filePath: string;
   dateKey: string;
@@ -105,6 +118,7 @@ export interface ProjectSummary {
   filters: {
     since?: string;
     until?: string;
+    provider?: ProviderFilter;
     paths: string[];
   };
   totals: {
@@ -123,6 +137,7 @@ export interface ProjectSummary {
   messagesByHour: DateBucket[];
   tokensByDay: DateBucket[];
   models: ModelBucket[];
+  providers: ProviderBucket[];
   sessions: SessionSummary[];
   promptIntents: PromptIntentSummary;
   repeatedUserMessages: RepeatedUserMessage[];
@@ -143,6 +158,10 @@ export interface MessageSearchOptions extends SummaryOptions {
 
 export interface MessageSearchResult {
   id: string;
+  provider: string;
+  sourceLabel?: string;
+  title?: string;
+  providerConversationId?: string;
   sessionId: string;
   filePath: string;
   dateKey: string;
@@ -284,6 +303,7 @@ export interface PromptIntentEvalFixtureDraft {
 
 export interface ProjectListItem {
   project: string;
+  providers: string[];
   cwdSamples: string[];
   sessions: number;
   turns: number;

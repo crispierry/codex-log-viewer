@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { parseCodexCorpus } from "@codex-log-viewer/parser";
+import { parseCodexCorpus, parseLogCorpus } from "@codex-log-viewer/parser";
 import {
   classifyPromptIntent,
   evalMessageId,
@@ -17,6 +17,7 @@ import {
 
 const testDir = dirname(fileURLToPath(import.meta.url));
 const fixturePath = resolve(testDir, "../../../fixtures/codex/sample-session.jsonl");
+const claudeFixturePath = resolve(testDir, "../../../fixtures/claude/basic-session.jsonl");
 
 test("summarizeParsedCorpus aggregates messages, unique messages, tokens, models, and warnings", async () => {
   const corpus = await parseCodexCorpus({ paths: [fixturePath] });
@@ -38,6 +39,20 @@ test("summarizeParsedCorpus aggregates messages, unique messages, tokens, models
   const projects = projectsFromCorpus(corpus);
   assert.equal(projects[0]?.firstSeen, "2026-04-27T19:01:00.745Z");
   assert.equal(projects[0]?.lastSeen, "2026-04-27T19:01:12.000Z");
+});
+
+test("summaries and search support mixed provider filtering", async () => {
+  const corpus = await parseLogCorpus({ paths: [fixturePath, claudeFixturePath] });
+  const allSummary = summarizeParsedCorpus(corpus);
+
+  assert.deepEqual(allSummary.providers.map((provider) => provider.provider).sort(), ["claude", "codex"]);
+  assert.equal(allSummary.totals.userMessages, 2);
+  assert.equal(allSummary.promptIntents.totalMessages, 1);
+
+  const claudeSearch = searchMessages(corpus, { provider: "claude", submittedOnly: true });
+  assert.equal(claudeSearch.totalMatches, 1);
+  assert.equal(claudeSearch.results[0]?.provider, "claude");
+  assert.equal(claudeSearch.results[0]?.content, "Add Claude fixture support");
 });
 
 test("projectsFromCorpus uses token and turn timestamps for activity metadata", () => {
