@@ -2526,3 +2526,45 @@ No raw local transcripts, local log content, secrets, or private data were added
 - Ran `git diff --check`.
 - Confirmed the packaged app `CFBundleShortVersionString` and `CFBundleVersion` are both `0.2.4`.
 - Relaunched the packaged macOS app from this branch.
+
+## 2026-05-31 - Fix Provider Switch Review Findings
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> code review
+
+> Fix them
+
+### Interpreted Intent
+
+The user wanted the review findings fixed: stale project scope after provider switches and background warmup competing with foreground provider navigation.
+
+### Response / Work Done
+
+- Reset the selected project to All Projects when the provider filter changes, so switching from one provider to another cannot keep a project that does not exist in the new provider scope.
+- Cleared the audit path suggestion when the provider switch resets to All Projects.
+- Cancelled in-flight provider warmup before foreground refreshes.
+- Added a warmup generation guard so a cancelled warmup cannot clear a newer warmup task during fast user switching.
+- Bumped the app patch version to `0.2.5`.
+
+### Privacy Notes
+
+No raw local transcripts, local log content, secrets, or private data were added.
+
+### Verification
+
+- Ran `npm run build:mac`.
+- Ran `npm test`.
+- Ran `npm run lint`.
+- Ran `npm run privacy:scan`.
+- Ran `node scripts/check-app-version.mjs --compare-ref main --require-pr-minor`.
+- Ran `node scripts/check-app-version.mjs --tag v0.2.5`.
+- Ran `git diff --check`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`.
+- Ran `npm run smoke:mac-ui`.
+- Confirmed the packaged app `CFBundleShortVersionString` and `CFBundleVersion` are both `0.2.5`.
+- Relaunched the packaged macOS app from this branch.

@@ -115,6 +115,7 @@ final class AppModel: ObservableObject {
   private var evalReviewTask: Task<Void, Never>?
   private var backgroundSyncTask: Task<Void, Never>?
   private var providerWarmupTask: Task<Void, Never>?
+  private var providerWarmupGeneration = 0
   private var reloadRequestID = 0
   private var detailRequestID = 0
   private var quietDetailRefreshRequestID = 0
@@ -434,6 +435,9 @@ final class AppModel: ObservableObject {
     if mode == .background, shouldSkipBackgroundSync {
       return
     }
+    if mode == .foreground {
+      cancelProviderWarmup()
+    }
 
     let shouldRefreshCache = force || rebuildCache || mode == .background
     let shouldShowLoadingNotice = mode == .foreground && (summary == nil || browseMessagesSummary == nil || force || rebuildCache)
@@ -576,10 +580,13 @@ final class AppModel: ObservableObject {
 
   private func startProviderWarmupIfNeeded(api: LogEngineAPI) {
     guard providerWarmupTask == nil, !isEphemeralSettingsRun, sourcePaths.isEmpty, providerFilter != .all else { return }
+    providerWarmupGeneration += 1
+    let generation = providerWarmupGeneration
     providerWarmupTask = Task { [weak self] in
       defer {
         Task { @MainActor [weak self] in
-          self?.providerWarmupTask = nil
+          guard let self, self.providerWarmupGeneration == generation else { return }
+          self.providerWarmupTask = nil
         }
       }
       do {
@@ -590,6 +597,12 @@ final class AppModel: ObservableObject {
       guard !Task.isCancelled else { return }
       await self?.warmProviderCaches(api: api)
     }
+  }
+
+  private func cancelProviderWarmup() {
+    providerWarmupGeneration += 1
+    providerWarmupTask?.cancel()
+    providerWarmupTask = nil
   }
 
   private func warmProviderCaches(api: LogEngineAPI) async {
@@ -760,7 +773,9 @@ final class AppModel: ObservableObject {
   func setProviderFilter(_ provider: ProviderFilter) {
     guard providerFilter != provider else { return }
     providerFilter = provider
+    selectedProject = AppConstants.allProjectsName
     saveSettings()
+    updateAuditRepoPathSuggestion(force: true)
     clearAuditPreview()
     clearSelectionState(markBrowseLoading: true)
     refresh()
