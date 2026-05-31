@@ -2432,3 +2432,97 @@ No raw local transcripts, log content, secrets, or private data were added. The 
 - Ran `npm run smoke:mac-ui`.
 - Confirmed the packaged app `CFBundleShortVersionString` and `CFBundleVersion` are both `0.2.2`.
 - Relaunched the packaged app and opened the About box.
+
+## 2026-05-31 - Fix Provider Review Issues
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> code review
+
+> Fix all these issues
+
+### Interpreted Intent
+
+The user wanted the review findings fixed across the server cache, CLI provider filtering, warning visibility, and native source-label copy.
+
+### Response / Work Done
+
+- Fixed server corpus cache keys so omitted provider defaults and explicit `provider=all` do not share the same cached corpus.
+- Fixed CLI provider parsing so `--provider all` explicitly scans all default provider roots instead of falling back to Codex-only discovery.
+- Kept parse warnings visible for provider files that have warnings but no sessions, while preserving date/project filtering for files with timestamped activity.
+- Changed the native source label for the All provider from “Default Codex log locations” to “Default AI log locations.”
+- Added focused server, CLI, and analytics tests for the regressions.
+- Bumped the app patch version to `0.2.3` for this code change.
+
+### Privacy Notes
+
+No raw local transcripts, local log content, secrets, or private data were added. New tests use sanitized fixtures and temporary directories only.
+
+### Verification
+
+- Ran `npm run test -w @codex-log-viewer/server`.
+- Ran `npm run test -w @codex-log-viewer/analytics`.
+- Ran `npm run test -w @codex-log-viewer/cli`.
+- Ran `npm test`.
+- Ran `npm run lint`.
+- Ran `npm run privacy:scan`.
+- Ran `npm run build:mac`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`.
+- Ran `npm run smoke:mac-ui`.
+- Ran `node scripts/check-app-version.mjs --compare-ref main --require-pr-minor`.
+- Ran `node scripts/check-app-version.mjs --tag v0.2.3`.
+- Ran `git diff --check`.
+- Confirmed the packaged app `CFBundleShortVersionString` and `CFBundleVersion` are both `0.2.3`.
+- Relaunched the packaged macOS app from this branch.
+
+## 2026-05-31 - Restore Provider Switch Responsiveness
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> We still have a performance issue when I click on cursor then I go to cloud then I go back to Codex. It takes many seconds for the Codex messages to load and there is no loading message on the screen so the users are just puzzled, wondering if the app crashed. Also when I click on, the same issue happens. I thought we had addressed all the performance concerns but it looks like we left a gap.
+>
+> Keep in mind that all that's visible for the user is about 7 to 10 messages, maybe 7 to 15 messages on a really large screen, so that's all we need to load initially. The rest can be lazy loaded. Can you take a pass into understanding why the performance got worse now and what we can do about it? Also make sure that all the performance improvements we made are still present in this current tree
+
+> Make sure that PR17 is incorporated here
+
+### Interpreted Intent
+
+The user wanted the current provider-switch slowdown diagnosed from the live branch, wanted confirmation that PR17's performance work was present, and wanted the Browse list to load only the visible working set up front with clear loading feedback.
+
+### Response / Work Done
+
+- Confirmed PR17 is incorporated: PR17 head commit `4975e0c85f70bbc0f019b046ae00192364957886` is an ancestor of this branch, and the PR17 merge commit has no tree diff from that head commit.
+- Traced the slowdown to a gap layered on top of PR17: provider/project/date switches cleared Browse state before showing a loading state, while the first Browse request still asked for 500 messages.
+- Changed Browse to request 30 messages initially and append 100 messages at a time.
+- Marked Browse as loading immediately when provider, project, date, or source switches clear the current list.
+- Updated the foreground loading copy to say local AI logs instead of Codex-only sessions.
+- Made provider background warmup reset after completion, avoid repeated warmups for the same provider/filter/project key, and warm the other providers' first Browse page in addition to project metadata.
+- Bounded the in-memory fallback message search so stale or unavailable SQLite indexes do not force formatting and retaining every matching message when only one page is needed.
+- Updated performance documentation and bumped the app patch version to `0.2.4`.
+
+### Privacy Notes
+
+No raw local transcripts, local log content, secrets, or private data were added. PR17 verification used commit ancestry and tree comparison only.
+
+### Verification
+
+- Ran `npm run test -w @codex-log-viewer/analytics`.
+- Ran `npm test`.
+- Ran `npm run lint`.
+- Ran `npm run privacy:scan`.
+- Ran `npm run build:mac`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`; the first attempt correctly failed because the previous packaged app was still running, then passed after quitting that app.
+- Ran `npm run smoke:mac-ui`.
+- Ran `node scripts/check-app-version.mjs --compare-ref main --require-pr-minor`.
+- Ran `node scripts/check-app-version.mjs --tag v0.2.4`.
+- Ran `git diff --check`.
+- Confirmed the packaged app `CFBundleShortVersionString` and `CFBundleVersion` are both `0.2.4`.
+- Relaunched the packaged macOS app from this branch.

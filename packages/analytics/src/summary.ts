@@ -107,8 +107,8 @@ export function summarizeParsedCorpus(corpus: ParsedCodexCorpus, options: Summar
   const activity = activityRange(sessions);
   const repeatedUserMessages = repeatedUserMessageGroups(codexSubmittedUserMessages, corpus, aliases);
   const promptIntents = promptIntentSummary(codexSubmittedUserMessages, corpus, aliases);
-  const visibleSessionFilePaths = new Set(sessions.map((session) => session.filePath));
-  const parseWarnings = corpus.warnings.filter((warning) => visibleSessionFilePaths.has(warning.filePath));
+  const visibleWarningFilePaths = warningFilePathsInScope(corpus, visibleFiles, range);
+  const parseWarnings = corpus.warnings.filter((warning) => visibleWarningFilePaths.has(warning.filePath));
 
   return {
     project,
@@ -233,7 +233,9 @@ export function searchMessages(corpus: ParsedCodexCorpus, options: MessageSearch
   const turnModels = new Map(
     corpus.turns.map((turn) => [turnModelKey(turn.filePath, turn.sessionId, turn.turnId), turn.model ?? "unknown"])
   );
-  const matches: MessageSearchResult[] = [];
+  const pageCandidateLimit = offset + limit;
+  const pageCandidates: MessageSearchCandidate[] = [];
+  let totalMatches = 0;
 
   for (const message of corpus.messages) {
     if (!providerInScope(recordProvider(message), providerFilter)) {
@@ -288,54 +290,104 @@ export function searchMessages(corpus: ParsedCodexCorpus, options: MessageSearch
     if (category && hiddenCategories.has(category)) {
       continue;
     }
-    const promptIntent = isCodexSubmittedUserMessage(message)
-      ? classifyPromptIntent(message.content)
-      : undefined;
-
-    matches.push({
-      id: [
-        message.filePath,
-        message.sessionId,
-        message.lineNumber ?? "",
-        message.turnId ?? "",
-        message.timestamp ?? "",
-        message.role,
-        message.sourceEvent,
-        matches.length
-      ].join("#"),
-      provider: recordProvider(message),
-      sourceLabel: message.sourceLabel,
-      title: message.title,
-      providerConversationId: message.providerConversationId,
-      sessionId: message.sessionId,
-      filePath: message.filePath,
-      dateKey,
-      project: context.project,
-      cwd: context.cwd,
-      lineNumber: message.lineNumber,
-      turnId: message.turnId,
+    const matchIndex = totalMatches;
+    totalMatches += 1;
+    appendSearchCandidate(pageCandidates, {
+      message,
+      context,
       model,
-      timestamp: message.timestamp,
-      role: message.role,
-      sourceEvent: message.sourceEvent,
+      dateKey,
       category,
-      promptIntentKey: promptIntent?.key,
-      promptIntent: promptIntent?.label,
-      snippet: snippetFor(message.content, query),
-      content: message.content
-    });
+      matchIndex
+    }, pageCandidateLimit);
   }
 
-  matches.sort((a, b) => (b.timestamp ?? "").localeCompare(a.timestamp ?? ""));
+  pruneSearchCandidates(pageCandidates, pageCandidateLimit);
+  const results = pageCandidates
+    .slice(offset, offset + limit)
+    .map((candidate) => searchCandidateToResult(candidate, query));
 
   return {
     query,
     project,
     generatedAt: new Date().toISOString(),
-    totalMatches: matches.length,
+    totalMatches,
     limit,
     offset,
-    results: matches.slice(offset, offset + limit)
+    results
+  };
+}
+
+interface MessageSearchCandidate {
+  message: MessageRecord;
+  context: ReturnType<typeof projectContextForFile>;
+  model?: string;
+  dateKey: string;
+  category?: string;
+  matchIndex: number;
+}
+
+function appendSearchCandidate(
+  candidates: MessageSearchCandidate[],
+  candidate: MessageSearchCandidate,
+  limit: number
+): void {
+  candidates.push(candidate);
+  const pruneThreshold = Math.max(limit * 2, limit + 100);
+  if (candidates.length > pruneThreshold) {
+    pruneSearchCandidates(candidates, limit);
+  }
+}
+
+function pruneSearchCandidates(candidates: MessageSearchCandidate[], limit: number): void {
+  candidates.sort(compareSearchCandidates);
+  if (candidates.length > limit) {
+    candidates.length = limit;
+  }
+}
+
+function compareSearchCandidates(a: MessageSearchCandidate, b: MessageSearchCandidate): number {
+  const timestampCompare = (b.message.timestamp ?? "").localeCompare(a.message.timestamp ?? "");
+  return timestampCompare || a.matchIndex - b.matchIndex;
+}
+
+function searchCandidateToResult(candidate: MessageSearchCandidate, query: string): MessageSearchResult {
+  const { message, context, model, dateKey, category, matchIndex } = candidate;
+  const promptIntent = isCodexSubmittedUserMessage(message)
+    ? classifyPromptIntent(message.content)
+    : undefined;
+
+  return {
+    id: [
+      message.filePath,
+      message.sessionId,
+      message.lineNumber ?? "",
+      message.turnId ?? "",
+      message.timestamp ?? "",
+      message.role,
+      message.sourceEvent,
+      matchIndex
+    ].join("#"),
+    provider: recordProvider(message),
+    sourceLabel: message.sourceLabel,
+    title: message.title,
+    providerConversationId: message.providerConversationId,
+    sessionId: message.sessionId,
+    filePath: message.filePath,
+    dateKey,
+    project: context.project,
+    cwd: context.cwd,
+    lineNumber: message.lineNumber,
+    turnId: message.turnId,
+    model,
+    timestamp: message.timestamp,
+    role: message.role,
+    sourceEvent: message.sourceEvent,
+    category,
+    promptIntentKey: promptIntent?.key,
+    promptIntent: promptIntent?.label,
+    snippet: snippetFor(message.content, query),
+    content: message.content
   };
 }
 
@@ -931,6 +983,49 @@ function sessionSummaries(
     (b.lastSeen ?? "").localeCompare(a.lastSeen ?? "") ||
     a.sessionId.localeCompare(b.sessionId)
   );
+}
+
+function warningFilePathsInScope(
+  corpus: ParsedCodexCorpus,
+  files: ParsedCodexFile[],
+  range: { since?: number; until?: number }
+): Set<string> {
+  const hasDateFilter = range.since !== undefined || range.until !== undefined;
+  return new Set(
+    files
+      .filter((file) =>
+        !hasDateFilter ||
+        fileHasActivityInRange(corpus, file, range) ||
+        !fileHasTimestampedActivity(corpus, file)
+      )
+      .map((file) => file.filePath)
+  );
+}
+
+function fileHasActivityInRange(
+  corpus: ParsedCodexCorpus,
+  file: ParsedCodexFile,
+  range: { since?: number; until?: number }
+): boolean {
+  return timestampedFileRecords(corpus, file).some((record) => timestampInRange(record.timestamp, range));
+}
+
+function fileHasTimestampedActivity(corpus: ParsedCodexCorpus, file: ParsedCodexFile): boolean {
+  return timestampedFileRecords(corpus, file).some((record) => Boolean(record.timestamp));
+}
+
+function timestampedFileRecords(
+  corpus: ParsedCodexCorpus,
+  file: ParsedCodexFile
+): Array<{ filePath: string; sessionId: string; timestamp?: string }> {
+  return [
+    ...corpus.sessions,
+    ...corpus.messages,
+    ...corpus.turns,
+    ...corpus.tokenUsage,
+    ...corpus.toolEvents,
+    ...corpus.unknownEvents
+  ].filter((record) => sameSessionFile(record, file));
 }
 
 function recordInScope(

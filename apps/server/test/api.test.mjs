@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readdir, readFile, rm, unlink, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readdir, readFile, rm, unlink, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { DatabaseSync } from "node:sqlite";
@@ -80,6 +80,46 @@ test("local API exposes provider filters for mixed sources", async () => {
     assert.equal(cursorSearchBody.search.results[0]?.content, "Add Cursor Markdown import support.");
   } finally {
     await server.close();
+  }
+});
+
+test("local API keeps default Codex cache separate from explicit all-provider cache", async () => {
+  const tempHome = await mkdtemp(`${tmpdir()}/codex-log-viewer-server-home-`);
+  const previousHome = process.env.HOME;
+  const headers = { authorization: "Bearer test-token" };
+
+  try {
+    const codexRoot = resolve(tempHome, ".codex/sessions");
+    const claudeRoot = resolve(tempHome, ".claude/projects/project-a");
+    const cacheDir = resolve(tempHome, "cache");
+    await mkdir(codexRoot, { recursive: true });
+    await mkdir(claudeRoot, { recursive: true });
+    await copyFile(fixturePath, resolve(codexRoot, "sample-session.jsonl"));
+    await copyFile(claudeFixturePath, resolve(claudeRoot, "basic-session.jsonl"));
+    process.env.HOME = tempHome;
+
+    const server = await startServer({ port: 0, authToken: "test-token", cacheDir });
+    try {
+      const defaultSummary = await fetch(`${server.url}/api/summary`, { headers });
+      assert.equal(defaultSummary.status, 200);
+      const defaultBody = await defaultSummary.json();
+      assert.deepEqual(defaultBody.summary.providers.map((provider) => provider.provider), ["codex"]);
+
+      const allSummary = await fetch(`${server.url}/api/summary?provider=all`, { headers });
+      assert.equal(allSummary.status, 200);
+      const allBody = await allSummary.json();
+      assert.deepEqual(allBody.summary.providers.map((provider) => provider.provider).sort(), ["claude", "codex"]);
+      assert.equal(allBody.summary.totals.userMessages, 2);
+    } finally {
+      await server.close();
+    }
+  } finally {
+    if (previousHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = previousHome;
+    }
+    await rm(tempHome, { recursive: true, force: true });
   }
 });
 

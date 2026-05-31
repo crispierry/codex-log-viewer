@@ -1,6 +1,6 @@
 # Performance Notes
 
-Codex Log Viewer keeps a local parsed-session cache so normal navigation does not repeatedly reprocess every Codex log file. The local server also maintains a private SQLite FTS5 message index beside the parsed cache so message browsing and text search can page through large histories without shipping every message to the native UI at once. The Browse and Evals message lists both use bounded pages so large local histories remain navigable.
+Codex Log Viewer keeps a local parsed-session cache so normal navigation does not repeatedly reprocess every AI log file. The local server also maintains a private SQLite FTS5 message index beside the parsed cache so message browsing and text search can page through large histories without shipping every message to the native UI at once. The Browse and Evals message lists both use bounded pages so large local histories remain navigable.
 
 ## Interaction Navigation Plan
 
@@ -18,10 +18,11 @@ Implemented staged work:
 3. Reduce local bridge overhead. API JSON responses are compact, and empty-query browse snippets skip unnecessary normalized-search work.
 4. Add timing instrumentation. Server responses include local-only timings for corpus load, summary, browse/search, and session detail. The native app records click-to-render timings for interaction navigation to stdout and the app model.
 5. Introduce a bounded session-detail LRU. The native app caches the 12 most recently opened session details, invalidates the cache on log refresh/source changes, and prefetches the next likely session from the visible message list.
-6. Paginate browse results. Project browse loads submitted messages in 500-row pages with a `Load More` row instead of shipping every submitted message to SwiftUI at once.
-7. Move message search and browse indexes to SQLite. The local server writes a private SQLite FTS5 index under the app cache for large histories, keyed by the active source set and parsed corpus fingerprint, and falls back to the original in-memory search for smaller or stale indexes.
+6. Paginate browse results. Project browse loads an initial 30 submitted messages, then appends 100 messages at a time through a `Load More` row instead of shipping every submitted message to SwiftUI at once.
+7. Move message search and browse indexes to SQLite. The local server writes a private SQLite FTS5 index under the app cache for large histories, keyed by the active source set and parsed corpus fingerprint, and falls back to a bounded in-memory search for smaller or stale indexes.
 8. Keep rendering incremental. Heavy interaction lists use lazy stacks, collapsed system/tool context remains behind disclosure groups, and very large message cards are collapsed until explicitly expanded.
 9. Keep Evals review responsive. Evals messages load in 500-row pages with append-only `Load More`, the Evals window reuses an already-loaded page when reopened, review saves preserve the loaded page span, the API reports local Evals timing, and very large reviewed prompts render as a collapsed preview until expanded.
+10. Keep provider switching visible and warm. Provider, project, date, and source switches mark the Browse list as loading immediately; after foreground loads, the app warms first-page provider caches in the background for the other default local providers.
 
 ## Local Parsed Cache
 

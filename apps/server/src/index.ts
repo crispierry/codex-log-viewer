@@ -727,7 +727,11 @@ function isSubmittedUserMessageShape(message: { role: string; sourceEvent: strin
 
 function cacheKey(paths: string[] | undefined, cacheDir: string | undefined, provider?: string): string {
   const sourceKey = paths && paths.length > 0 ? [...paths].sort().join("\n") : "__default__";
-  return `${cacheDir ?? "__no_cache__"}\n${provider ?? "all"}\n${sourceKey}`;
+  return `${cacheDir ?? "__no_cache__"}\n${effectiveProviderForCache(paths, provider)}\n${sourceKey}`;
+}
+
+function effectiveProviderForCache(paths: string[] | undefined, provider?: string): string {
+  return provider ?? (paths && paths.length > 0 ? "all" : "codex");
 }
 
 function serverCacheDir(): string | undefined {

@@ -61,6 +61,50 @@ test("summaries and search support mixed provider filtering", async () => {
   assert.equal(cursorSearch.results[0]?.content, "Add Cursor Markdown import support.");
 });
 
+test("summaries keep parse warnings for provider files without sessions", () => {
+  const warningOnlyFile = {
+    provider: "cursor",
+    inputKind: "cursor-vscdb",
+    sourceLabel: "Cursor",
+    filePath: "state.vscdb",
+    sessionId: "state",
+    lineCount: 0,
+    sessions: [],
+    turns: [],
+    messages: [],
+    tokenUsage: [],
+    taskTimings: [],
+    toolEvents: [],
+    unknownEvents: [],
+    warnings: [
+      {
+        provider: "cursor",
+        inputKind: "cursor-vscdb",
+        sourceLabel: "Cursor",
+        filePath: "state.vscdb",
+        lineNumber: 0,
+        code: "unsupported_cursor_vscdb",
+        message: "Cursor SQLite database does not contain cursorDiskKV chat storage."
+      }
+    ]
+  };
+  const summary = summarizeParsedCorpus({
+    files: [warningOnlyFile],
+    sessions: [],
+    turns: [],
+    messages: [],
+    tokenUsage: [],
+    taskTimings: [],
+    toolEvents: [],
+    unknownEvents: [],
+    warnings: warningOnlyFile.warnings
+  }, { provider: "cursor" });
+
+  assert.equal(summary.totals.sessions, 0);
+  assert.equal(summary.totals.parseWarnings, 1);
+  assert.equal(summary.providers[0]?.provider, "cursor");
+});
+
 test("projectsFromCorpus uses token and turn timestamps for activity metadata", () => {
   const file = {
     filePath: "activity.jsonl",

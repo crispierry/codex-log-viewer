@@ -1,6 +1,6 @@
 {
   "name": "codex-log-viewer",
-  "version": "0.2.2",
+  "version": "0.2.4",
   "private": true,
   "description": "Local-first native macOS app and parser for OpenAI Codex session logs.",
   "license": "MIT",
@@ -25,7 +25,7 @@
   "scripts": {
     "build": "npm run build -w @codex-log-viewer/parser && npm run build -w @codex-log-viewer/analytics && npm run build -w @codex-log-viewer/server && npm run build -w @codex-log-viewer/cli",
     "build:all": "npm run build && npm run build:mac",
-    "test": "npm run test -w @codex-log-viewer/parser && npm run test -w @codex-log-viewer/analytics && npm run test -w @codex-log-viewer/server",
+    "test": "npm run test -w @codex-log-viewer/parser && npm run test -w @codex-log-viewer/analytics && npm run test -w @codex-log-viewer/server && npm run test -w @codex-log-viewer/cli",
     "test:all": "npm test && npm run lint && npm run build:mac",
     "lint": "npm run build",
     "build:native-engine": "npm run build -w @codex-log-viewer/parser && npm run build -w @codex-log-viewer/analytics && npm run build -w @codex-log-viewer/server",

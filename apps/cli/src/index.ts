@@ -287,7 +287,7 @@ function arrayOption(value: string | boolean | string[] | undefined): string[] {
 
 function providerOption(value: string | boolean | string[] | undefined): SummaryOptions["provider"] {
   const provider = stringOption(value);
-  return provider && provider !== "all" ? provider : undefined;
+  return provider || undefined;
 }
 
 function formatNumber(value: number): string {

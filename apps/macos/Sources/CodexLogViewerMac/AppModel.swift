@@ -132,12 +132,14 @@ final class AppModel: ObservableObject {
   private var pendingInteractionRenderSource = ""
   private var pendingInteractionRenderID: String?
   private var isLogRefreshInFlight = false
+  private var warmedProviderCacheKeys: Set<String> = []
   private let isEphemeralSettingsRun = ProcessInfo.processInfo.environment["CODEX_LOG_VIEWER_EPHEMERAL_SETTINGS"] == "1" ||
     ProcessInfo.processInfo.environment["CODEX_LOG_VIEWER_UI_TEST"] == "1"
   private var hasScheduledUITestQuit = false
   private static let backgroundSyncInterval: Duration = .seconds(60)
   private static let sessionDetailCacheCapacity = 12
-  private static let browseMessagesPageSize = 500
+  private static let initialBrowseMessagesPageSize = 30
+  private static let browseMessagesAppendPageSize = 100
   private static let evalMessagesPageSize = 500
 
   private enum RefreshMode {
@@ -355,7 +357,9 @@ final class AppModel: ObservableObject {
 
   private var defaultSourceSummaryText: String {
     switch providerFilter {
-    case .all, .codex:
+    case .all:
+      return "Default AI log locations"
+    case .codex:
       return "Default Codex log locations"
     case .claude:
       return "Default Claude Code log locations"
@@ -432,9 +436,10 @@ final class AppModel: ObservableObject {
     }
 
     let shouldRefreshCache = force || rebuildCache || mode == .background
-    let shouldShowLoadingNotice = mode == .foreground && (summary == nil || force || rebuildCache)
+    let shouldShowLoadingNotice = mode == .foreground && (summary == nil || browseMessagesSummary == nil || force || rebuildCache)
     if shouldRefreshCache {
       refreshToken += 1
+      warmedProviderCacheKeys.removeAll()
       cacheMetadata = CacheMetadata(
         cacheStatus: "checking",
         reusedFiles: 0,
@@ -572,18 +577,46 @@ final class AppModel: ObservableObject {
   private func startProviderWarmupIfNeeded(api: LogEngineAPI) {
     guard providerWarmupTask == nil, !isEphemeralSettingsRun, sourcePaths.isEmpty, providerFilter != .all else { return }
     providerWarmupTask = Task { [weak self] in
-      try? await Task.sleep(for: .seconds(2))
+      defer {
+        Task { @MainActor [weak self] in
+          self?.providerWarmupTask = nil
+        }
+      }
+      do {
+        try await Task.sleep(for: .seconds(2))
+      } catch {
+        return
+      }
+      guard !Task.isCancelled else { return }
       await self?.warmProviderCaches(api: api)
     }
   }
 
   private func warmProviderCaches(api: LogEngineAPI) async {
     let warmProviders = ProviderFilter.allCases.filter { $0 != .all && $0 != providerFilter }
+    let project = selectedProject
     for provider in warmProviders {
       guard !Task.isCancelled, sourcePaths.isEmpty else { return }
-      let filters = LogFilters(provider: provider)
+      var filters = currentFilters()
+      filters.provider = provider
+      filters.refreshToken = 0
+      filters.rebuildCache = false
+      let warmupKey = providerWarmupCacheKey(provider: provider, project: project, filters: filters)
+      guard !warmedProviderCacheKeys.contains(warmupKey) else { continue }
       do {
         _ = try await api.projectsWithMetadata(filters: filters)
+        _ = try await api.searchMessagesWithMetadata(
+          query: "",
+          role: .user,
+          model: AppConstants.allModelsName,
+          sessionID: nil,
+          project: project,
+          filters: filters,
+          submittedOnly: true,
+          limit: Self.initialBrowseMessagesPageSize,
+          offset: 0
+        )
+        warmedProviderCacheKeys.insert(warmupKey)
       } catch {
         continue
       }
@@ -601,10 +634,10 @@ final class AppModel: ObservableObject {
 
     if showLoadingNotice {
       logLoadingNotice = LogLoadingNotice(
-        title: rebuildCache ? "Rebuilding Local Cache" : "Loading Latest Logs",
+        title: rebuildCache ? "Rebuilding Local Cache" : "Loading Latest AI Logs",
         message: rebuildCache
-          ? "Reparsing your local Codex sessions. This can take a moment for large histories."
-          : "Checking your local Codex sessions for the newest activity."
+          ? "Reparsing your local AI logs. This can take a moment for large histories."
+          : "Checking your local AI logs for the newest activity."
       )
     } else {
       logLoadingNotice = nil
@@ -680,7 +713,7 @@ final class AppModel: ObservableObject {
     selectedProject = project
     updateAuditRepoPathSuggestion(force: true)
     clearAuditPreview()
-    clearSelectionState()
+    clearSelectionState(markBrowseLoading: true)
     refresh()
   }
 
@@ -720,7 +753,7 @@ final class AppModel: ObservableObject {
   func filtersChanged() {
     saveSettings()
     clearAuditPreview()
-    clearSelectionState()
+    clearSelectionState(markBrowseLoading: true)
     refresh()
   }
 
@@ -729,7 +762,7 @@ final class AppModel: ObservableObject {
     providerFilter = provider
     saveSettings()
     clearAuditPreview()
-    clearSelectionState()
+    clearSelectionState(markBrowseLoading: true)
     refresh()
   }
 
@@ -924,11 +957,11 @@ final class AppModel: ObservableObject {
     let requestID = browseMessagesRequestID
     let filters = currentFilters()
     let project = selectedProject
-    let limit = Self.browseMessagesPageSize
+    let limit = append ? Self.browseMessagesAppendPageSize : Self.initialBrowseMessagesPageSize
+    isBrowseMessagesLoading = true
 
     browseMessagesTask = Task {
       do {
-        isBrowseMessagesLoading = true
         let searchResult = try await api.searchMessagesWithMetadata(
           query: "",
           role: .user,
@@ -1567,9 +1600,9 @@ final class AppModel: ObservableObject {
     return alert.runModal() == .alertFirstButtonReturn
   }
 
-  private func clearSelectionState() {
+  private func clearSelectionState(markBrowseLoading: Bool = false) {
     clearSelectedSession()
-    clearBrowseMessages()
+    clearBrowseMessages(markLoading: markBrowseLoading)
     clearSearchResults()
   }
 
@@ -1586,12 +1619,12 @@ final class AppModel: ObservableObject {
     isDetailLoading = false
   }
 
-  private func clearBrowseMessages() {
+  private func clearBrowseMessages(markLoading: Bool = false) {
     browseMessagesTask?.cancel()
     browseMessagesRequestID += 1
     browseMessagesSummary = nil
     selectedBrowseMessageID = nil
-    isBrowseMessagesLoading = false
+    isBrowseMessagesLoading = markLoading && api != nil
   }
 
   private func clearSearchResults() {
@@ -2133,7 +2166,7 @@ final class AppModel: ObservableObject {
     updateRecentSourcePaths(uniquePaths)
     saveSettings()
     selectedProject = AppConstants.allProjectsName
-    clearSelectionState()
+    clearSelectionState(markBrowseLoading: true)
     refresh(force: true)
     DispatchQueue.main.async {
       Self.restoreViewerWindow(activate: true)
@@ -2285,7 +2318,7 @@ final class AppModel: ObservableObject {
     }
     if reload {
       clearAuditPreview()
-      clearSelectionState()
+      clearSelectionState(markBrowseLoading: true)
       refresh()
     }
   }
@@ -2628,6 +2661,15 @@ final class AppModel: ObservableObject {
       refreshToken: refreshToken,
       rebuildCache: rebuildCache
     )
+  }
+
+  private func providerWarmupCacheKey(provider: ProviderFilter, project: String, filters: LogFilters) -> String {
+    [
+      provider.rawValue,
+      project,
+      filters.since ?? "",
+      filters.until ?? ""
+    ].joined(separator: "\n")
   }
 
   private func defaultExportDirectoryURL() -> URL {
