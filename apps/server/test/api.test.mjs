@@ -110,6 +110,16 @@ test("local API keeps default Codex cache separate from explicit all-provider ca
       const allBody = await allSummary.json();
       assert.deepEqual(allBody.summary.providers.map((provider) => provider.provider).sort(), ["claude", "codex"]);
       assert.equal(allBody.summary.totals.userMessages, 2);
+
+      const allMessages = await fetch(
+        `${server.url}/api/messages/search?provider=all&role=user&submittedOnly=true&limit=1`,
+        { headers }
+      );
+      assert.equal(allMessages.status, 200);
+      const allMessagesBody = await allMessages.json();
+      assert.equal(allMessagesBody.search.totalMatches, 2);
+      assert.equal(allMessagesBody.search.results.length, 1);
+      assert(["claude", "codex"].includes(allMessagesBody.search.results[0]?.provider));
     } finally {
       await server.close();
     }

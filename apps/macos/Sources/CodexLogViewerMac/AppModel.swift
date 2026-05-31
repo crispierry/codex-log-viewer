@@ -19,6 +19,14 @@ private struct SessionDetailCacheKey: Hashable {
   let filePath: String?
 }
 
+private struct BrowseMessagesCacheKey: Hashable {
+  let provider: String
+  let project: String
+  let sourcePaths: String
+  let since: String?
+  let until: String?
+}
+
 @MainActor
 final class AppModel: ObservableObject {
   enum Status: Equatable {
@@ -128,6 +136,8 @@ final class AppModel: ObservableObject {
   private var pendingSearchConversationResult: MessageSearchResult?
   private var sessionDetailCache: [SessionDetailCacheKey: SessionDetail] = [:]
   private var sessionDetailCacheOrder: [SessionDetailCacheKey] = []
+  private var browseMessagesCache: [BrowseMessagesCacheKey: MessageSearchSummary] = [:]
+  private var browseMessagesCacheOrder: [BrowseMessagesCacheKey] = []
   private var detailCacheGeneration = 0
   private var pendingInteractionRenderStartedAt: Date?
   private var pendingInteractionRenderSource = ""
@@ -139,6 +149,7 @@ final class AppModel: ObservableObject {
   private var hasScheduledUITestQuit = false
   private static let backgroundSyncInterval: Duration = .seconds(60)
   private static let sessionDetailCacheCapacity = 12
+  private static let browseMessagesCacheCapacity = 24
   private static let initialBrowseMessagesPageSize = 30
   private static let browseMessagesAppendPageSize = 100
   private static let evalMessagesPageSize = 500
@@ -421,15 +432,21 @@ final class AppModel: ObservableObject {
     Self.startOfToday()
   }
 
-  func refresh(force: Bool = false, rebuildCache: Bool = false) {
-    refresh(force: force, rebuildCache: rebuildCache, mode: .foreground)
+  func refresh(force: Bool = false, rebuildCache: Bool = false, suppressLoadingNotice: Bool = false) {
+    refresh(
+      force: force,
+      rebuildCache: rebuildCache,
+      mode: .foreground,
+      suppressLoadingNotice: suppressLoadingNotice
+    )
   }
 
   private func refresh(
     force: Bool = false,
     rebuildCache: Bool = false,
     mode: RefreshMode,
-    allowEngineRestart: Bool = true
+    allowEngineRestart: Bool = true,
+    suppressLoadingNotice: Bool = false
   ) {
     guard let api else { return }
     if mode == .background, shouldSkipBackgroundSync {
@@ -440,7 +457,9 @@ final class AppModel: ObservableObject {
     }
 
     let shouldRefreshCache = force || rebuildCache || mode == .background
-    let shouldShowLoadingNotice = mode == .foreground && (summary == nil || browseMessagesSummary == nil || force || rebuildCache)
+    let shouldShowLoadingNotice = !suppressLoadingNotice &&
+      mode == .foreground &&
+      (summary == nil || browseMessagesSummary == nil || force || rebuildCache)
     if shouldRefreshCache {
       refreshToken += 1
       warmedProviderCacheKeys.removeAll()
@@ -469,6 +488,13 @@ final class AppModel: ObservableObject {
       }
     }
     beginLogRefresh(mode: mode, showLoadingNotice: shouldShowLoadingNotice, rebuildCache: rebuildCache)
+    let shouldLoadBrowseMessagesEarly = mode == .foreground &&
+      !showSessionBrowser &&
+      pendingSearchConversationResult == nil &&
+      (isBrowseMessagesLoading || browseMessagesSummary == nil)
+    if shouldLoadBrowseMessagesEarly {
+      loadBrowseMessages(selectFirstIfNeeded: true)
+    }
 
     reloadTask = Task {
       do {
@@ -499,7 +525,9 @@ final class AppModel: ObservableObject {
         if showSessionBrowser && pendingSearchConversationResult == nil {
           selectLatestSessionIfNeeded(in: summary)
         }
-        loadBrowseMessages(selectFirstIfNeeded: mode == .foreground && !showSessionBrowser && pendingSearchConversationResult == nil)
+        if !shouldLoadBrowseMessagesEarly {
+          loadBrowseMessages(selectFirstIfNeeded: mode == .foreground && !showSessionBrowser && pendingSearchConversationResult == nil)
+        }
         if mode == .background {
           refreshSelectedSessionQuietly(api: api, filters: currentFilters(), project: project)
         } else {
@@ -520,7 +548,13 @@ final class AppModel: ObservableObject {
             do {
               let connection = try await LocalLogEngineServer.shared.start()
               self.api = LogEngineAPI(baseURL: connection.baseURL, authToken: connection.authToken)
-              refresh(force: force, rebuildCache: rebuildCache, mode: mode, allowEngineRestart: false)
+              refresh(
+                force: force,
+                rebuildCache: rebuildCache,
+                mode: mode,
+                allowEngineRestart: false,
+                suppressLoadingNotice: suppressLoadingNotice
+              )
               return
             } catch {
               status = .failed(error.localizedDescription)
@@ -772,13 +806,20 @@ final class AppModel: ObservableObject {
 
   func setProviderFilter(_ provider: ProviderFilter) {
     guard providerFilter != provider else { return }
+    storeCurrentBrowseMessagesInCache()
+    let currentBrowseMessagesSummary = browseMessagesSummary
     providerFilter = provider
     selectedProject = AppConstants.allProjectsName
+    let cachedOrPartialBrowseMessages = cachedBrowseMessagesForCurrentFilters() ??
+      partialBrowseMessagesForProviderSwitch(to: provider, from: currentBrowseMessagesSummary)
     saveSettings()
     updateAuditRepoPathSuggestion(force: true)
     clearAuditPreview()
-    clearSelectionState(markBrowseLoading: true)
-    refresh()
+    clearSelectionState(markBrowseLoading: true, preserveBrowseMessages: cachedOrPartialBrowseMessages != nil)
+    if let cachedOrPartialBrowseMessages {
+      browseMessagesSummary = cachedOrPartialBrowseMessages
+    }
+    refresh(suppressLoadingNotice: true)
   }
 
   func setDateRangeMode(_ mode: DateRangeMode) {
@@ -993,6 +1034,7 @@ final class AppModel: ObservableObject {
           ? mergedBrowseSearch(existing: existingSummary, incoming: searchResult.search)
           : searchResult.search
         browseMessagesSummary = updatedSearch
+        storeBrowseMessagesInCache(updatedSearch, key: currentBrowseMessagesCacheKey())
         cacheMetadata = searchResult.cache ?? cacheMetadata
         isBrowseMessagesLoading = false
         let visibleResults = visibleBrowseMessages(in: updatedSearch.results)
@@ -1615,9 +1657,9 @@ final class AppModel: ObservableObject {
     return alert.runModal() == .alertFirstButtonReturn
   }
 
-  private func clearSelectionState(markBrowseLoading: Bool = false) {
+  private func clearSelectionState(markBrowseLoading: Bool = false, preserveBrowseMessages: Bool = false) {
     clearSelectedSession()
-    clearBrowseMessages(markLoading: markBrowseLoading)
+    clearBrowseMessages(markLoading: markBrowseLoading, preserveMessages: preserveBrowseMessages)
     clearSearchResults()
   }
 
@@ -1634,10 +1676,12 @@ final class AppModel: ObservableObject {
     isDetailLoading = false
   }
 
-  private func clearBrowseMessages(markLoading: Bool = false) {
+  private func clearBrowseMessages(markLoading: Bool = false, preserveMessages: Bool = false) {
     browseMessagesTask?.cancel()
     browseMessagesRequestID += 1
-    browseMessagesSummary = nil
+    if !preserveMessages {
+      browseMessagesSummary = nil
+    }
     selectedBrowseMessageID = nil
     isBrowseMessagesLoading = markLoading && api != nil
   }
@@ -1824,6 +1868,62 @@ final class AppModel: ObservableObject {
       limit: results.count,
       offset: 0,
       results: results
+    )
+  }
+
+  private func storeCurrentBrowseMessagesInCache() {
+    guard let browseMessagesSummary else { return }
+    storeBrowseMessagesInCache(browseMessagesSummary, key: currentBrowseMessagesCacheKey())
+  }
+
+  private func storeBrowseMessagesInCache(_ summary: MessageSearchSummary, key: BrowseMessagesCacheKey) {
+    browseMessagesCache[key] = summary
+    browseMessagesCacheOrder.removeAll { $0 == key }
+    browseMessagesCacheOrder.append(key)
+    while browseMessagesCacheOrder.count > Self.browseMessagesCacheCapacity {
+      let removedKey = browseMessagesCacheOrder.removeFirst()
+      browseMessagesCache.removeValue(forKey: removedKey)
+    }
+  }
+
+  private func cachedBrowseMessagesForCurrentFilters() -> MessageSearchSummary? {
+    let key = currentBrowseMessagesCacheKey()
+    guard let cached = browseMessagesCache[key] else { return nil }
+    browseMessagesCacheOrder.removeAll { $0 == key }
+    browseMessagesCacheOrder.append(key)
+    return cached
+  }
+
+  private func partialBrowseMessagesForProviderSwitch(
+    to provider: ProviderFilter,
+    from summary: MessageSearchSummary?
+  ) -> MessageSearchSummary? {
+    guard let summary else { return nil }
+    if provider == .all {
+      return summary
+    }
+
+    let providerResults = summary.results.filter { $0.provider == provider.rawValue }
+    guard !providerResults.isEmpty else { return nil }
+    return MessageSearchSummary(
+      query: summary.query,
+      project: AppConstants.allProjectsName,
+      generatedAt: summary.generatedAt,
+      totalMatches: providerResults.count,
+      limit: providerResults.count,
+      offset: 0,
+      results: providerResults
+    )
+  }
+
+  private func currentBrowseMessagesCacheKey() -> BrowseMessagesCacheKey {
+    let filters = currentFilters()
+    return BrowseMessagesCacheKey(
+      provider: filters.provider.rawValue,
+      project: selectedProject,
+      sourcePaths: filters.paths.joined(separator: "\n"),
+      since: filters.since,
+      until: filters.until
     )
   }
 

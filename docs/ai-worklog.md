@@ -2568,3 +2568,95 @@ No raw local transcripts, local log content, secrets, or private data were added
 - Ran `npm run smoke:mac-ui`.
 - Confirmed the packaged app `CFBundleShortVersionString` and `CFBundleVersion` are both `0.2.5`.
 - Relaunched the packaged macOS app from this branch.
+
+## 2026-05-31 - Make All Provider Browse Feel Incremental
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> I just timed it and when I went from cursor to all, it took 10 seconds for you to load my initial batch of messages
+>
+> That's what we said: we're going to load just a few initially while the rest loads up in the background. If you did that, it's not working
+
+### Interpreted Intent
+
+The user wanted the Cursor-to-All provider switch to show an initial visible batch immediately, instead of waiting for the full All-provider summary and corpus path before any Browse messages appear.
+
+### Response / Work Done
+
+- Kept the current provider's Browse messages visible as an immediate partial batch when switching to All.
+- Started Browse loading independently at the beginning of foreground refreshes, so message loading no longer waits for project and summary responses to finish first.
+- Added a visible “Loading latest” status while an existing partial Browse list is being replaced.
+- Added a server fast path for default-source `provider=all` message search that merges per-provider search pages from provider-specific caches instead of forcing the monolithic All-provider corpus path before returning the first page.
+- Added API coverage for default-source All-provider message search pagination.
+- Bumped the app patch version to `0.2.6`.
+
+### Privacy Notes
+
+No raw local transcripts, local log content, secrets, or private data were added. Testing uses sanitized fixtures and temporary directories.
+
+### Verification
+
+- Ran `npm run test -w @codex-log-viewer/server`.
+- Ran `npm run build:mac`.
+- Ran `npm test`.
+- Ran `npm run lint`.
+- Ran `npm run privacy:scan`.
+- Ran `node scripts/check-app-version.mjs --compare-ref main --require-pr-minor`.
+- Ran `node scripts/check-app-version.mjs --tag v0.2.6`.
+- Ran `git diff --check`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`.
+- Ran `npm run smoke:mac-ui`.
+- Confirmed the packaged app `CFBundleShortVersionString` and `CFBundleVersion` are both `0.2.6`.
+- Relaunched the packaged macOS app from this branch.
+- Queried the running packaged helper for aggregate All-provider first-page timing only; it returned one result with no message content printed.
+
+## 2026-05-31 - Cache Provider Browse Switching
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> I'm not quite happy with it. See this here? I see all the messages then I click on Codex And I get this dialogue box saying "Loading latest AI messages"
+>
+> This happens every time I switch a tab. We should keep a cache of it and this loading should be happening in the background
+>
+> So it really is not very practical to go from all to Codex and then back to all every time you're loading things up
+>
+> Do you understand what I mean? Can you fix it?
+
+### Interpreted Intent
+
+The user wanted provider switching to behave like cached tab navigation: no blocking modal every time, immediate reuse of already-loaded provider pages, and background refresh to update the cached view.
+
+### Response / Work Done
+
+- Added an in-memory Browse message page cache keyed by provider, selected project, source paths, and date filters.
+- Reused cached Browse pages immediately when switching providers.
+- Derived a partial provider page from the current All-provider page when a provider cache is not yet available.
+- Suppressed the modal loading notice for provider switches, while keeping the list status as a background refresh indicator.
+- Bumped the app patch version to `0.2.7`.
+
+### Privacy Notes
+
+No raw local transcripts, local log content, secrets, or private data were added.
+
+### Verification
+
+- Ran `npm run build -w @codex-log-viewer/server`.
+- Ran `npm run build:mac`.
+- Ran `npm test`.
+- Ran `npm run lint`.
+- Ran `npm run privacy:scan`.
+- Ran `node scripts/check-app-version.mjs --compare-ref main --require-pr-minor`.
+- Ran `node scripts/check-app-version.mjs --tag v0.2.7`.
+- Ran `git diff --check`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`.
+- Ran `npm run smoke:mac-ui`.
+- Confirmed the packaged app `CFBundleShortVersionString` and `CFBundleVersion` are both `0.2.7`.
+- Relaunched the packaged macOS app from this branch.

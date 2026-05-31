@@ -769,8 +769,8 @@ struct SentMessagesBrowserColumn: View {
       }
       return "\(sessionUserMessages.count.formatted()) sent"
     }
-    if model.isBrowseMessagesLoading && browseMessages.isEmpty {
-      return "Loading"
+    if model.isBrowseMessagesLoading {
+      return browseMessages.isEmpty ? "Loading" : "Loading latest"
     }
     guard let summary = model.browseMessagesSummary else {
       return nil
