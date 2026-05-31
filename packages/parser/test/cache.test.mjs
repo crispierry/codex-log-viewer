@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import test from "node:test";
@@ -130,7 +130,7 @@ test("parseCodexCorpusWithCache repairs corrupt files and stale manifests", asyn
   }
 });
 
-test("parseLogCorpusWithCache filters provider after reusing detected parsed files", async () => {
+test("parseLogCorpusWithCache filters provider while limiting discovered file kinds", async () => {
   const tempDir = await mkdtemp(`${tmpdir()}/codex-log-viewer-provider-cache-`);
   const cacheDir = join(tempDir, "cache");
   const paths = [fixturePath, claudeFixturePath, cursorMarkdownFixturePath];
@@ -140,19 +140,44 @@ test("parseLogCorpusWithCache filters provider after reusing detected parsed fil
     assert.deepEqual(allProviders.corpus.files.map((file) => file.provider).sort(), ["claude", "codex", "cursor"]);
 
     const claudeOnly = await parseLogCorpusWithCache({ paths, provider: "claude", cacheDir });
-    assert.equal(claudeOnly.cache.reusedFiles, 3);
+    assert.equal(claudeOnly.cache.reusedFiles, 2);
     assert.deepEqual(claudeOnly.corpus.files.map((file) => file.provider), ["claude"]);
     assert.equal(claudeOnly.corpus.messages.every((message) => message.provider === "claude"), true);
 
     const codexOnly = await parseLogCorpusWithCache({ paths, provider: "codex", cacheDir });
-    assert.equal(codexOnly.cache.reusedFiles, 3);
+    assert.equal(codexOnly.cache.reusedFiles, 2);
     assert.deepEqual(codexOnly.corpus.files.map((file) => file.provider), ["codex"]);
     assert.equal(codexOnly.corpus.messages.every((message) => message.provider === "codex"), true);
 
     const cursorOnly = await parseLogCorpusWithCache({ paths, provider: "cursor", cacheDir });
-    assert.equal(cursorOnly.cache.reusedFiles, 3);
+    assert.equal(cursorOnly.cache.reusedFiles, 1);
     assert.deepEqual(cursorOnly.corpus.files.map((file) => file.provider), ["cursor"]);
     assert.equal(cursorOnly.corpus.messages.every((message) => message.provider === "cursor"), true);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("parseLogCorpusWithCache uses provider-specific default roots", async () => {
+  const tempDir = await mkdtemp(`${tmpdir()}/codex-log-viewer-provider-cache-home-`);
+  const tempHome = join(tempDir, "home");
+  const cacheDir = join(tempDir, "cache");
+
+  try {
+    const codexRoot = join(tempHome, ".codex", "sessions");
+    const claudeRoot = join(tempHome, ".claude", "projects", "project-a");
+    await mkdir(codexRoot, { recursive: true });
+    await mkdir(claudeRoot, { recursive: true });
+    await copyFile(fixturePath, join(codexRoot, "sample-session.jsonl"));
+    await copyFile(claudeFixturePath, join(claudeRoot, "basic-session.jsonl"));
+
+    const claudeOnly = await parseLogCorpusWithCache({ provider: "claude", cacheDir, homeDir: tempHome });
+    assert.equal(claudeOnly.cache.totalFiles, 1);
+    assert.deepEqual(claudeOnly.corpus.files.map((file) => file.provider), ["claude"]);
+
+    const codexOnly = await parseLogCorpusWithCache({ cacheDir, homeDir: tempHome });
+    assert.equal(codexOnly.cache.totalFiles, 1);
+    assert.deepEqual(codexOnly.corpus.files.map((file) => file.provider), ["codex"]);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { parseLogCorpus, parseLogCorpusWithCache } from "@codex-log-viewer/parser";
+import { defaultLogRoots, parseLogCorpus, parseLogCorpusWithCache } from "@codex-log-viewer/parser";
 import type {
   MessageRecord,
   ParsedCodexCorpus,
@@ -8,7 +8,6 @@ import type {
   TokenUsageRecord,
   TurnRecord
 } from "@codex-log-viewer/parser";
-import { defaultCodexLogRoots } from "@codex-log-viewer/parser";
 import { classifyPromptIntent, promptIntentCategories } from "./prompt-intents.js";
 import { listProjects, projectContextForFile } from "./project.js";
 import type {
@@ -119,7 +118,7 @@ export function summarizeParsedCorpus(corpus: ParsedCodexCorpus, options: Summar
       since: options.since,
       until: options.until,
       provider: options.provider,
-      paths: options.paths ?? defaultCodexLogRoots()
+      paths: options.paths ?? defaultLogRoots(providerForDefaultSources(options))
     },
     totals: {
       sessions: sessions.length,
@@ -964,6 +963,10 @@ function isCodexSubmittedUserMessage(message: MessageRecord): boolean {
 
 function providerInScope(provider: string, filter: ProviderFilter | undefined): boolean {
   return !filter || filter === "all" || provider === filter;
+}
+
+function providerForDefaultSources(options: SummaryOptions): ProviderFilter {
+  return options.provider ?? (options.paths && options.paths.length > 0 ? "all" : "codex");
 }
 
 function recordProvider(record: { provider?: string }): string {

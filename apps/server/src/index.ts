@@ -533,7 +533,7 @@ function projectFromQuery(url: URL): string | undefined {
 
 function providerFromQuery(url: URL): SummaryOptions["provider"] {
   const provider = url.searchParams.get("provider")?.trim();
-  return provider && provider !== "all" ? provider : undefined;
+  return provider ? provider : undefined;
 }
 
 function pathsFromQuery(url: URL, fallbackPaths?: string[]): string[] | undefined {

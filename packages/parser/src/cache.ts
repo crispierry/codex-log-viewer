@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
-import { defaultCodexLogRoots, discoverLogFiles } from "./discover.js";
+import { defaultLogRoots, discoverLogFiles } from "./discover.js";
 import { parseLogFile } from "./parser.js";
 import type {
   CachedParsedCodexCorpus,
@@ -15,6 +15,10 @@ import type {
 
 const CACHE_SCHEMA_VERSION = 1;
 const PARSER_CACHE_VERSION = "parser-v7";
+
+type CacheParseOptions = ParseOptions & {
+  pruneInputScope?: boolean;
+};
 
 interface CacheManifest {
   schemaVersion: number;
@@ -46,13 +50,14 @@ interface SourceScope {
 }
 
 export async function parseCodexCorpusWithCache(options: ParseOptions = {}): Promise<CachedParsedCodexCorpus> {
-  return parseLogCorpusWithCache({ ...options, provider: "codex" });
+  return parseLogCorpusWithCache({ ...options, provider: "codex", pruneInputScope: true } as CacheParseOptions);
 }
 
 export async function parseLogCorpusWithCache(options: ParseOptions = {}): Promise<CachedParsedLogCorpus> {
+  const cacheOptions = options as CacheParseOptions;
   const provider = providerForDiscovery(options);
   if (!options.cacheDir) {
-    const files = await discoverLogFiles(options.paths, "all");
+    const files = await discoverLogFiles(options.paths, provider, options.homeDir);
     const parsedFiles = (await Promise.all(files.map((file) => parseLogFile(file)))).flat();
     const visibleFiles = filterProviderFiles(parsedFiles, provider);
     return {
@@ -65,10 +70,14 @@ export async function parseLogCorpusWithCache(options: ParseOptions = {}): Promi
   const filesDirectory = resolve(cacheDirectory, "files");
   await mkdir(filesDirectory, { recursive: true });
 
-  const discoveredFiles = await canonicalLogFiles(await discoverLogFiles(options.paths, "all"));
+  const discoveredFiles = await canonicalLogFiles(await discoverLogFiles(options.paths, provider, options.homeDir));
   const fingerprints = await Promise.all(discoveredFiles.map((filePath) => fingerprintFor(filePath)));
   const activeKeys = new Set(fingerprints.map((fingerprint) => fingerprint.cacheKey));
-  const sourceScopes = await scopesFor(options.paths ?? defaultCodexLogRoots());
+  const pruneInputScope = cacheOptions.pruneInputScope ?? (!options.paths || !options.provider || options.provider === "all");
+  const sourceScopePaths = pruneInputScope
+    ? options.paths ?? defaultLogRoots(provider, options.homeDir)
+    : discoveredFiles;
+  const sourceScopes = await scopesFor(sourceScopePaths);
   const manifest = await readManifest(cacheDirectory);
   let removedFiles = 0;
 

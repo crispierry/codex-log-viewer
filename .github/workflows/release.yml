@@ -22,10 +22,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run privacy:scan
-      - name: Verify tag matches package version
-        run: |
-          PACKAGE_VERSION="$(node -p "require('./package.json').version")"
-          test "$GITHUB_REF_NAME" = "v$PACKAGE_VERSION"
+      - name: Verify tag matches app version
+        run: node scripts/check-app-version.mjs --tag "$GITHUB_REF_NAME"
       - run: npm run test:all
       - run: npm audit --audit-level=moderate
       - run: npm run benchmark:search

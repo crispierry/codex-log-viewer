@@ -43,7 +43,7 @@ open "dist/macos/Codex Log Viewer.app"
 
 ## Custom Sources
 
-Use `Logs > Choose Codex Log Location...` to pick custom log files or folders. Custom sources can include Codex JSONL, Claude Code JSONL, Cursor `state.vscdb`, and explicit Cursor Markdown exports. Use `Logs > Use Default Codex Log Locations` to return to `~/.codex/sessions` and `~/.codex/archived_sessions`. Recent custom sources, provider filter choices, and date filter choices are stored in local app settings.
+Use `Logs > Choose AI Log Location...` to pick custom log files or folders. Custom sources can include Codex JSONL, Claude Code JSONL, Cursor `state.vscdb`, and explicit Cursor Markdown exports. Use `Logs > Use Default AI Log Locations` to return to the default local source for the selected provider. Codex defaults to `~/.codex/sessions` and `~/.codex/archived_sessions`, Claude defaults to `~/.claude/projects`, and Cursor defaults to local Cursor app storage. Recent custom sources, provider filter choices, and date filter choices are stored in local app settings.
 
 The provider filter in the workspace header can show All, Codex, Claude, or Cursor records. Default launch remains Codex-only because the default source roots are Codex roots.
 

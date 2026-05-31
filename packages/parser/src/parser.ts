@@ -100,7 +100,7 @@ export async function parseCodexCorpus(options: ParseOptions = {}): Promise<Pars
 
 export async function parseLogCorpus(options: ParseOptions = {}): Promise<ParsedCodexCorpus> {
   const provider = providerForDiscovery(options);
-  const files = await discoverLogFiles(options.paths, "all");
+  const files = await discoverLogFiles(options.paths, provider, options.homeDir);
   const parsedFileGroups = await Promise.all(files.map((file) => parseLogFile(file)));
   return corpusFromFiles(parsedFileGroups.flat().filter((file) => providerMatches(file.provider, provider)));
 }

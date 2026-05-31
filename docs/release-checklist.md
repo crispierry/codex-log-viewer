@@ -4,13 +4,14 @@ Use this checklist before publishing a public Codex Log Viewer version.
 
 ## Versioning
 
-- App versions use `major.minor (Build N)` from `app-version.json`.
-- Major and minor versions are intentional release decisions; the macOS build number is incremented by `npm run build:mac`, `npm run app:mac`, and `npm run package:mac`.
+- App versions use `major.minor.patch` from `app-version.json`.
+- PR branches bump `minor` once with `npm run version:pr`; each commit bumps `patch` once with `npm run version:commit`.
+- Local build, package, and run commands sync generated app metadata without changing the version.
 - See [App Versioning](versioning.md) for maintainer details.
-- Use package semantic versions beginning with `0.1.0`.
-- Keep `package.json`, `CHANGELOG.md`, and Git tags aligned.
+- The root `package.json` version is generated from `app-version.json`; workspace package versions are managed separately for package releases.
+- Keep `app-version.json`, the root `package.json`, `CHANGELOG.md`, and Git tags aligned.
 - Tag releases as `vX.Y.Z`; the GitHub Release workflow runs from tags that start with `v`.
-- The release workflow fails if the tag does not match `package.json` as `v<version>`.
+- The release workflow fails if the tag does not match `app-version.json` as `v<version>`.
 
 ## Required Verification
 
@@ -91,7 +92,7 @@ Paste the copied value into the `CODEX_LOG_VIEWER_MACOS_CERTIFICATE_BASE64` repo
 
 ## Artifact Review
 
-- Confirm `dist/macos/Codex-Log-Viewer-vX.Y-buildN-macOS.zip` exists.
+- Confirm `dist/macos/Codex-Log-Viewer-vX.Y.Z-macOS.zip` exists.
 - Confirm the matching `.sha256` file exists.
 - Confirm the checksum file contains the zip basename, not a build-machine absolute path.
 - Unzip the artifact and launch the app from Finder.
@@ -109,5 +110,5 @@ Start from [Release Notes Template](release-notes-template.md). Release notes sh
 - checksum verification command:
 
 ```sh
-shasum -a 256 -c Codex-Log-Viewer-vX.Y-buildN-macOS.zip.sha256
+shasum -a 256 -c Codex-Log-Viewer-vX.Y.Z-macOS.zip.sha256
 ```

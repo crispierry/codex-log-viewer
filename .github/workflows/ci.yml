@@ -13,11 +13,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
       - run: npm ci
+      - name: Verify app version bump
+        if: github.event_name == 'pull_request'
+        run: node scripts/check-app-version.mjs --compare-ref "origin/${{ github.base_ref }}" --require-pr-minor
       - run: npm run privacy:scan
       - run: npm run lint
       - run: npm test

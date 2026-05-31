@@ -2263,3 +2263,172 @@ No raw logs, private session content, secrets, or unsanitized local Codex data w
 
 - Confirmed the repository is public at `https://github.com/crispierry/codex-log-viewer`.
 - Confirmed the repository uses the MIT License and has privacy/security contribution guidance.
+
+## 2026-05-31 - Fix Provider-Specific Local Log Loading
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> Run the app from this branch
+
+> How do I select cursor or Claude? I missed it somewhere. Can you show me in the screenshots?
+
+> I'm getting a "could not connect to the server, try again" when I'm asking to fetch cloud messages. This doesn't seem right. I have cloud running locally. I want you to fetch the messages from my local logs
+
+### Interpreted Intent
+
+The user wanted the branch app running locally and expected the Claude provider filter to read local Claude Code logs, not fail through a crashed local parser helper or imply cloud fetching.
+
+### Response / Work Done
+
+- Reproduced the app-side failure and found the packaged local parser helper had crashed from a Node heap out-of-memory condition.
+- Identified that provider-specific loads with no custom source path still discovered the large default Codex log tree before filtering to Claude.
+- Added provider-specific default roots so Codex, Claude Code, Cursor, and explicit `all` provider loads discover the correct local source paths before parsing.
+- Updated cached parsing to use the provider-specific discovery scope and avoid pruning unrelated cached provider entries during explicit provider-filtered custom-path loads.
+- Updated summary filter metadata to report the provider-appropriate default source roots.
+- Renamed source-picker copy from Codex-specific wording to AI log wording and made the default-source label provider-aware.
+- Relaunched the rebuilt packaged macOS app and confirmed the Claude filter reads local Claude Code messages from `~/.claude/projects`.
+
+### Privacy Notes
+
+No raw local Codex, Claude, or Cursor transcripts were committed. Live validation printed only aggregate counts for local Claude files, sessions, messages, provider ids, and cache status.
+
+### Verification
+
+- Ran `wt bootstrap`.
+- Ran `npm run test -w @codex-log-viewer/parser`.
+- Ran `npm test`.
+- Ran `npm run lint`.
+- Ran `npm run privacy:scan`.
+- Ran an aggregate-only local Claude parse check.
+- Ran `npm run build:mac`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`.
+- Ran `npm run smoke:mac-ui`.
+- Relaunched the packaged macOS app from this branch.
+
+## 2026-05-31 - Stabilize All-Projects Provider Loading
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> Getting an error again: could not connect to the server when I selected all projects
+>
+> Another issue I noticed that when I went from cursor to Claude to Codex, not all the data was loaded. Remember I want to be loading the data in the background so right now I had to wait a long time until my Codex data showed up. Most importantly could not connect to the server when I selected all projects. The app is still running; you can just take a look
+
+### Interpreted Intent
+
+The user wanted the running branch app inspected in place, the all-projects local parser crash fixed, and provider data warmed in the background so switching between Cursor, Claude, and Codex does not feel like a cold load.
+
+### Response / Work Done
+
+- Inspected the running packaged app and confirmed the native app was alive while the local parser helper had crashed with a Node heap out-of-memory error.
+- Increased the packaged local parser helper heap limit, with an environment override available through `CODEX_LOG_VIEWER_NODE_MAX_OLD_SPACE_MB`.
+- Added foreground request recovery so the app restarts the local helper once after a local connection failure instead of leaving the UI pointed at a dead port.
+- Added provider cache warmup after foreground loads so default Codex, Claude, and Cursor sources can be prepared in the background.
+- Made the native app send explicit provider filters, including `all`, and changed the server to honor explicit `provider=all` while preserving Codex-only behavior when no provider is supplied.
+- Kept new default launches Codex-first by changing the native provider default to Codex.
+- Extended local API request timeouts so cold multi-gigabyte local scans can finish instead of being mistaken for connection loss.
+
+### Privacy Notes
+
+No raw local transcripts were committed. Live checks used aggregate API counts only: sessions, submitted-message totals, provider buckets, and helper process status.
+
+### Verification
+
+- Ran `npm test`.
+- Ran `npm run lint`.
+- Ran `npm run privacy:scan`.
+- Ran `npm run build:mac`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`.
+- Ran `npm run smoke:mac-ui`.
+- Relaunched the packaged macOS app from this branch.
+- Queried the running local API with `provider=all` and confirmed all-projects data returned across Codex, Claude, and Cursor while the helper stayed alive.
+
+## 2026-05-31 - Add App Version Process
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> Do we still not have an app version of any kind?
+>
+> If we don't have one in place, can we please create an app version and create a process for updating this app version with every code change we make?
+>
+> Every PR that we push should increment 0.x+1.0
+>
+> Every commit incerases 0.0.x+1
+
+### Interpreted Intent
+
+The user wanted a real app version visible in the native app and a repeatable workflow so PR branches and commits advance that version intentionally.
+
+### Response / Work Done
+
+- Replaced the old `major.minor (Build N)` app metadata with `major.minor.patch`.
+- Set this PR branch to app version `0.2.1`: one minor bump for the branch and one patch bump for this code change.
+- Added `npm run version:pr`, `npm run version:commit`, and `npm run version:sync`.
+- Changed local build, package, and run scripts to sync generated metadata without silently bumping versions.
+- Updated packaged app metadata and archive naming to use `0.2.1` style versions.
+- Added a PR version check that compares `app-version.json` against the PR target branch and requires the minor bump.
+- Updated release CI to verify tags against `app-version.json`.
+- Updated versioning, release, release-note, first-public-release, and PR-template docs.
+
+### Privacy Notes
+
+No raw local transcripts, local log content, secrets, or private data were added. The changes only affect version metadata, build/release scripts, CI checks, and documentation.
+
+### Verification
+
+- Ran `node scripts/check-app-version.mjs --compare-ref main --require-pr-minor`.
+- Ran `node scripts/check-app-version.mjs --tag v0.2.1`.
+- Ran `npm test`.
+- Ran `npm run lint`.
+- Ran `npm run privacy:scan`.
+- Ran `npm run build:mac`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`; closed the already-running packaged app after the smoke check correctly detected it, then reran successfully.
+- Ran `npm run smoke:mac-ui`.
+- Ran `npm run release:notes -- --tag v0.2.1 --output dist/macos/release-notes.md`.
+- Ran `git diff --check`.
+- Relaunched the packaged macOS app and confirmed its bundle short version and bundle version are both `0.2.1`.
+
+## 2026-05-31 - Show Version In About Box
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> I also want to make sure that the version number is visible in the about box
+
+### Interpreted Intent
+
+The user wanted the native macOS About box to visibly show the app version, not only carry it in bundle metadata.
+
+### Response / Work Done
+
+- Added an explicit `Version 0.2.2` line to the About box credits text while keeping the standard macOS About panel version fields populated.
+- Bumped the app patch version from `0.2.1` to `0.2.2` for this code change using the new commit-version workflow.
+- Rebuilt, packaged, smoke-tested, and relaunched the packaged macOS app.
+- Opened the running app's About box and captured a local-only screenshot confirming the version is visible.
+
+### Privacy Notes
+
+No raw local transcripts, log content, secrets, or private data were added. The About-box screenshot was saved under the ignored local audit folder and is not intended for commit.
+
+### Verification
+
+- Ran `npm run version:commit`.
+- Ran `npm run build:mac`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`; an initial parallel smoke attempt collided with the UI smoke app launch, then the package smoke was rerun sequentially and passed.
+- Ran `npm run smoke:mac-ui`.
+- Confirmed the packaged app `CFBundleShortVersionString` and `CFBundleVersion` are both `0.2.2`.
+- Relaunched the packaged app and opened the About box.

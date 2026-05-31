@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import test from "node:test";
 import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
-import { parseCodexLogFile, parseLogCorpus, parseLogFile } from "../dist/index.js";
+import { discoverLogFiles, parseCodexLogFile, parseLogCorpus, parseLogFile } from "../dist/index.js";
 
 const testDir = dirname(fileURLToPath(import.meta.url));
 const fixturePath = resolve(testDir, "../../../fixtures/codex/sample-session.jsonl");
@@ -129,6 +129,36 @@ test("parseLogCorpus can filter Cursor provider sources", async () => {
   assert.deepEqual(corpus.files.map((file) => file.provider), ["cursor"]);
   assert.equal(corpus.messages.every((message) => message.provider === "cursor"), true);
   assert.equal(corpus.messages.some((message) => message.sourceEvent === "event_msg.user_message"), false);
+});
+
+test("parseLogCorpus discovers provider-specific default roots before parsing", async () => {
+  const tempHome = await mkdtemp(`${tmpdir()}/codex-log-viewer-home-`);
+
+  try {
+    const codexRoot = resolve(tempHome, ".codex/sessions");
+    const claudeRoot = resolve(tempHome, ".claude/projects/project-a");
+    await mkdir(codexRoot, { recursive: true });
+    await mkdir(claudeRoot, { recursive: true });
+    await copyFile(fixturePath, resolve(codexRoot, "sample-session.jsonl"));
+    await copyFile(claudeFixturePath, resolve(claudeRoot, "basic-session.jsonl"));
+
+    const codexCorpus = await parseLogCorpus({ homeDir: tempHome });
+    assert.deepEqual(codexCorpus.files.map((file) => file.provider), ["codex"]);
+
+    const claudeCorpus = await parseLogCorpus({ provider: "claude", homeDir: tempHome });
+    assert.deepEqual(claudeCorpus.files.map((file) => file.provider), ["claude"]);
+
+    const allProvidersCorpus = await parseLogCorpus({ provider: "all", homeDir: tempHome });
+    assert.deepEqual(allProvidersCorpus.files.map((file) => file.provider).sort(), ["claude", "codex"]);
+
+    const defaultDiscoveredFiles = await discoverLogFiles(undefined, undefined, tempHome);
+    assert.deepEqual(defaultDiscoveredFiles.map((file) => file.endsWith("sample-session.jsonl")), [true]);
+
+    const customDiscoveredFiles = await discoverLogFiles([codexRoot, claudeRoot]);
+    assert.equal(customDiscoveredFiles.length, 2);
+  } finally {
+    await rm(tempHome, { recursive: true, force: true });
+  }
 });
 
 test("parseCodexLogFile normalizes response items and tool events", async () => {

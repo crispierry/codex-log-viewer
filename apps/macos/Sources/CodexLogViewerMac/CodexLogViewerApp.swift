@@ -109,13 +109,13 @@ struct CodexLogViewerApp: App {
           Button(model.sourceMenuLabel) {}
             .disabled(true)
 
-          Button("Choose Codex Log Location...") {
+          Button("Choose AI Log Location...") {
             model.chooseSourcePaths()
           }
           .keyboardShortcut("o", modifiers: .command)
           .accessibilityIdentifier("source-picker-menu-item")
 
-          Button("Use Default Codex Log Locations") {
+          Button("Use Default AI Log Locations") {
             model.resetSourcePaths()
           }
           .accessibilityIdentifier("source-default-menu-item")

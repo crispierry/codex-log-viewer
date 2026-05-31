@@ -1,4 +1,11 @@
-export { defaultCodexLogRoots, discoverCodexLogFiles, discoverLogFiles } from "./discover.js";
+export {
+  defaultClaudeLogRoots,
+  defaultCodexLogRoots,
+  defaultCursorLogRoots,
+  defaultLogRoots,
+  discoverCodexLogFiles,
+  discoverLogFiles
+} from "./discover.js";
 export { corpusFromParsedFiles, parseCodexCorpusWithCache, parseLogCorpusWithCache } from "./cache.js";
 export { parseCodexCorpus, parseCodexLogFile, parseLogCorpus, parseLogFile } from "./parser.js";
 export type {

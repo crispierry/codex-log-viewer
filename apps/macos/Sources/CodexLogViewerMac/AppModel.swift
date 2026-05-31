@@ -71,7 +71,7 @@ final class AppModel: ObservableObject {
   @Published var pathDraft = ""
   @Published var sourcePaths: [String] = []
   @Published var recentSourcePaths: [String] = []
-  @Published var providerFilter: ProviderFilter = .all
+  @Published var providerFilter: ProviderFilter = .codex
   @Published var hasSinceFilter = false
   @Published var hasUntilFilter = false
   @Published var sinceDate = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
@@ -114,6 +114,7 @@ final class AppModel: ObservableObject {
   private var evalsTask: Task<Void, Never>?
   private var evalReviewTask: Task<Void, Never>?
   private var backgroundSyncTask: Task<Void, Never>?
+  private var providerWarmupTask: Task<Void, Never>?
   private var reloadRequestID = 0
   private var detailRequestID = 0
   private var quietDetailRefreshRequestID = 0
@@ -159,6 +160,7 @@ final class AppModel: ObservableObject {
     evalsTask?.cancel()
     evalReviewTask?.cancel()
     backgroundSyncTask?.cancel()
+    providerWarmupTask?.cancel()
   }
 
   var browseMessages: [MessageSearchResult] {
@@ -284,7 +286,7 @@ final class AppModel: ObservableObject {
         status = .starting
         logLoadingNotice = LogLoadingNotice(
           title: "Starting Log Engine",
-          message: "Preparing to scan your local Codex logs."
+          message: "Preparing to scan your local AI logs."
         )
         let connection = try await LocalLogEngineServer.shared.start()
         api = LogEngineAPI(baseURL: connection.baseURL, authToken: connection.authToken)
@@ -339,7 +341,7 @@ final class AppModel: ObservableObject {
 
   var sourceSummaryText: String {
     guard !sourcePaths.isEmpty else {
-      return "Default Codex log locations"
+      return defaultSourceSummaryText
     }
     if sourcePaths.count == 1, let path = sourcePaths.first {
       return URL(fileURLWithPath: path).lastPathComponent.isEmpty ? path : URL(fileURLWithPath: path).lastPathComponent
@@ -349,6 +351,17 @@ final class AppModel: ObservableObject {
 
   var sourceMenuLabel: String {
     "Source: \(sourceSummaryText) · Provider: \(providerFilter.label)"
+  }
+
+  private var defaultSourceSummaryText: String {
+    switch providerFilter {
+    case .all, .codex:
+      return "Default Codex log locations"
+    case .claude:
+      return "Default Claude Code log locations"
+    case .cursor:
+      return "Default Cursor log locations"
+    }
   }
 
   var auditTargetPathText: String {
@@ -407,7 +420,12 @@ final class AppModel: ObservableObject {
     refresh(force: force, rebuildCache: rebuildCache, mode: .foreground)
   }
 
-  private func refresh(force: Bool = false, rebuildCache: Bool = false, mode: RefreshMode) {
+  private func refresh(
+    force: Bool = false,
+    rebuildCache: Bool = false,
+    mode: RefreshMode,
+    allowEngineRestart: Bool = true
+  ) {
     guard let api else { return }
     if mode == .background, shouldSkipBackgroundSync {
       return
@@ -479,6 +497,9 @@ final class AppModel: ObservableObject {
           status = .ready
         }
         finishLogRefresh(requestID: requestID)
+        if mode == .foreground {
+          startProviderWarmupIfNeeded(api: api)
+        }
         scheduleUITestWorkflowIfNeeded(api: api, filters: filters)
       } catch is CancellationError {
         return
@@ -486,6 +507,17 @@ final class AppModel: ObservableObject {
         guard requestID == reloadRequestID else { return }
         finishLogRefresh(requestID: requestID)
         if mode == .foreground {
+          if allowEngineRestart, isLocalConnectionFailure(error) {
+            do {
+              let connection = try await LocalLogEngineServer.shared.start()
+              self.api = LogEngineAPI(baseURL: connection.baseURL, authToken: connection.authToken)
+              refresh(force: force, rebuildCache: rebuildCache, mode: mode, allowEngineRestart: false)
+              return
+            } catch {
+              status = .failed(error.localizedDescription)
+              return
+            }
+          }
           status = .failed(error.localizedDescription)
         }
       }
@@ -537,6 +569,27 @@ final class AppModel: ObservableObject {
     refresh(force: true, mode: .background)
   }
 
+  private func startProviderWarmupIfNeeded(api: LogEngineAPI) {
+    guard providerWarmupTask == nil, !isEphemeralSettingsRun, sourcePaths.isEmpty, providerFilter != .all else { return }
+    providerWarmupTask = Task { [weak self] in
+      try? await Task.sleep(for: .seconds(2))
+      await self?.warmProviderCaches(api: api)
+    }
+  }
+
+  private func warmProviderCaches(api: LogEngineAPI) async {
+    let warmProviders = ProviderFilter.allCases.filter { $0 != .all && $0 != providerFilter }
+    for provider in warmProviders {
+      guard !Task.isCancelled, sourcePaths.isEmpty else { return }
+      let filters = LogFilters(provider: provider)
+      do {
+        _ = try await api.projectsWithMetadata(filters: filters)
+      } catch {
+        continue
+      }
+    }
+  }
+
   private func beginLogRefresh(mode: RefreshMode, showLoadingNotice: Bool, rebuildCache: Bool) {
     isLogRefreshInFlight = true
     isBackgroundSyncing = mode == .background
@@ -563,6 +616,17 @@ final class AppModel: ObservableObject {
     isLogRefreshInFlight = false
     isBackgroundSyncing = false
     logLoadingNotice = nil
+  }
+
+  private func isLocalConnectionFailure(_ error: Error) -> Bool {
+    let nsError = error as NSError
+    guard nsError.domain == NSURLErrorDomain else {
+      return error.localizedDescription.localizedCaseInsensitiveContains("could not connect")
+    }
+    return [
+      NSURLErrorCannotConnectToHost,
+      NSURLErrorNetworkConnectionLost
+    ].contains(nsError.code)
   }
 
   private func refreshSelectedSessionQuietly(api: LogEngineAPI, filters: LogFilters, project: String) {
@@ -630,7 +694,7 @@ final class AppModel: ObservableObject {
 
   func chooseSourcePaths() {
     let panel = NSOpenPanel()
-    panel.title = "Choose Codex Logs"
+    panel.title = "Choose AI Logs"
     panel.prompt = "Choose"
     panel.canChooseFiles = true
     panel.canChooseDirectories = true
@@ -2827,7 +2891,13 @@ final class AppModel: ObservableObject {
 
   static func showAboutBox() {
     let credits = NSAttributedString(
-      string: "A local-first native macOS viewer for Codex session logs.\n\nCodex logs stay on this Mac unless you explicitly export data.",
+      string: """
+      Version \(AppVersion.displayVersion)
+
+      A local-first native macOS viewer for Codex session logs.
+
+      Codex logs stay on this Mac unless you explicitly export data.
+      """,
       attributes: [
         .font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize),
         .foregroundColor: NSColor.secondaryLabelColor
@@ -2859,7 +2929,7 @@ final class AppModel: ObservableObject {
     Search finds messages across the current filters. Audit prepares a reviewed AI worklog for the selected repository.
 
     Logs
-    Use Logs > Choose Codex Log Location to change sources. Exports are redacted by default, but still review them before sharing. Your Codex logs stay on this Mac unless you export them.
+    Use Logs > Choose AI Log Location to change sources. Exports are redacted by default, but still review them before sharing. Your AI logs stay on this Mac unless you export them.
     """
     alert.alertStyle = .informational
     alert.addButton(withTitle: "OK")

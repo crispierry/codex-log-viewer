@@ -10,15 +10,52 @@ export function defaultCodexLogRoots(homeDir = homedir()): string[] {
   ];
 }
 
+export function defaultClaudeLogRoots(homeDir = homedir()): string[] {
+  return [
+    join(homeDir, ".claude", "projects")
+  ];
+}
+
+export function defaultCursorLogRoots(homeDir = homedir()): string[] {
+  return [
+    join(homeDir, "Library", "Application Support", "Cursor", "User", "globalStorage", "state.vscdb"),
+    join(homeDir, "Library", "Application Support", "Cursor - Insiders", "User", "globalStorage", "state.vscdb")
+  ];
+}
+
+export function defaultLogRoots(provider: ProviderFilter = "codex", homeDir = homedir()): string[] {
+  switch (provider) {
+    case "all":
+      return [
+        ...defaultCodexLogRoots(homeDir),
+        ...defaultClaudeLogRoots(homeDir),
+        ...defaultCursorLogRoots(homeDir)
+      ];
+    case "claude":
+      return defaultClaudeLogRoots(homeDir);
+    case "cursor":
+      return defaultCursorLogRoots(homeDir);
+    case "codex":
+    default:
+      return defaultCodexLogRoots(homeDir);
+  }
+}
+
 export async function discoverCodexLogFiles(paths = defaultCodexLogRoots()): Promise<string[]> {
   return discoverLogFiles(paths, "codex");
 }
 
-export async function discoverLogFiles(paths = defaultCodexLogRoots(), provider: ProviderFilter = "all"): Promise<string[]> {
+export async function discoverLogFiles(
+  paths: string[] | undefined = undefined,
+  provider: ProviderFilter | undefined = undefined,
+  homeDir = homedir()
+): Promise<string[]> {
   const files = new Set<string>();
+  const effectiveProvider = provider ?? (paths && paths.length > 0 ? "all" : "codex");
+  const roots = paths ?? defaultLogRoots(effectiveProvider, homeDir);
 
-  for (const inputPath of paths) {
-    await collectLogFiles(resolve(inputPath), files, provider, true);
+  for (const inputPath of roots) {
+    await collectLogFiles(resolve(inputPath), files, effectiveProvider, true);
   }
 
   return [...files].sort();

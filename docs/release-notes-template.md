@@ -40,16 +40,16 @@ Codex Log Viewer is a local-first native macOS app for inspecting OpenAI Codex s
 - `npm run benchmark:search`
 - `npm run check:reference -- --reference fixtures/codex/sample-reference-summary.json --path fixtures/codex/sample-session.jsonl --project sample-app`
 - `npm run release:mac`
-- `shasum -a 256 -c Codex-Log-Viewer-vX.Y-buildN-macOS.zip.sha256`
+- `shasum -a 256 -c Codex-Log-Viewer-vX.Y.Z-macOS.zip.sha256`
 - maintainer-local private reference parity check, if this is an official public release
 
 ## Downloads
 
-- `Codex-Log-Viewer-vX.Y-buildN-macOS.zip`
-- `Codex-Log-Viewer-vX.Y-buildN-macOS.zip.sha256`
+- `Codex-Log-Viewer-vX.Y.Z-macOS.zip`
+- `Codex-Log-Viewer-vX.Y.Z-macOS.zip.sha256`
 
 Verify the checksum:
 
 ```sh
-shasum -a 256 -c Codex-Log-Viewer-vX.Y-buildN-macOS.zip.sha256
+shasum -a 256 -c Codex-Log-Viewer-vX.Y.Z-macOS.zip.sha256
 ```
