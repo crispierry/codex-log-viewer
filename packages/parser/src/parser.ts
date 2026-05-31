@@ -1,6 +1,7 @@
 import { createReadStream } from "node:fs";
 import { basename } from "node:path";
 import { createInterface } from "node:readline";
+import { mapWithConcurrency } from "./concurrency.js";
 import { discoverCodexLogFiles } from "./discover.js";
 import type {
   JsonObject,
@@ -17,6 +18,8 @@ import type {
   TurnRecord,
   UnknownEventRecord
 } from "./types.js";
+
+const PARSE_FILE_CONCURRENCY = 16;
 
 interface ParseState {
   sessionId: string;
@@ -52,7 +55,7 @@ const USER_REQUEST_MARKER = "## My request for Codex:";
 
 export async function parseCodexCorpus(options: ParseOptions = {}): Promise<ParsedCodexCorpus> {
   const files = await discoverCodexLogFiles(options.paths);
-  const parsedFiles = await Promise.all(files.map((file) => parseCodexLogFile(file)));
+  const parsedFiles = await mapWithConcurrency(files, PARSE_FILE_CONCURRENCY, (file) => parseCodexLogFile(file));
 
   return {
     files: parsedFiles,

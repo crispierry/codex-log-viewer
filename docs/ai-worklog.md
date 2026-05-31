@@ -2,6 +2,45 @@
 
 Sanitized audit trail of AI-assisted work on this project.
 
+## 2026-05-31 - Limit Parser File Discovery Concurrency
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> I'm getting this error from our app. What does it mean? How do we fix it?
+>
+> The local parser engine returned HTTP 500 for api/projects: {"error":"EMFILE: too many open files, scandir '[local Codex sessions path]'"}
+
+### Interpreted Intent
+
+The user wanted the local parser engine error explained and fixed so large local Codex session histories do not crash project loading.
+
+### Response / Work Done
+
+- Identified the root cause as unbounded parallel directory traversal in Codex log discovery.
+- Replaced recursive `Promise.all` scanning with an iterative, controlled directory walk that avoids opening many directories at once.
+- Added a small concurrency helper and capped parser file work for no-cache corpus parsing and metadata fingerprinting.
+- Added a fixture-driven discovery test that covers nested session paths, wide directory trees, sorted output, and ignored `.git` / `node_modules` directories.
+- Packaged and relaunched the native macOS app at build 123 for review.
+
+### Privacy Notes
+
+No raw Codex logs, private prompts, screenshots, session content, export payloads, credentials, or secrets were added. The reported local sessions path was redacted in this worklog.
+
+### Verification
+
+- Ran `wt bootstrap`.
+- Ran `npm run test -w @codex-log-viewer/parser`.
+- Ran `npm test`.
+- Ran `npm run lint`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`.
+- Ran `npm run privacy:scan`.
+- Ran `git diff --check`.
+- Relaunched `dist/macos/Codex Log Viewer.app`.
+
 ## 2026-05-29 - Merge Main Evals And Extend Performance Work
 
 Status: Completed
