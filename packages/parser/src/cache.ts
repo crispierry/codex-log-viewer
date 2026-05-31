@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
+import { mapWithConcurrency } from "./concurrency.js";
 import { defaultCodexLogRoots, discoverCodexLogFiles } from "./discover.js";
 import { parseCodexLogFile } from "./parser.js";
 import type {
@@ -13,6 +14,8 @@ import type {
 
 const CACHE_SCHEMA_VERSION = 1;
 const PARSER_CACHE_VERSION = "parser-v5";
+const FILE_METADATA_CONCURRENCY = 32;
+const PARSE_FILE_CONCURRENCY = 16;
 
 interface CacheManifest {
   schemaVersion: number;
@@ -46,7 +49,7 @@ interface SourceScope {
 export async function parseCodexCorpusWithCache(options: ParseOptions = {}): Promise<CachedParsedCodexCorpus> {
   if (!options.cacheDir) {
     const files = await discoverCodexLogFiles(options.paths);
-    const parsedFiles = await Promise.all(files.map((file) => parseCodexLogFile(file)));
+    const parsedFiles = await mapWithConcurrency(files, PARSE_FILE_CONCURRENCY, (file) => parseCodexLogFile(file));
     return {
       corpus: corpusFromParsedFiles(parsedFiles),
       cache: cacheMetadata("updated", 0, parsedFiles.length, 0, parsedFiles.length)
@@ -58,7 +61,9 @@ export async function parseCodexCorpusWithCache(options: ParseOptions = {}): Pro
   await mkdir(filesDirectory, { recursive: true });
 
   const discoveredFiles = await canonicalLogFiles(await discoverCodexLogFiles(options.paths));
-  const fingerprints = await Promise.all(discoveredFiles.map((filePath) => fingerprintFor(filePath)));
+  const fingerprints = await mapWithConcurrency(discoveredFiles, FILE_METADATA_CONCURRENCY, (filePath) =>
+    fingerprintFor(filePath)
+  );
   const activeKeys = new Set(fingerprints.map((fingerprint) => fingerprint.cacheKey));
   const sourceScopes = await scopesFor(options.paths ?? defaultCodexLogRoots());
   const manifest = await readManifest(cacheDirectory);
@@ -186,11 +191,12 @@ async function removeCachedFile(filesDirectory: string, cacheFile: string): Prom
 
 async function canonicalLogFiles(files: string[]): Promise<string[]> {
   const canonical = new Set<string>();
-  await Promise.all(
-    files.map(async (filePath) => {
-      canonical.add(await canonicalPath(filePath));
-    })
+  const canonicalPaths = await mapWithConcurrency(files, FILE_METADATA_CONCURRENCY, (filePath) =>
+    canonicalPath(filePath)
   );
+  for (const filePath of canonicalPaths) {
+    canonical.add(filePath);
+  }
   return [...canonical].sort();
 }
 
