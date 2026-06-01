@@ -1,6 +1,6 @@
 {
   "name": "codex-log-viewer",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "private": true,
   "description": "Local-first native macOS app and parser for OpenAI Codex session logs.",
   "license": "MIT",

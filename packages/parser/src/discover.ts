@@ -3,6 +3,8 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import type { ProviderFilter } from "./types.js";
 
+const IGNORED_DIRECTORIES = new Set(["node_modules", ".git"]);
+
 export function defaultCodexLogRoots(homeDir = homedir()): string[] {
   return [
     join(homeDir, ".codex", "sessions"),
@@ -61,34 +63,48 @@ export async function discoverLogFiles(
   return [...files].sort();
 }
 
-async function collectLogFiles(path: string, files: Set<string>, provider: ProviderFilter, explicitInput = false): Promise<void> {
-  let info;
-  try {
-    info = await stat(path);
-  } catch {
-    return;
-  }
+async function collectLogFiles(rootPath: string, files: Set<string>, provider: ProviderFilter, explicitInput = false): Promise<void> {
+  const pending = [{ path: rootPath, explicitInput }];
 
-  if (info.isFile()) {
-    if (isSupportedLogFile(path, provider, explicitInput)) {
-      files.add(path);
+  while (pending.length > 0) {
+    const current = pending.pop() as { path: string; explicitInput: boolean };
+    let info;
+    try {
+      info = await stat(current.path);
+    } catch {
+      continue;
     }
-    return;
-  }
 
-  if (!info.isDirectory()) {
-    return;
-  }
-
-  const entries = await readdir(path, { withFileTypes: true });
-  await Promise.all(
-    entries.map(async (entry) => {
-      if (entry.name === "node_modules" || entry.name === ".git") {
-        return;
+    if (info.isFile()) {
+      if (isSupportedLogFile(current.path, provider, current.explicitInput)) {
+        files.add(current.path);
       }
-      await collectLogFiles(join(path, entry.name), files, provider);
-    })
-  );
+      continue;
+    }
+
+    if (!info.isDirectory()) {
+      continue;
+    }
+
+    let entries;
+    try {
+      entries = await readdir(current.path, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+
+    for (const entry of entries) {
+      if (IGNORED_DIRECTORIES.has(entry.name)) {
+        continue;
+      }
+      const entryPath = join(current.path, entry.name);
+      if (entry.isFile() && isSupportedLogFile(entryPath, provider, false)) {
+        files.add(entryPath);
+      } else if (entry.isDirectory() || entry.isSymbolicLink()) {
+        pending.push({ path: entryPath, explicitInput: false });
+      }
+    }
+  }
 }
 
 function isSupportedLogFile(path: string, provider: ProviderFilter, explicitInput: boolean): boolean {

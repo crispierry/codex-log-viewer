@@ -2,6 +2,86 @@
 
 Sanitized audit trail of AI-assisted work on this project.
 
+## 2026-05-31 - Resolve Provider PR Merge Conflicts
+
+Status: Completed
+Related commit/PR: PR #19
+
+### User Messages
+
+> create a pr
+
+> The PR is blocked on some conflict resolution. Can you take a look and see what's wrong and resolve it?
+
+### Interpreted Intent
+
+The user wanted the provider-support branch published as a draft PR, then wanted the PR's merge conflicts with the updated `main` branch resolved.
+
+### Response / Work Done
+
+- Created draft PR #19 for `codex/unified-ai-provider-support` into `main`.
+- Merged the latest `origin/main` into the PR branch and resolved conflicts in app version metadata, the AI worklog, parser cache/discovery, and provider parsing.
+- Preserved this branch's provider-aware Codex, Claude, and Cursor support while incorporating `main`'s iterative discovery and bounded parser concurrency fixes.
+- Kept the app's `major.minor.patch` version model and bumped the patch version to `0.2.8` for the conflict-resolution commit.
+
+### Privacy Notes
+
+No raw Codex, Claude, Cursor, private prompts, screenshots, session content, credentials, or secrets were added. The merged worklog keeps the local sessions path redacted.
+
+### Verification
+
+- Ran `wt bootstrap`.
+- Ran `npm run test -w @codex-log-viewer/parser`.
+- Ran `npm test`.
+- Ran `npm run lint`.
+- Ran `npm run privacy:scan`.
+- Ran `npm run build:mac`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`; the first attempt found a lingering packaged app process, then passed after closing it.
+- Ran `npm run smoke:mac-ui`; the first attempt did not observe a native window, then passed on a clean retry.
+- Ran `node scripts/check-app-version.mjs --compare-ref origin/main --require-pr-minor`.
+- Ran `node scripts/check-app-version.mjs --tag v0.2.8`.
+- Ran `git diff --check`.
+
+## 2026-05-31 - Limit Parser File Discovery Concurrency
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> I'm getting this error from our app. What does it mean? How do we fix it?
+>
+> The local parser engine returned HTTP 500 for api/projects: {"error":"EMFILE: too many open files, scandir '[local Codex sessions path]'"}
+
+### Interpreted Intent
+
+The user wanted the local parser engine error explained and fixed so large local Codex session histories do not crash project loading.
+
+### Response / Work Done
+
+- Identified the root cause as unbounded parallel directory traversal in Codex log discovery.
+- Replaced recursive `Promise.all` scanning with an iterative, controlled directory walk that avoids opening many directories at once.
+- Added a small concurrency helper and capped parser file work for no-cache corpus parsing and metadata fingerprinting.
+- Added a fixture-driven discovery test that covers nested session paths, wide directory trees, sorted output, and ignored `.git` / `node_modules` directories.
+- Packaged and relaunched the native macOS app at build 123 for review.
+
+### Privacy Notes
+
+No raw Codex logs, private prompts, screenshots, session content, export payloads, credentials, or secrets were added. The reported local sessions path was redacted in this worklog.
+
+### Verification
+
+- Ran `wt bootstrap`.
+- Ran `npm run test -w @codex-log-viewer/parser`.
+- Ran `npm test`.
+- Ran `npm run lint`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`.
+- Ran `npm run privacy:scan`.
+- Ran `git diff --check`.
+- Relaunched `dist/macos/Codex Log Viewer.app`.
+
 ## 2026-05-30 - Fix Cursor Provider Review Issues
 
 Status: Completed

@@ -4,6 +4,7 @@ import { basename, dirname, join } from "node:path";
 import { createInterface } from "node:readline";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
+import { mapWithConcurrency } from "./concurrency.js";
 import { discoverCodexLogFiles, discoverLogFiles } from "./discover.js";
 import type {
   JsonObject,
@@ -24,6 +25,8 @@ import type {
   TurnRecord,
   UnknownEventRecord
 } from "./types.js";
+
+const PARSE_FILE_CONCURRENCY = 16;
 
 interface ParseState extends ProviderMetadata {
   sessionId: string;
@@ -94,14 +97,14 @@ const USER_REQUEST_MARKER = "## My request for Codex:";
 
 export async function parseCodexCorpus(options: ParseOptions = {}): Promise<ParsedCodexCorpus> {
   const files = await discoverCodexLogFiles(options.paths);
-  const parsedFiles = await Promise.all(files.map((file) => parseCodexLogFile(file)));
+  const parsedFiles = await mapWithConcurrency(files, PARSE_FILE_CONCURRENCY, (file) => parseCodexLogFile(file));
   return corpusFromFiles(parsedFiles);
 }
 
 export async function parseLogCorpus(options: ParseOptions = {}): Promise<ParsedCodexCorpus> {
   const provider = providerForDiscovery(options);
   const files = await discoverLogFiles(options.paths, provider, options.homeDir);
-  const parsedFileGroups = await Promise.all(files.map((file) => parseLogFile(file)));
+  const parsedFileGroups = await mapWithConcurrency(files, PARSE_FILE_CONCURRENCY, (file) => parseLogFile(file));
   return corpusFromFiles(parsedFileGroups.flat().filter((file) => providerMatches(file.provider, provider)));
 }
 
