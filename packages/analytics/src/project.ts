@@ -25,6 +25,19 @@ export function projectNameForCwd(cwd: string | undefined, aliases: ProjectAlias
   return basename(normalized);
 }
 
+function projectNameForProvider(provider: string, cwd: string | undefined, aliases: ProjectAlias[] = []): string {
+  if (cwd) {
+    return projectNameForCwd(cwd, aliases);
+  }
+  if (provider === "claude") {
+    return "Claude Code";
+  }
+  if (provider === "cursor") {
+    return "Cursor";
+  }
+  return "Unknown Project";
+}
+
 export function projectContextForSession(
   sessionId: string,
   corpus: ParsedCodexCorpus,
@@ -41,7 +54,7 @@ export function projectContextForSession(
   return {
     session,
     cwd,
-    project: projectNameForCwd(cwd, aliases)
+    project: projectNameForProvider(session?.provider ?? turn?.provider ?? "codex", cwd, aliases)
   };
 }
 
@@ -56,7 +69,7 @@ export function projectContextForFile(
   return {
     session,
     cwd,
-    project: projectNameForCwd(cwd, aliases)
+    project: projectNameForProvider(session?.provider ?? turn?.provider ?? locatorProvider(locator, corpus), cwd, aliases)
   };
 }
 
@@ -76,6 +89,7 @@ export function listProjects(corpus: ParsedCodexCorpus, aliases: ProjectAlias[] 
     const project = context.project;
     const existing = projects.get(project) ?? {
       project,
+      providers: [],
       cwdSamples: [],
       sessions: 0,
       turns: 0,
@@ -87,8 +101,13 @@ export function listProjects(corpus: ParsedCodexCorpus, aliases: ProjectAlias[] 
 
     existing.sessions += dailySessionCount(file);
     existing.turns += file.turns.length;
-    existing.messages += file.messages.filter((message) => message.sourceEvent === "event_msg.user_message").length;
+    existing.messages += file.messages.filter((message) => isSubmittedUserMessageShape(message)).length;
     existing.totalTokens += file.tokenUsage.reduce((sum, token) => sum + token.usage.totalTokens, 0);
+    const provider = file.provider ?? "codex";
+    if (!existing.providers.includes(provider)) {
+      existing.providers.push(provider);
+      existing.providers.sort((a, b) => a.localeCompare(b));
+    }
     for (const timestamp of projectActivityTimestamps(file)) {
       if (!existing.firstSeen || timestamp < existing.firstSeen) {
         existing.firstSeen = timestamp;
@@ -122,11 +141,23 @@ function sameSessionFile(record: SessionLocator, locator: SessionLocator): boole
 function dailySessionCount(file: ParsedCodexCorpus["files"][number]): number {
   const dateKeys = new Set<string>();
   for (const message of file.messages) {
-    if (message.sourceEvent === "event_msg.user_message") {
+    if (isSubmittedUserMessageShape(message)) {
       dateKeys.add(localDateKey(message.timestamp));
     }
   }
   return dateKeys.size;
+}
+
+function locatorProvider(locator: SessionLocator, corpus: ParsedCodexCorpus): string {
+  return corpus.files.find((file) => sameSessionFile(file, locator))?.provider ?? "codex";
+}
+
+function isSubmittedUserMessageShape(message: { role: string; sourceEvent: string }): boolean {
+  return message.role === "user" && (
+    message.sourceEvent === "event_msg.user_message" ||
+    message.sourceEvent === "claude.user_message" ||
+    message.sourceEvent === "cursor.user_message"
+  );
 }
 
 function localDateKey(timestamp: string | undefined): string {

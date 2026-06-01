@@ -1,12 +1,25 @@
 # Parser Schema Notes
 
-These notes describe observed Codex rollout JSONL shapes. They are not an official OpenAI schema.
+These notes describe observed provider log shapes. They are not official provider schemas.
 
 ## Known File Locations
 
 - `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`
 - `~/.codex/archived_sessions/rollout-*.jsonl`
 - user-provided JSONL files or directories
+- Claude Code JSONL files such as `~/.claude/projects/**/*.jsonl`
+- Cursor local SQLite state files such as `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb` when explicitly selected
+- explicit Cursor Markdown export files
+
+## Provider Metadata
+
+Normalized records carry:
+
+- `provider`: `codex`, `claude`, `cursor`, or a future provider id
+- `inputKind`: source format such as `codex-jsonl`, `claude-jsonl`, `cursor-vscdb`, or `cursor-markdown`
+- `sourceLabel`: display label for the source
+- optional `title`
+- optional `providerConversationId`
 
 ## Top-Level Shape
 
@@ -155,15 +168,38 @@ Initial normalized record types:
 - `UnknownEventRecord`
 - `ParseWarning`
 
+## Claude Code Notes
+
+- Top-level `user` records with text blocks become submitted user messages.
+- Top-level `assistant` records become assistant messages.
+- `tool_use` and `tool_result` content blocks become tool events.
+- `message.usage` maps to token usage, including `cache_creation_input_tokens` and `cache_read_input_tokens`.
+- Attachments, queue operations, future records, malformed lines, and unsupported shapes are preserved as unknown events or warnings.
+
+## Cursor Notes
+
+Cursor's public docs describe regular Agent chat history as local SQLite data and provide Markdown export as the preservation path. The local SQLite schema is private and may change, so support is fixture-driven and tolerant rather than a claim of complete schema coverage.
+
+- Local `state.vscdb` imports read `cursorDiskKV` keys shaped like `bubbleId:<composerId>:<bubbleId>`.
+- `composer.composerHeaders` records provide optional session title, created/updated timestamps, and workspace id metadata.
+- When a sibling `workspaceStorage/<workspace-id>/workspace.json` file is available, the parser maps Cursor sessions to a working directory.
+- Bubble type `1` becomes `cursor.user_message`; bubble type `2` becomes `cursor.assistant_message`.
+- Bubble `tokenCount.inputTokens` and `tokenCount.outputTokens` map to token usage when nonzero.
+- Bubble `toolResults` entries become tool events when present.
+- Unsupported bubble types with text are preserved as unknown events. Malformed bubble JSON and unsupported SQLite shapes become parse warnings.
+- Markdown export imports are best-effort and require recognizable user/assistant role headings or inline labels.
+
 ## Aggregation Rules
 
-- Count submitted user messages from `event_msg.user_message`.
+- Count submitted user messages from provider-specific submitted-message records.
+- Keep Codex Project Focus and Codex-specific metrics scoped to Codex records unless another provider exposes trustworthy equivalent data.
+- Generate audit worklogs from provider-specific submitted user-message records and captured assistant responses across enabled providers.
 - Use `response_item.message` with `role=user` as a fallback or audit path.
 - Aggregate per-turn tokens from `last_token_usage` when present.
 - Use cumulative `total_token_usage` for reconciliation, not as the primary sum.
 - Ignore token usage for `token_count` events with `info: null`.
 - Preserve unknown events and include counts in parser summaries.
-- Use normalized line numbers and turn ids to reconstruct the Codex interaction that follows a selected submitted user message.
+- Use normalized line numbers and turn ids to reconstruct the AI interaction that follows a selected submitted user message.
 
 ## Schema Change Policy
 

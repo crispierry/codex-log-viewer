@@ -146,6 +146,7 @@ final class LocalLogEngineServer {
     environment["CODEX_LOG_VIEWER_AUTH_TOKEN"] = authToken
     environment["CODEX_LOG_VIEWER_CACHE_DIR"] = try cacheDirectoryURL().path
     environment["CODEX_LOG_VIEWER_EVALS_DIR"] = try evalsDirectoryURL().path
+    environment["NODE_OPTIONS"] = Self.nodeOptionsWithHeapLimit(environment["NODE_OPTIONS"])
     process.environment = environment
 
     do {
@@ -318,5 +319,18 @@ final class LocalLogEngineServer {
       return bytes.map { String(format: "%02x", $0) }.joined()
     }
     return "\(UUID().uuidString)-\(UUID().uuidString)"
+  }
+
+  private static func nodeOptionsWithHeapLimit(_ existingOptions: String?) -> String {
+    let existingOptions = existingOptions?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    if existingOptions.contains("--max-old-space-size") {
+      return existingOptions
+    }
+
+    let configuredHeap = ProcessInfo.processInfo.environment["CODEX_LOG_VIEWER_NODE_MAX_OLD_SPACE_MB"]?
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    let heapLimit = configuredHeap?.isEmpty == false ? configuredHeap! : "12288"
+    let heapOption = "--max-old-space-size=\(heapLimit)"
+    return existingOptions.isEmpty ? heapOption : "\(existingOptions) \(heapOption)"
   }
 }

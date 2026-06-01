@@ -19,9 +19,9 @@ npm run app:mac
 From the app you can:
 
 - use the default Codex log locations
-- add custom files or directories from the native `Logs` menu
+- add custom files or directories from the native `Logs` menu, including Codex JSONL, Claude Code JSONL, Cursor `state.vscdb`, and explicit Cursor Markdown exports
 - select a project from the sidebar
-- use Browse to move from project to submitted message to Codex interaction, with sessions available as an optional view
+- use Browse to move from project to submitted message to AI interaction, with sessions available as an optional view
 - use Overview for metrics, charts, and Project Focus prompt categories for the selected project
 - use Search for cross-project or project-filtered message search
 - use Audit to generate, review, smart-merge, and approve `docs/ai-worklog.md`
@@ -43,17 +43,21 @@ open "dist/macos/Codex Log Viewer.app"
 
 ## Custom Sources
 
-Use `Logs > Choose Codex Log Location...` to pick custom Codex log files or folders. Use `Logs > Use Default Codex Log Locations` to return to `~/.codex/sessions` and `~/.codex/archived_sessions`. Recent custom sources and date filter choices are stored in local app settings.
+Use `Logs > Choose AI Log Location...` to pick custom log files or folders. Custom sources can include Codex JSONL, Claude Code JSONL, Cursor `state.vscdb`, and explicit Cursor Markdown exports. Use `Logs > Use Default AI Log Locations` to return to the default local source for the selected provider. Codex defaults to `~/.codex/sessions` and `~/.codex/archived_sessions`, Claude defaults to `~/.claude/projects`, and Cursor defaults to local Cursor app storage. Recent custom sources, provider filter choices, and date filter choices are stored in local app settings.
+
+The provider filter in the workspace header can show All, Codex, Claude, or Cursor records. Default launch remains Codex-only because the default source roots are Codex roots.
+
+For Cursor, choose the local SQLite state file directly, usually `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb`, or choose the containing Cursor `User` folder if you want discovery to include Cursor state databases. Cursor Markdown exports must be selected as explicit files so ordinary documentation folders are not interpreted as chat exports. Cursor's local SQLite schema is private and may change; unsupported records are reported as warnings instead of aborting the scan.
 
 The date filter lives in the workspace header. Use the calendar control to switch between all time, a specific day, week, month, year, or a custom start/end range. Future dates are disabled, and the current week, month, or year is capped at today.
 
 ## Message Search
 
-Use the Search section to search across parsed messages. Search respects the current source, project, date, role, model, and session filters. Choose `All Projects` to search across every discovered project.
+Use the Search section to search across parsed messages. Search respects the current source, provider, project, date, role, model, and session filters. Choose `All Projects` to search across every discovered project.
 
 Browse lists prompts you typed and submitted for the selected project without requiring a session first. Generated context wrappers, such as browser state, file attachments, review metadata, and goal-resume prompts, are excluded from that view.
 
-In Browse, the sidebar selects the project, the main Messages column lists submitted prompts for the current project and date filters, and the Codex Interaction column shows the selected message split into user message, Codex response, tool activity, system/developer context, and token/timing sections. User messages show their Project Focus category label anywhere they appear. Use `View > Show Sessions` when you want an extra session column before the message list.
+In Browse, the sidebar selects the project, the main Messages column lists submitted prompts for the current project, provider, and date filters, and the AI Interaction column shows the selected message split into user message, AI response, tool activity, system/developer context, and token/timing sections when those records exist. Codex user messages show their Project Focus category label anywhere they appear. Use `View > Show Sessions` when you want an extra session column before the message list.
 
 Use `View > Operational Messages...` to hide or show all operational prompt families at once, or control families independently: `Code review/QA`, `Deploy/release/run/build`, `Git commands`, `Plan approvals`, and `Testing/verification`. The same operational filters apply in Browse, optional session-message lists, Search results, and repeated prompts.
 
@@ -110,7 +114,7 @@ The CLI remains available for fixture tests and automation:
 npm run cli -- audit --repo /path/to/repo --output /path/to/repo/docs/ai-worklog.md
 ```
 
-The audit flow includes every submitted user message it finds for the repository and, by default, the captured Codex responses that followed those messages. Output uses public privacy mode unless `--raw` is passed in the CLI, redacting obvious local home paths, email addresses, and token-like strings while preserving user intent.
+The audit flow includes submitted user messages from all enabled providers and, by default, the captured AI responses that followed those messages. Codex, Claude Code, and Cursor entries use working-directory metadata for repository filtering when the provider exposes it. Output uses public privacy mode unless `--raw` is passed in the CLI, redacting obvious local home paths, email addresses, and token-like strings while preserving user intent.
 
 Smart merge mode skips generated sections already present in the target worklog and appends only new generated session sections. Existing reviewed text is preserved.
 
@@ -128,9 +132,9 @@ The CLI remains available for automation:
 
 ```sh
 npm run cli -- projects
-npm run cli -- summary --project sample-app --since 2026-04-22 --until 2026-04-29
+npm run cli -- summary --provider codex --project sample-app --since 2026-04-22 --until 2026-04-29
 npm run cli -- export --format json --output usage.json --project sample-app
-npm run cli -- audit --repo /path/to/repo --output /path/to/repo/docs/ai-worklog.md
+npm run cli -- audit --provider all --repo /path/to/repo --output /path/to/repo/docs/ai-worklog.md
 ```
 
 You can still pass `--path` for fixture testing:
@@ -141,11 +145,13 @@ npm run cli -- summary --path fixtures/codex/sample-session.jsonl
 
 You can pass multiple `--path` values.
 
+Use `--provider all|codex|claude|cursor` to filter CLI summaries, session lists, exports, and audit drafts. Custom `--path` values can point at mixed provider sources.
+
 ## Current Metric Rules
 
-- User-message counts come from `event_msg.user_message`.
+- User-message counts come from provider-specific submitted user-message records.
 - Unique user messages are trimmed, whitespace-collapsed, and lowercased.
-- Project Focus classifies submitted user messages into deterministic local categories such as `Feature design`, `Implementation`, `Bug fixes`, `Git commands`, `Deploy/release/run/build`, `Code review/QA`, `Planning/strategy`, `Research`, `Testing/verification`, `Content creation`, `Data/metrics`, `Documentation`, and `Context/observation`.
+- Project Focus classifies Codex submitted user messages into deterministic local categories such as `Feature design`, `Implementation`, `Bug fixes`, `Git commands`, `Deploy/release/run/build`, `Code review/QA`, `Planning/strategy`, `Research`, `Testing/verification`, `Content creation`, `Data/metrics`, `Documentation`, and `Context/observation`.
 - Project Focus percentages are based on the current project and date filters, with representative examples shown only inside the local app or non-redacted exports.
 - Repeated prompts are still grouped from normalized user messages in the analytics API and shown only for groups with more than one submission.
 - Short approvals such as `yes`, `go ahead`, `execute`, `do that`, or `sounds good` are grouped as `Plan approvals`.
@@ -158,6 +164,8 @@ You can pass multiple `--path` values.
 - Run `npm run evals:export-fixture-draft` to write a placeholder-only reviewed-example draft under `.codex/evals/` for manual sanitization.
 - Browse, Search, and operational prompt groups can hide or show grouped prompt families from `View > Operational Messages...`.
 - Token totals sum `token_count.info.last_token_usage` records.
+- Claude token totals use Anthropic usage fields, including cache creation and cache read token fields.
+- Cursor token totals use local bubble `tokenCount` fields when present; Cursor records without exposed token counts do not contribute token totals.
 - `token_count` events with `info: null` are ignored for token totals.
 - Unknown event shapes are preserved and counted.
 - Malformed JSONL lines produce parse warnings instead of aborting the scan.

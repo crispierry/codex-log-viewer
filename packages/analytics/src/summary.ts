@@ -1,15 +1,15 @@
 import { createHash } from "node:crypto";
-import { parseCodexCorpus, parseCodexCorpusWithCache } from "@codex-log-viewer/parser";
+import { defaultLogRoots, parseLogCorpus, parseLogCorpusWithCache } from "@codex-log-viewer/parser";
 import type {
   MessageRecord,
   ParsedCodexCorpus,
   ParsedCodexFile,
+  ProviderFilter,
   TokenUsageRecord,
   TurnRecord
 } from "@codex-log-viewer/parser";
-import { defaultCodexLogRoots } from "@codex-log-viewer/parser";
 import { classifyPromptIntent, promptIntentCategories } from "./prompt-intents.js";
-import { listProjects, projectContextForFile, projectNameForCwd } from "./project.js";
+import { listProjects, projectContextForFile } from "./project.js";
 import type {
   DateBucket,
   LoadedCorpus,
@@ -22,6 +22,7 @@ import type {
   ProjectAlias,
   ProjectListItem,
   ProjectSummary,
+  ProviderBucket,
   RepeatedUserMessage,
   SessionSummary,
   SummaryOptions
@@ -39,8 +40,9 @@ const operationalPromptIntentCategoryKeys = new Set<string>([
 
 export async function loadCorpus(options: SummaryOptions = {}): Promise<LoadedCorpus> {
   if (options.cacheDir) {
-    const loaded = await parseCodexCorpusWithCache({
+    const loaded = await parseLogCorpusWithCache({
       paths: options.paths,
+      provider: options.provider,
       cacheDir: options.cacheDir,
       refreshCache: options.refreshCache,
       rebuildCache: options.rebuildCache
@@ -52,7 +54,7 @@ export async function loadCorpus(options: SummaryOptions = {}): Promise<LoadedCo
     };
   }
 
-  const corpus = await parseCodexCorpus({ paths: options.paths });
+  const corpus = await parseLogCorpus({ paths: options.paths, provider: options.provider });
   return {
     corpus,
     projects: listProjects(corpus, options.aliases)
@@ -69,6 +71,9 @@ export function summarizeParsedCorpus(corpus: ParsedCodexCorpus, options: Summar
   const project = options.project ?? "All Projects";
   const range = dateRange(options);
   const visibleFiles = corpus.files.filter((file) => {
+    if (!providerInScope(recordProvider(file), options.provider)) {
+      return false;
+    }
     const context = projectContextForFile(file, corpus, aliases);
     return project === "All Projects" || context.project === project;
   });
@@ -79,7 +84,8 @@ export function summarizeParsedCorpus(corpus: ParsedCodexCorpus, options: Summar
     turns.map((turn) => [turnModelKey(turn.filePath, turn.sessionId, turn.turnId), turn.model ?? "unknown"])
   );
   const messages = corpus.messages.filter((message) => recordInScope(message, visibleFilePaths, range));
-  const submittedUserMessages = messages.filter((message) => message.sourceEvent === "event_msg.user_message");
+  const submittedUserMessages = messages.filter(isSubmittedUserMessage);
+  const codexSubmittedUserMessages = submittedUserMessages.filter(isCodexSubmittedUserMessage);
   const automationMessages = messages.filter((message) => message.sourceEvent === "event_msg.automation_message");
   const assistantMessages = messages.filter((message) => message.role === "assistant");
   const tokenUsage = corpus.tokenUsage.filter((token) => recordInScope(token, visibleFilePaths, range));
@@ -97,11 +103,12 @@ export function summarizeParsedCorpus(corpus: ParsedCodexCorpus, options: Summar
   const tokensByDay = bucketTokens(tokenUsage, "day");
   const models = modelBuckets(turns, tokenUsage, turnModels);
   const sessions = sessionSummaries(corpus, visibleFiles, aliases, range);
+  const providers = providerBuckets(visibleFiles, submittedUserMessages, tokenUsage);
   const activity = activityRange(sessions);
-  const repeatedUserMessages = repeatedUserMessageGroups(submittedUserMessages, corpus, aliases);
-  const promptIntents = promptIntentSummary(submittedUserMessages, corpus, aliases);
-  const visibleSessionFilePaths = new Set(sessions.map((session) => session.filePath));
-  const parseWarnings = corpus.warnings.filter((warning) => visibleSessionFilePaths.has(warning.filePath));
+  const repeatedUserMessages = repeatedUserMessageGroups(codexSubmittedUserMessages, corpus, aliases);
+  const promptIntents = promptIntentSummary(codexSubmittedUserMessages, corpus, aliases);
+  const visibleWarningFilePaths = warningFilePathsInScope(corpus, visibleFiles, range);
+  const parseWarnings = corpus.warnings.filter((warning) => visibleWarningFilePaths.has(warning.filePath));
 
   return {
     project,
@@ -110,7 +117,8 @@ export function summarizeParsedCorpus(corpus: ParsedCodexCorpus, options: Summar
     filters: {
       since: options.since,
       until: options.until,
-      paths: options.paths ?? defaultCodexLogRoots()
+      provider: options.provider,
+      paths: options.paths ?? defaultLogRoots(providerForDefaultSources(options))
     },
     totals: {
       sessions: sessions.length,
@@ -128,6 +136,7 @@ export function summarizeParsedCorpus(corpus: ParsedCodexCorpus, options: Summar
     messagesByHour,
     tokensByDay,
     models,
+    providers,
     sessions,
     promptIntents,
     repeatedUserMessages
@@ -150,6 +159,57 @@ function activityRange(sessions: SessionSummary[]): ProjectSummary["activity"] {
   };
 }
 
+function providerBuckets(
+  files: ParsedCodexFile[],
+  messages: MessageRecord[],
+  tokenUsage: TokenUsageRecord[]
+): ProviderBucket[] {
+  const buckets = new Map<string, ProviderBucket>();
+  const sessionKeysByProvider = new Map<string, Set<string>>();
+  for (const file of files) {
+    const provider = recordProvider(file);
+    const bucket = buckets.get(provider) ?? {
+      provider,
+      sessions: 0,
+      messages: 0,
+      totalTokens: 0
+    };
+    buckets.set(provider, bucket);
+  }
+  for (const message of messages) {
+    const provider = recordProvider(message);
+    const bucket = buckets.get(provider) ?? {
+      provider,
+      sessions: 0,
+      messages: 0,
+      totalTokens: 0
+    };
+    bucket.messages += 1;
+    buckets.set(provider, bucket);
+    const sessionKeys = sessionKeysByProvider.get(provider) ?? new Set<string>();
+    sessionKeys.add(sessionRecordKey(message.filePath, message.sessionId, localDateKey(message.timestamp)));
+    sessionKeysByProvider.set(provider, sessionKeys);
+  }
+  for (const token of dedupeTokenEvents(tokenUsage)) {
+    const provider = recordProvider(token);
+    const bucket = buckets.get(provider) ?? {
+      provider,
+      sessions: 0,
+      messages: 0,
+      totalTokens: 0
+    };
+    bucket.totalTokens += token.usage.totalTokens;
+    buckets.set(provider, bucket);
+  }
+  for (const [provider, sessionKeys] of sessionKeysByProvider) {
+    const bucket = buckets.get(provider);
+    if (bucket) {
+      bucket.sessions = sessionKeys.size;
+    }
+  }
+  return [...buckets.values()].sort((a, b) => b.messages - a.messages || a.provider.localeCompare(b.provider));
+}
+
 export function projectsFromCorpus(corpus: ParsedCodexCorpus, aliases: ProjectAlias[] = []): ProjectListItem[] {
   return listProjects(corpus, aliases);
 }
@@ -165,6 +225,7 @@ export function searchMessages(corpus: ParsedCodexCorpus, options: MessageSearch
   const sessionFilter = options.sessionId?.trim();
   const filePathFilter = options.filePath?.trim();
   const dateKeyFilter = options.dateKey?.trim();
+  const providerFilter = options.provider;
   const hiddenCategories = new Set((options.hiddenCategories ?? []).map((category) => category.trim()).filter(Boolean));
 
   const range = dateRange(options);
@@ -172,9 +233,14 @@ export function searchMessages(corpus: ParsedCodexCorpus, options: MessageSearch
   const turnModels = new Map(
     corpus.turns.map((turn) => [turnModelKey(turn.filePath, turn.sessionId, turn.turnId), turn.model ?? "unknown"])
   );
-  const matches: MessageSearchResult[] = [];
+  const pageCandidateLimit = offset + limit;
+  const pageCandidates: MessageSearchCandidate[] = [];
+  let totalMatches = 0;
 
   for (const message of corpus.messages) {
+    if (!providerInScope(recordProvider(message), providerFilter)) {
+      continue;
+    }
     if (sessionFilter && message.sessionId !== sessionFilter) {
       continue;
     }
@@ -194,7 +260,7 @@ export function searchMessages(corpus: ParsedCodexCorpus, options: MessageSearch
       continue;
     }
 
-    if (options.submittedOnly && message.sourceEvent !== "event_msg.user_message") {
+    if (options.submittedOnly && !isSubmittedUserMessage(message)) {
       continue;
     }
 
@@ -218,56 +284,110 @@ export function searchMessages(corpus: ParsedCodexCorpus, options: MessageSearch
       continue;
     }
 
-    const category = message.sourceEvent === "event_msg.user_message"
+    const category = isCodexSubmittedUserMessage(message)
       ? userMessageCategoryLabel(message.content)
       : undefined;
     if (category && hiddenCategories.has(category)) {
       continue;
     }
-    const promptIntent = message.sourceEvent === "event_msg.user_message"
-      ? classifyPromptIntent(message.content)
-      : undefined;
-
-    matches.push({
-      id: [
-        message.filePath,
-        message.sessionId,
-        message.lineNumber ?? "",
-        message.turnId ?? "",
-        message.timestamp ?? "",
-        message.role,
-        message.sourceEvent,
-        matches.length
-      ].join("#"),
-      sessionId: message.sessionId,
-      filePath: message.filePath,
-      dateKey,
-      project: context.project,
-      cwd: context.cwd,
-      lineNumber: message.lineNumber,
-      turnId: message.turnId,
+    const matchIndex = totalMatches;
+    totalMatches += 1;
+    appendSearchCandidate(pageCandidates, {
+      message,
+      context,
       model,
-      timestamp: message.timestamp,
-      role: message.role,
-      sourceEvent: message.sourceEvent,
+      dateKey,
       category,
-      promptIntentKey: promptIntent?.key,
-      promptIntent: promptIntent?.label,
-      snippet: snippetFor(message.content, query),
-      content: message.content
-    });
+      matchIndex
+    }, pageCandidateLimit);
   }
 
-  matches.sort((a, b) => (b.timestamp ?? "").localeCompare(a.timestamp ?? ""));
+  pruneSearchCandidates(pageCandidates, pageCandidateLimit);
+  const results = pageCandidates
+    .slice(offset, offset + limit)
+    .map((candidate) => searchCandidateToResult(candidate, query));
 
   return {
     query,
     project,
     generatedAt: new Date().toISOString(),
-    totalMatches: matches.length,
+    totalMatches,
     limit,
     offset,
-    results: matches.slice(offset, offset + limit)
+    results
+  };
+}
+
+interface MessageSearchCandidate {
+  message: MessageRecord;
+  context: ReturnType<typeof projectContextForFile>;
+  model?: string;
+  dateKey: string;
+  category?: string;
+  matchIndex: number;
+}
+
+function appendSearchCandidate(
+  candidates: MessageSearchCandidate[],
+  candidate: MessageSearchCandidate,
+  limit: number
+): void {
+  candidates.push(candidate);
+  const pruneThreshold = Math.max(limit * 2, limit + 100);
+  if (candidates.length > pruneThreshold) {
+    pruneSearchCandidates(candidates, limit);
+  }
+}
+
+function pruneSearchCandidates(candidates: MessageSearchCandidate[], limit: number): void {
+  candidates.sort(compareSearchCandidates);
+  if (candidates.length > limit) {
+    candidates.length = limit;
+  }
+}
+
+function compareSearchCandidates(a: MessageSearchCandidate, b: MessageSearchCandidate): number {
+  const timestampCompare = (b.message.timestamp ?? "").localeCompare(a.message.timestamp ?? "");
+  return timestampCompare || a.matchIndex - b.matchIndex;
+}
+
+function searchCandidateToResult(candidate: MessageSearchCandidate, query: string): MessageSearchResult {
+  const { message, context, model, dateKey, category, matchIndex } = candidate;
+  const promptIntent = isCodexSubmittedUserMessage(message)
+    ? classifyPromptIntent(message.content)
+    : undefined;
+
+  return {
+    id: [
+      message.filePath,
+      message.sessionId,
+      message.lineNumber ?? "",
+      message.turnId ?? "",
+      message.timestamp ?? "",
+      message.role,
+      message.sourceEvent,
+      matchIndex
+    ].join("#"),
+    provider: recordProvider(message),
+    sourceLabel: message.sourceLabel,
+    title: message.title,
+    providerConversationId: message.providerConversationId,
+    sessionId: message.sessionId,
+    filePath: message.filePath,
+    dateKey,
+    project: context.project,
+    cwd: context.cwd,
+    lineNumber: message.lineNumber,
+    turnId: message.turnId,
+    model,
+    timestamp: message.timestamp,
+    role: message.role,
+    sourceEvent: message.sourceEvent,
+    category,
+    promptIntentKey: promptIntent?.key,
+    promptIntent: promptIntent?.label,
+    snippet: snippetFor(message.content, query),
+    content: message.content
   };
 }
 
@@ -832,22 +952,26 @@ function sessionSummaries(
     }
 
     return [...buckets.entries()].flatMap(([dateKey, bucket]) => {
-      const userMessages = bucket.messages.filter((message) => message.sourceEvent === "event_msg.user_message");
-      if (userMessages.length === 0) {
+      const submittedUserMessages = bucket.messages.filter(isSubmittedUserMessage);
+      if (submittedUserMessages.length === 0) {
         return [];
       }
 
       const sortedTimestamps = bucket.timestamps.sort();
 
       return {
+        provider: recordProvider(file),
+        sourceLabel: file.sourceLabel,
+        title: file.title ?? session?.title,
+        providerConversationId: file.providerConversationId ?? session?.providerConversationId,
         sessionId,
         filePath: file.filePath,
         dateKey,
-        project: projectNameForCwd(cwd, aliases),
+        project: projectContextForFile(file, corpus, aliases).project,
         cwd,
         firstSeen: sortedTimestamps[0],
         lastSeen: sortedTimestamps.at(-1),
-        userMessages: userMessages.length,
+        userMessages: submittedUserMessages.length,
         automationMessages: bucket.messages.filter((message) => message.sourceEvent === "event_msg.automation_message").length,
         assistantMessages: bucket.messages.filter((message) => message.role === "assistant").length,
         totalTokens: bucket.tokens.reduce((sum, token) => sum + token.usage.totalTokens, 0),
@@ -859,6 +983,49 @@ function sessionSummaries(
     (b.lastSeen ?? "").localeCompare(a.lastSeen ?? "") ||
     a.sessionId.localeCompare(b.sessionId)
   );
+}
+
+function warningFilePathsInScope(
+  corpus: ParsedCodexCorpus,
+  files: ParsedCodexFile[],
+  range: { since?: number; until?: number }
+): Set<string> {
+  const hasDateFilter = range.since !== undefined || range.until !== undefined;
+  return new Set(
+    files
+      .filter((file) =>
+        !hasDateFilter ||
+        fileHasActivityInRange(corpus, file, range) ||
+        !fileHasTimestampedActivity(corpus, file)
+      )
+      .map((file) => file.filePath)
+  );
+}
+
+function fileHasActivityInRange(
+  corpus: ParsedCodexCorpus,
+  file: ParsedCodexFile,
+  range: { since?: number; until?: number }
+): boolean {
+  return timestampedFileRecords(corpus, file).some((record) => timestampInRange(record.timestamp, range));
+}
+
+function fileHasTimestampedActivity(corpus: ParsedCodexCorpus, file: ParsedCodexFile): boolean {
+  return timestampedFileRecords(corpus, file).some((record) => Boolean(record.timestamp));
+}
+
+function timestampedFileRecords(
+  corpus: ParsedCodexCorpus,
+  file: ParsedCodexFile
+): Array<{ filePath: string; sessionId: string; timestamp?: string }> {
+  return [
+    ...corpus.sessions,
+    ...corpus.messages,
+    ...corpus.turns,
+    ...corpus.tokenUsage,
+    ...corpus.toolEvents,
+    ...corpus.unknownEvents
+  ].filter((record) => sameSessionFile(record, file));
 }
 
 function recordInScope(
@@ -875,4 +1042,28 @@ function sameSessionFile(record: { filePath: string; sessionId: string }, file: 
 
 function sessionRecordKey(filePath: string, sessionId: string, suffix?: string): string {
   return suffix === undefined ? `${filePath}\n${sessionId}` : `${filePath}\n${sessionId}\n${suffix}`;
+}
+
+export function isSubmittedUserMessage(message: MessageRecord): boolean {
+  return message.role === "user" && (
+    message.sourceEvent === "event_msg.user_message" ||
+    message.sourceEvent === "claude.user_message" ||
+    message.sourceEvent === "cursor.user_message"
+  );
+}
+
+function isCodexSubmittedUserMessage(message: MessageRecord): boolean {
+  return recordProvider(message) === "codex" && message.sourceEvent === "event_msg.user_message";
+}
+
+function providerInScope(provider: string, filter: ProviderFilter | undefined): boolean {
+  return !filter || filter === "all" || provider === filter;
+}
+
+function providerForDefaultSources(options: SummaryOptions): ProviderFilter {
+  return options.provider ?? (options.paths && options.paths.length > 0 ? "all" : "codex");
+}
+
+function recordProvider(record: { provider?: string }): string {
+  return record.provider ?? "codex";
 }

@@ -176,6 +176,10 @@ async function handleRequest(
     sendJson(response, 200, withPerformanceMetadata({
       session,
       file: {
+        provider: file.provider,
+        sourceLabel: file.sourceLabel,
+        title: file.title,
+        providerConversationId: file.providerConversationId,
         filePath: file.filePath,
         sessionId: file.sessionId,
         lineCount: file.lineCount
@@ -205,11 +209,8 @@ async function handleRequest(
 
   if (url.pathname === "/api/messages/search") {
     const corpusStartedAt = performance.now();
-    const loaded = await loadCachedCorpus(url, options, corpusCache);
-    const corpusLoadMs = elapsedMs(corpusStartedAt);
     const limit = Number(url.searchParams.get("limit") ?? 100);
     const offset = Number(url.searchParams.get("offset") ?? 0);
-    const searchStartedAt = performance.now();
     const searchOptions = {
       ...summaryOptionsFromQuery(url, options.paths),
       query: url.searchParams.get("q") ?? "",
@@ -223,6 +224,28 @@ async function handleRequest(
       limit,
       offset
     };
+    const splitProviderSearch = await searchMessagesAcrossDefaultProviders(
+      url,
+      options,
+      searchOptions,
+      corpusCache,
+      searchIndexCache,
+      searchIndexRebuilds
+    );
+    if (splitProviderSearch) {
+      sendJson(response, 200, withPerformanceMetadata(withCacheMetadata({
+        search: splitProviderSearch.search
+      }, splitProviderSearch.cache), {
+        totalMs: elapsedMs(requestStartedAt),
+        corpusLoadMs: elapsedMs(corpusStartedAt),
+        searchMs: splitProviderSearch.searchMs
+      }));
+      return;
+    }
+
+    const loaded = await loadCachedCorpus(url, options, corpusCache);
+    const corpusLoadMs = elapsedMs(corpusStartedAt);
+    const searchStartedAt = performance.now();
     const search = searchMessagesWithLocalIndex(url, options, loaded, searchOptions, searchIndexCache, searchIndexRebuilds) ??
       searchMessages(loaded.corpus, searchOptions);
     sendJson(response, 200, withPerformanceMetadata(withCacheMetadata({
@@ -393,8 +416,9 @@ function loadCachedCorpus(
   const paths = pathsFromQuery(url, options.paths);
   const refreshCache = url.searchParams.has("refresh");
   const rebuildCache = url.searchParams.get("rebuild") === "1";
+  const provider = providerFromQuery(url);
   const cacheDir = options.cacheDir ?? serverCacheDir();
-  const key = cacheKey(paths, cacheDir);
+  const key = cacheKey(paths, cacheDir, provider);
   const cached = corpusCache.get(key);
 
   if (cached && !cached.loaded) {
@@ -411,6 +435,7 @@ function loadCachedCorpus(
   const entry: CorpusCacheEntry = {
     promise: loadCorpus({
       paths,
+      provider,
       cacheDir,
       refreshCache,
       rebuildCache
@@ -427,6 +452,104 @@ function loadCachedCorpus(
   return entry.promise;
 }
 
+async function searchMessagesAcrossDefaultProviders(
+  url: URL,
+  options: ServerOptions,
+  searchOptions: MessageSearchOptions,
+  corpusCache: Map<string, CorpusCacheEntry>,
+  searchIndexCache: Map<string, SearchIndexCacheEntry>,
+  searchIndexRebuilds: Set<string>
+): Promise<{ search: MessageSearchSummary; cache?: ParseCacheMetadata; searchMs: number } | undefined> {
+  if (searchOptions.provider !== "all" || pathsFromQuery(url, options.paths)) {
+    return undefined;
+  }
+
+  const startedAt = performance.now();
+  const providers: Array<NonNullable<SummaryOptions["provider"]>> = ["codex", "claude", "cursor"];
+  const limit = clampSearchLimit(searchOptions.limit);
+  const offset = clampSearchOffset(searchOptions.offset);
+  const providerLimit = offset + limit;
+  const providerSearches = await Promise.all(providers.map(async (provider) => {
+    const providerUrl = new URL(url.toString());
+    providerUrl.searchParams.set("provider", provider);
+    providerUrl.searchParams.set("offset", "0");
+    providerUrl.searchParams.set("limit", String(providerLimit));
+    const loaded = await loadCachedCorpus(providerUrl, options, corpusCache);
+    const providerSearchOptions = {
+      ...searchOptions,
+      provider,
+      limit: providerLimit,
+      offset: 0
+    };
+    const search = searchMessagesWithLocalIndex(
+      providerUrl,
+      options,
+      loaded,
+      providerSearchOptions,
+      searchIndexCache,
+      searchIndexRebuilds
+    ) ?? searchMessages(loaded.corpus, providerSearchOptions);
+    return { search, cache: loaded.cache };
+  }));
+
+  const results = providerSearches
+    .flatMap((entry) => entry.search.results)
+    .sort((a, b) => (b.timestamp ?? "").localeCompare(a.timestamp ?? ""))
+    .slice(offset, offset + limit);
+
+  return {
+    search: {
+      query: searchOptions.query ?? "",
+      project: searchOptions.project ?? "All Projects",
+      generatedAt: new Date().toISOString(),
+      totalMatches: providerSearches.reduce((sum, entry) => sum + entry.search.totalMatches, 0),
+      limit,
+      offset,
+      results
+    },
+    cache: mergeCacheMetadata(providerSearches.map((entry) => entry.cache)),
+    searchMs: elapsedMs(startedAt)
+  };
+}
+
+function mergeCacheMetadata(caches: Array<ParseCacheMetadata | undefined>): ParseCacheMetadata | undefined {
+  const visibleCaches = caches.filter((cache): cache is ParseCacheMetadata => Boolean(cache));
+  if (visibleCaches.length === 0) {
+    return undefined;
+  }
+  const statusPriority: Record<ParseCacheMetadata["cacheStatus"], number> = {
+    rebuilt: 4,
+    updated: 3,
+    checking: 2,
+    ready: 1
+  };
+  return {
+    cacheStatus: visibleCaches.reduce((current, cache) =>
+      statusPriority[cache.cacheStatus] > statusPriority[current] ? cache.cacheStatus : current,
+      visibleCaches[0]?.cacheStatus ?? "ready"
+    ),
+    reusedFiles: visibleCaches.reduce((sum, cache) => sum + cache.reusedFiles, 0),
+    parsedFiles: visibleCaches.reduce((sum, cache) => sum + cache.parsedFiles, 0),
+    removedFiles: visibleCaches.reduce((sum, cache) => sum + cache.removedFiles, 0),
+    totalFiles: visibleCaches.reduce((sum, cache) => sum + cache.totalFiles, 0),
+    updatedAt: visibleCaches.map((cache) => cache.updatedAt).sort().at(-1) ?? new Date().toISOString()
+  };
+}
+
+function clampSearchLimit(limit: number | undefined): number {
+  if (!limit || Number.isNaN(limit)) {
+    return 100;
+  }
+  return Math.max(1, Math.min(10_000, Math.trunc(limit)));
+}
+
+function clampSearchOffset(offset: number | undefined): number {
+  if (!offset || Number.isNaN(offset)) {
+    return 0;
+  }
+  return Math.max(0, Math.trunc(offset));
+}
+
 function searchMessagesWithLocalIndex(
   url: URL,
   options: ServerOptions,
@@ -441,7 +564,7 @@ function searchMessagesWithLocalIndex(
   }
 
   const paths = pathsFromQuery(url, options.paths);
-  const key = cacheKey(paths, cacheDir);
+  const key = cacheKey(paths, cacheDir, searchOptions.provider);
   if (loaded.corpus.messages.length < searchIndexMinMessages()) {
     searchIndexCache.get(key)?.handle.close();
     searchIndexCache.delete(key);
@@ -490,6 +613,9 @@ function scheduleSearchIndexRebuild(
       const handle = openSearchIndex(loaded.corpus, indexPath);
       searchIndexCache.get(key)?.handle.close();
       searchIndexCache.set(key, { handle });
+    } catch {
+      searchIndexCache.get(key)?.handle.close();
+      searchIndexCache.delete(key);
     } finally {
       searchIndexRebuilds.delete(key);
     }
@@ -512,13 +638,19 @@ function summaryOptionsFromQuery(url: URL, fallbackPaths?: string[]): SummaryOpt
     paths: pathsFromQuery(url, fallbackPaths),
     project: projectFromQuery(url),
     since: url.searchParams.get("since") ?? undefined,
-    until: url.searchParams.get("until") ?? undefined
+    until: url.searchParams.get("until") ?? undefined,
+    provider: providerFromQuery(url)
   };
 }
 
 function projectFromQuery(url: URL): string | undefined {
   const project = url.searchParams.get("project")?.trim();
   return project && project !== "All Projects" ? project : undefined;
+}
+
+function providerFromQuery(url: URL): SummaryOptions["provider"] {
+  const provider = url.searchParams.get("provider")?.trim();
+  return provider ? provider : undefined;
 }
 
 function pathsFromQuery(url: URL, fallbackPaths?: string[]): string[] | undefined {
@@ -607,6 +739,9 @@ function findVisibleSessionFile(
     if (filePath && file.filePath !== filePath) {
       return false;
     }
+    if (options.provider && options.provider !== "all" && file.provider !== options.provider) {
+      return false;
+    }
     if (project && projectContextForFile(file, corpus).project !== project) {
       return false;
     }
@@ -635,7 +770,7 @@ function fileHasSubmittedUserMessageOnDate(
 ): boolean {
   return file.messages.some(
     (message) =>
-      message.sourceEvent === "event_msg.user_message" &&
+      isSubmittedUserMessageShape(message) &&
       localDateKey(message.timestamp) === dateKey &&
       timestampInRange(message.timestamp, range)
   );
@@ -699,9 +834,21 @@ function localDateKey(timestamp: string | undefined): string {
   return `${year}-${month}-${day}`;
 }
 
-function cacheKey(paths: string[] | undefined, cacheDir: string | undefined): string {
+function isSubmittedUserMessageShape(message: { role: string; sourceEvent: string }): boolean {
+  return message.role === "user" && (
+    message.sourceEvent === "event_msg.user_message" ||
+    message.sourceEvent === "claude.user_message" ||
+    message.sourceEvent === "cursor.user_message"
+  );
+}
+
+function cacheKey(paths: string[] | undefined, cacheDir: string | undefined, provider?: string): string {
   const sourceKey = paths && paths.length > 0 ? [...paths].sort().join("\n") : "__default__";
-  return `${cacheDir ?? "__no_cache__"}\n${sourceKey}`;
+  return `${cacheDir ?? "__no_cache__"}\n${effectiveProviderForCache(paths, provider)}\n${sourceKey}`;
+}
+
+function effectiveProviderForCache(paths: string[] | undefined, provider?: string): string {
+  return provider ?? (paths && paths.length > 0 ? "all" : "codex");
 }
 
 function serverCacheDir(): string | undefined {

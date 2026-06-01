@@ -119,6 +119,22 @@ struct WorkspaceHeaderView: View {
 
       Spacer(minLength: 12)
 
+      Picker(
+        "Provider",
+        selection: Binding(
+          get: { model.providerFilter },
+          set: { model.setProviderFilter($0) }
+        )
+      ) {
+        ForEach(ProviderFilter.allCases) { provider in
+          Text(provider.label).tag(provider)
+        }
+      }
+      .labelsHidden()
+      .pickerStyle(.segmented)
+      .frame(width: 300)
+      .help("Filter logs by provider")
+
       DateRangeControlView()
 
       Picker("Section", selection: $model.selectedSection) {
@@ -182,7 +198,7 @@ struct DateRangePopoverView: View {
 
       switch model.dateRangeMode {
       case .all:
-        detailText("All local Codex activity is included.")
+        detailText("All local AI activity is included.")
       case .custom:
         VStack(alignment: .leading, spacing: 10) {
           formRow(label: "Start") {
@@ -477,7 +493,7 @@ struct SessionBrowserColumn: View {
 
   private var emptySessionsDescription: String {
     if model.summary?.totals.sessions == 0 {
-      return "Choose another source or return to the default Codex log locations."
+      return "Choose another source or return to the default log locations."
     }
     return "Adjust the current filters."
   }
@@ -753,8 +769,8 @@ struct SentMessagesBrowserColumn: View {
       }
       return "\(sessionUserMessages.count.formatted()) sent"
     }
-    if model.isBrowseMessagesLoading && browseMessages.isEmpty {
-      return "Loading"
+    if model.isBrowseMessagesLoading {
+      return browseMessages.isEmpty ? "Loading" : "Loading latest"
     }
     guard let summary = model.browseMessagesSummary else {
       return nil
@@ -776,6 +792,7 @@ struct SentMessageBrowserRow: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
       HStack(alignment: .firstTextBaseline, spacing: 8) {
+        ProviderBadge(provider: message.provider)
         PromptIntentBadge(key: message.promptIntentKey, label: message.promptIntent)
         Text(formattedDate(message.timestamp))
           .font(.caption.monospacedDigit())
@@ -801,6 +818,7 @@ struct SentMessageResultBrowserRow: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
       HStack(alignment: .firstTextBaseline, spacing: 8) {
+        ProviderBadge(provider: message.provider)
         PromptIntentBadge(key: message.promptIntentKey, label: message.promptIntent)
         Label {
           Text(message.project)
@@ -847,6 +865,36 @@ struct PromptIntentBadge: View {
       .fontWeight(.semibold)
       .foregroundStyle(projectFocusColor(for: key ?? ""))
       .accessibilityLabel("Prompt category: \(label)")
+    }
+  }
+}
+
+struct ProviderBadge: View {
+  let provider: String?
+
+  var body: some View {
+    if let provider, !provider.isEmpty {
+      Text(providerLabel(provider))
+        .font(.caption)
+        .fontWeight(.semibold)
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 5)
+        .padding(.vertical, 1)
+        .background(Color.primary.opacity(0.07), in: Capsule())
+        .accessibilityLabel("Provider: \(providerLabel(provider))")
+    }
+  }
+
+  private func providerLabel(_ provider: String) -> String {
+    switch provider {
+    case "codex":
+      return "Codex"
+    case "claude":
+      return "Claude"
+    case "cursor":
+      return "Cursor"
+    default:
+      return provider
     }
   }
 }
@@ -903,8 +951,8 @@ struct InteractionBrowserColumn: View {
             systemImage: "sidebar.right",
             description: Text(
               model.showSessionBrowser
-                ? "Choose a session and sent message to inspect Codex's response."
-                : "Choose a sent message to inspect Codex's response."
+                ? "Choose a session and sent message to inspect the AI response."
+                : "Choose a sent message to inspect the AI response."
             )
           )
           .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -912,7 +960,7 @@ struct InteractionBrowserColumn: View {
           ContentUnavailableView(
             "Select a Message",
             systemImage: "text.bubble",
-            description: Text("Choose a sent message to show the Codex interaction.")
+            description: Text("Choose a sent message to show the AI interaction.")
           )
           .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if let selectedInteraction = model.selectedInteraction {
@@ -925,7 +973,7 @@ struct InteractionBrowserColumn: View {
           ContentUnavailableView(
             "Interaction Not Found",
             systemImage: "exclamationmark.triangle",
-            description: Text("This message could not be matched to a Codex response.")
+            description: Text("This message could not be matched to a AI response.")
           )
           .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -933,7 +981,7 @@ struct InteractionBrowserColumn: View {
       .frame(maxWidth: .infinity, maxHeight: .infinity)
 
       Divider()
-      BrowserColumnStatusBar("Codex Interaction", subtitle: interactionSubtitle)
+      BrowserColumnStatusBar("AI Interaction", subtitle: interactionSubtitle)
     }
     .background(.background)
   }
@@ -1185,7 +1233,7 @@ struct HeaderView: View {
       Text(model.selectedProject)
         .font(.largeTitle)
         .fontWeight(.semibold)
-      Text("Local Codex usage, sessions, tokens, and message search.")
+      Text("Local AI usage, sessions, tokens, and message search.")
         .foregroundStyle(.secondary)
       if let activityRangeText = model.activityRangeText {
         Text(activityRangeText)
@@ -1208,7 +1256,7 @@ struct EmptyLibraryView: View {
     ContentUnavailableView(
       "No Logs Found",
       systemImage: "tray",
-      description: Text("Choose a Codex log folder or return to the default source.")
+      description: Text("Choose a log folder or return to the default source.")
     )
     .frame(maxWidth: .infinity, minHeight: 160)
   }
@@ -2369,7 +2417,7 @@ struct SessionsTableView: View {
 
   private var emptySessionsDescription: String {
     if model.summary?.totals.sessions == 0 {
-      return "Choose another source or return to the default Codex log locations."
+      return "Choose another source or return to the default log locations."
     }
     return "Adjust the current filters."
   }
@@ -2404,6 +2452,11 @@ struct SessionsTableView: View {
                 Text(session.userMessages.formatted())
               }
               .width(92)
+
+              TableColumn("Provider") { session in
+                ProviderBadge(provider: session.provider)
+              }
+              .width(96)
 
               TableColumn("Project") { session in
                 Text(session.project)
@@ -2665,7 +2718,7 @@ struct SessionUserMessagesInspector: View {
           CodexInteractionView(interaction: selectedInteraction)
         } else if !userMessages.isEmpty {
           Divider()
-          Text("Select a user message to show the Codex response.")
+          Text("Select a user message to show the AI response.")
             .font(.callout)
             .foregroundStyle(.secondary)
         }
@@ -2718,6 +2771,7 @@ struct SessionUserMessagesInspector: View {
   private func userMessageRow(message: MessageDetail, isSelected: Bool) -> some View {
     VStack(alignment: .leading, spacing: 6) {
       HStack(alignment: .firstTextBaseline, spacing: 8) {
+        ProviderBadge(provider: message.provider)
         PromptIntentBadge(key: message.promptIntentKey, label: message.promptIntent)
         Text(formattedDate(message.timestamp))
           .font(.caption.monospacedDigit())
@@ -2764,7 +2818,7 @@ struct CodexInteractionView: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
-      Label("Codex Interaction", systemImage: "text.bubble")
+      Label("AI Interaction", systemImage: "text.bubble")
         .font(.title3)
         .fontWeight(.semibold)
 
@@ -2777,9 +2831,9 @@ struct CodexInteractionView: View {
         promptIntent: interaction.userMessage.promptIntent
       )
 
-      InspectorSectionTitle("Codex Response")
+      InspectorSectionTitle("AI Response")
       if interaction.assistantMessages.isEmpty {
-        Text("No Codex response was found for this message.")
+        Text("No AI response was found for this message.")
           .foregroundStyle(.secondary)
       } else {
         LazyVStack(alignment: .leading, spacing: 10) {
@@ -2831,9 +2885,9 @@ struct CodexInteractionView: View {
 
   private func responseTitle(_ message: MessageDetail) -> String {
     if let phase = message.phase, !phase.isEmpty {
-      return "Codex Response - \(phase.replacingOccurrences(of: "_", with: " ").capitalized)"
+      return "AI Response - \(phase.replacingOccurrences(of: "_", with: " ").capitalized)"
     }
-    return "Codex Response"
+    return "AI Response"
   }
 
   private func contextTitle(_ message: MessageDetail) -> String {

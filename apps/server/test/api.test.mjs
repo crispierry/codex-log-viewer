@@ -1,15 +1,19 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readdir, readFile, rm, unlink, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readdir, readFile, rm, unlink, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { tmpdir } from "node:os";
+import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { explainPromptIntent } from "@codex-log-viewer/analytics";
 import { startServer } from "../dist/index.js";
+import { openSearchIndex } from "../dist/search-index.js";
 
 const testDir = dirname(fileURLToPath(import.meta.url));
 const fixturePath = resolve(testDir, "../../../fixtures/codex/sample-session.jsonl");
 const interactionDetailFixturePath = resolve(testDir, "../../../fixtures/codex/interaction-detail.jsonl");
+const claudeFixturePath = resolve(testDir, "../../../fixtures/claude/basic-session.jsonl");
+const cursorMarkdownFixturePath = resolve(testDir, "../../../fixtures/cursor/basic-export.md");
 
 test("local API requires bearer token when auth is enabled", async () => {
   const server = await startServer({ port: 0, authToken: "test-token", paths: [fixturePath] });
@@ -39,6 +43,93 @@ test("local API requires bearer token when auth is enabled", async () => {
     assert.equal(body.projects[0]?.lastSeen, "2026-04-27T19:01:12.000Z");
   } finally {
     await server.close();
+  }
+});
+
+test("local API exposes provider filters for mixed sources", async () => {
+  const server = await startServer({
+    port: 0,
+    authToken: "test-token",
+    paths: [fixturePath, claudeFixturePath, cursorMarkdownFixturePath]
+  });
+  const headers = { authorization: "Bearer test-token" };
+
+  try {
+    const summary = await fetch(`${server.url}/api/summary?provider=claude`, { headers });
+    assert.equal(summary.status, 200);
+    const summaryBody = await summary.json();
+    assert.equal(summaryBody.summary.providers[0]?.provider, "claude");
+    assert.equal(summaryBody.summary.totals.userMessages, 1);
+
+    const search = await fetch(`${server.url}/api/messages/search?provider=claude&submittedOnly=true&role=user`, {
+      headers
+    });
+    assert.equal(search.status, 200);
+    const searchBody = await search.json();
+    assert.equal(searchBody.search.totalMatches, 1);
+    assert.equal(searchBody.search.results[0]?.provider, "claude");
+    assert.equal(searchBody.search.results[0]?.content, "Add Claude fixture support");
+
+    const cursorSearch = await fetch(`${server.url}/api/messages/search?provider=cursor&submittedOnly=true&role=user`, {
+      headers
+    });
+    assert.equal(cursorSearch.status, 200);
+    const cursorSearchBody = await cursorSearch.json();
+    assert.equal(cursorSearchBody.search.totalMatches, 1);
+    assert.equal(cursorSearchBody.search.results[0]?.provider, "cursor");
+    assert.equal(cursorSearchBody.search.results[0]?.content, "Add Cursor Markdown import support.");
+  } finally {
+    await server.close();
+  }
+});
+
+test("local API keeps default Codex cache separate from explicit all-provider cache", async () => {
+  const tempHome = await mkdtemp(`${tmpdir()}/codex-log-viewer-server-home-`);
+  const previousHome = process.env.HOME;
+  const headers = { authorization: "Bearer test-token" };
+
+  try {
+    const codexRoot = resolve(tempHome, ".codex/sessions");
+    const claudeRoot = resolve(tempHome, ".claude/projects/project-a");
+    const cacheDir = resolve(tempHome, "cache");
+    await mkdir(codexRoot, { recursive: true });
+    await mkdir(claudeRoot, { recursive: true });
+    await copyFile(fixturePath, resolve(codexRoot, "sample-session.jsonl"));
+    await copyFile(claudeFixturePath, resolve(claudeRoot, "basic-session.jsonl"));
+    process.env.HOME = tempHome;
+
+    const server = await startServer({ port: 0, authToken: "test-token", cacheDir });
+    try {
+      const defaultSummary = await fetch(`${server.url}/api/summary`, { headers });
+      assert.equal(defaultSummary.status, 200);
+      const defaultBody = await defaultSummary.json();
+      assert.deepEqual(defaultBody.summary.providers.map((provider) => provider.provider), ["codex"]);
+
+      const allSummary = await fetch(`${server.url}/api/summary?provider=all`, { headers });
+      assert.equal(allSummary.status, 200);
+      const allBody = await allSummary.json();
+      assert.deepEqual(allBody.summary.providers.map((provider) => provider.provider).sort(), ["claude", "codex"]);
+      assert.equal(allBody.summary.totals.userMessages, 2);
+
+      const allMessages = await fetch(
+        `${server.url}/api/messages/search?provider=all&role=user&submittedOnly=true&limit=1`,
+        { headers }
+      );
+      assert.equal(allMessages.status, 200);
+      const allMessagesBody = await allMessages.json();
+      assert.equal(allMessagesBody.search.totalMatches, 2);
+      assert.equal(allMessagesBody.search.results.length, 1);
+      assert(["claude", "codex"].includes(allMessagesBody.search.results[0]?.provider));
+    } finally {
+      await server.close();
+    }
+  } finally {
+    if (previousHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = previousHome;
+    }
+    await rm(tempHome, { recursive: true, force: true });
   }
 });
 
@@ -197,6 +288,53 @@ test("message search writes and reads a local SQLite search index when cache is 
     } else {
       process.env.CODEX_LOG_VIEWER_SEARCH_INDEX_REBUILD_DELAY_MS = previousDelayMs;
     }
+  }
+});
+
+test("message search index rebuilds stale v2 schemas", async () => {
+  const tempDir = await mkdtemp(`${tmpdir()}/codex-log-viewer-search-index-migration-`);
+  const indexPath = resolve(tempDir, "messages.sqlite");
+  const database = new DatabaseSync(indexPath);
+  database.exec(`
+    CREATE TABLE metadata (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+    INSERT INTO metadata (key, value) VALUES ('schemaVersion', '2');
+    CREATE TABLE messages (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      file_path TEXT NOT NULL,
+      date_key TEXT NOT NULL,
+      project TEXT NOT NULL,
+      cwd TEXT,
+      line_number INTEGER,
+      turn_id TEXT,
+      model TEXT,
+      timestamp TEXT,
+      role TEXT NOT NULL,
+      source_event TEXT NOT NULL,
+      category TEXT,
+      prompt_intent_key TEXT,
+      prompt_intent TEXT,
+      normalized_content TEXT NOT NULL,
+      content TEXT NOT NULL
+    );
+    CREATE VIRTUAL TABLE messages_fts
+      USING fts5(content, content='messages', content_rowid='rowid');
+  `);
+  database.close();
+
+  try {
+    const handle = openSearchIndex(searchIndexCorpus(), indexPath);
+    const result = handle.search({ submittedOnly: true });
+    handle.close();
+
+    assert.equal(result?.totalMatches, 1);
+    assert.equal(result?.results[0]?.provider, "codex");
+    assert.equal(result?.results[0]?.content, "Upgrade stale index");
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
   }
 });
 
@@ -741,6 +879,7 @@ test("audit endpoints preview smart merges and write approved Markdown", async (
   const tempDir = await mkdtemp(`${tmpdir()}/codex-log-viewer-audit-api-`);
   const repoPath = resolve(tempDir, "sample-app");
   const fixture = resolve(tempDir, "audit-session.jsonl");
+  const claudeFixture = resolve(tempDir, "claude-audit-session.jsonl");
 
   await mkdir(repoPath, { recursive: true });
   await writeFile(
@@ -775,18 +914,49 @@ test("audit endpoints preview smart merges and write approved Markdown", async (
     ].join("\n") + "\n",
     "utf8"
   );
+  await writeFile(
+    claudeFixture,
+    [
+      JSON.stringify({
+        type: "user",
+        timestamp: "2026-05-19T12:00:03.000Z",
+        sessionId: "claude-audit-api-session",
+        uuid: "claude-audit-turn-1",
+        cwd: repoPath,
+        message: {
+          role: "user",
+          content: [{ type: "text", text: "Add Claude audit coverage." }]
+        }
+      }),
+      JSON.stringify({
+        type: "assistant",
+        timestamp: "2026-05-19T12:00:04.000Z",
+        sessionId: "claude-audit-api-session",
+        uuid: "claude-audit-turn-1",
+        cwd: repoPath,
+        message: {
+          role: "assistant",
+          content: [{ type: "text", text: "Claude audit response included." }]
+        }
+      })
+    ].join("\n") + "\n",
+    "utf8"
+  );
 
-  const server = await startServer({ port: 0, authToken: "test-token", paths: [fixture] });
+  const server = await startServer({ port: 0, authToken: "test-token", paths: [fixture, claudeFixture] });
   const headers = { authorization: "Bearer test-token" };
 
   try {
     const preview = await fetch(`${server.url}/api/audit?repoPath=${encodeURIComponent(repoPath)}`, { headers });
     assert.equal(preview.status, 200);
     const previewBody = await preview.json();
-    assert.equal(previewBody.audit.appendedSections, 1);
+    assert.equal(previewBody.audit.appendedSections, 2);
     assert.equal(previewBody.audit.targetPath, resolve(repoPath, "docs/ai-worklog.md"));
+    assert.match(previewBody.audit.mergedMarkdown, /Providers: Claude Code, Codex/);
     assert.match(previewBody.audit.mergedMarkdown, /Generate the repo audit trail/);
     assert.match(previewBody.audit.mergedMarkdown, /Prepared the audit preview/);
+    assert.match(previewBody.audit.mergedMarkdown, /Add Claude audit coverage/);
+    assert.match(previewBody.audit.mergedMarkdown, /Claude audit response included/);
 
     const targetOverride = await fetch(
       `${server.url}/api/audit?repoPath=${encodeURIComponent(repoPath)}&targetPath=${encodeURIComponent(resolve(tempDir, "elsewhere.md"))}`,
@@ -816,7 +986,7 @@ test("audit endpoints preview smart merges and write approved Markdown", async (
     assert.equal(duplicatePreview.status, 200);
     const duplicateBody = await duplicatePreview.json();
     assert.equal(duplicateBody.audit.appendedSections, 0);
-    assert.equal(duplicateBody.audit.skippedSections, 1);
+    assert.equal(duplicateBody.audit.skippedSections, 2);
     assert.match(duplicateBody.audit.mergedMarkdown, /Reviewed: yes/);
 
     const outsideWrite = await fetch(`${server.url}/api/audit`, {
@@ -953,4 +1123,58 @@ async function writeApiSession(filePath, { sessionId, cwd, timestamp, message })
     ].join("\n") + "\n",
     "utf8"
   );
+}
+
+function searchIndexCorpus() {
+  const file = {
+    provider: "codex",
+    sourceLabel: "Codex",
+    inputKind: "codex-jsonl",
+    filePath: "fixture.jsonl",
+    sessionId: "search-index-session",
+    lineCount: 2,
+    sessions: [],
+    turns: [],
+    messages: [],
+    tokenUsage: [],
+    taskTimings: [],
+    toolEvents: [],
+    unknownEvents: [],
+    warnings: []
+  };
+  const session = {
+    provider: "codex",
+    sourceLabel: "Codex",
+    inputKind: "codex-jsonl",
+    filePath: file.filePath,
+    sessionId: file.sessionId,
+    cwd: "/tmp/search-index-app",
+    timestamp: "2026-01-01T00:00:00.000Z"
+  };
+  const message = {
+    provider: "codex",
+    sourceLabel: "Codex",
+    inputKind: "codex-jsonl",
+    filePath: file.filePath,
+    sessionId: file.sessionId,
+    lineNumber: 2,
+    timestamp: "2026-01-01T00:00:01.000Z",
+    role: "user",
+    sourceEvent: "event_msg.user_message",
+    content: "Upgrade stale index",
+    imagesCount: 0,
+    localImagesCount: 0
+  };
+
+  return {
+    files: [{ ...file, sessions: [session], messages: [message] }],
+    sessions: [session],
+    turns: [],
+    messages: [message],
+    tokenUsage: [],
+    taskTimings: [],
+    toolEvents: [],
+    unknownEvents: [],
+    warnings: []
+  };
 }

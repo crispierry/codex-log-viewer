@@ -2,6 +2,47 @@
 
 Sanitized audit trail of AI-assisted work on this project.
 
+## 2026-05-31 - Resolve Provider PR Merge Conflicts
+
+Status: Completed
+Related commit/PR: PR #19
+
+### User Messages
+
+> create a pr
+
+> The PR is blocked on some conflict resolution. Can you take a look and see what's wrong and resolve it?
+
+### Interpreted Intent
+
+The user wanted the provider-support branch published as a draft PR, then wanted the PR's merge conflicts with the updated `main` branch resolved.
+
+### Response / Work Done
+
+- Created draft PR #19 for `codex/unified-ai-provider-support` into `main`.
+- Merged the latest `origin/main` into the PR branch and resolved conflicts in app version metadata, the AI worklog, parser cache/discovery, and provider parsing.
+- Preserved this branch's provider-aware Codex, Claude, and Cursor support while incorporating `main`'s iterative discovery and bounded parser concurrency fixes.
+- Kept the app's `major.minor.patch` version model and bumped the patch version to `0.2.8` for the conflict-resolution commit.
+
+### Privacy Notes
+
+No raw Codex, Claude, Cursor, private prompts, screenshots, session content, credentials, or secrets were added. The merged worklog keeps the local sessions path redacted.
+
+### Verification
+
+- Ran `wt bootstrap`.
+- Ran `npm run test -w @codex-log-viewer/parser`.
+- Ran `npm test`.
+- Ran `npm run lint`.
+- Ran `npm run privacy:scan`.
+- Ran `npm run build:mac`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`; the first attempt found a lingering packaged app process, then passed after closing it.
+- Ran `npm run smoke:mac-ui`; the first attempt did not observe a native window, then passed on a clean retry.
+- Ran `node scripts/check-app-version.mjs --compare-ref origin/main --require-pr-minor`.
+- Ran `node scripts/check-app-version.mjs --tag v0.2.8`.
+- Ran `git diff --check`.
+
 ## 2026-05-31 - Limit Parser File Discovery Concurrency
 
 Status: Completed
@@ -38,6 +79,244 @@ No raw Codex logs, private prompts, screenshots, session content, export payload
 - Ran `npm run package:mac`.
 - Ran `npm run smoke:mac-package`.
 - Ran `npm run privacy:scan`.
+- Ran `git diff --check`.
+- Relaunched `dist/macos/Codex Log Viewer.app`.
+
+## 2026-05-30 - Fix Cursor Provider Review Issues
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> Core review
+
+> Fix them
+
+### Interpreted Intent
+
+The user wanted a defect-focused review of the Cursor provider changes, then wanted the identified issues fixed.
+
+### Response / Work Done
+
+- Reviewed the Cursor provider implementation for parser failure modes, privacy behavior, provider filtering, and native/API integration.
+- Fixed Cursor SQLite parsing so private-schema read failures are converted into `cursor_vscdb_parse_failed` parse warnings instead of aborting corpus loading.
+- Updated redacted JSON exports to redact session `title` and `providerConversationId`, preventing Cursor chat titles or native conversation ids from leaking through default exports.
+- Added parser regression coverage for unsupported Cursor SQLite schemas.
+- Added analytics regression coverage for redacted session title and provider conversation id fields.
+
+### Privacy Notes
+
+No raw Cursor, Codex, or Claude transcripts were added. The new parser fixture is synthetic, and the export regression uses synthetic sensitive strings.
+
+### Verification
+
+- Ran `npm run test -w @codex-log-viewer/parser`.
+- Ran `npm run test -w @codex-log-viewer/analytics`.
+- Ran `npm test`.
+- Ran `npm run lint`.
+- Ran `npm run privacy:scan`.
+- Ran `git diff --check`.
+- Ran `npm run build:mac`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`.
+- Ran `npm run smoke:mac-ui`.
+- Relaunched `dist/macos/Codex Log Viewer.app`.
+
+## 2026-05-30 - Add Cursor Provider Support
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> Let’s add support for Cursor as well
+
+### Interpreted Intent
+
+The user wanted Cursor added as another provider in the unified local AI log viewer model, with useful local support rather than an export-only path where possible.
+
+### Response / Work Done
+
+- Checked Cursor's public docs and treated local SQLite history plus Markdown exports as the v1 support boundary.
+- Added Cursor provider metadata and input kinds for `cursor-vscdb` and `cursor-markdown`.
+- Added explicit Cursor `.vscdb` discovery and direct Markdown-file import while avoiding recursive Markdown discovery in ordinary folders.
+- Implemented Cursor SQLite parsing for `cursorDiskKV` chat bubbles, composer headers, workspace-derived working directories, user/assistant messages, token counts, tool results, malformed records, and unknown records.
+- Implemented best-effort Cursor Markdown export parsing for recognizable user/assistant sections.
+- Wired `cursor.user_message` through analytics, audit worklogs, API search, CLI help, native submitted-message reconstruction, provider badges, and the macOS provider filter.
+- Added sanitized Cursor Markdown fixture coverage and synthetic SQLite fixture generation in tests.
+- Updated architecture, schema, usage, privacy, fixture, roadmap, and README documentation.
+
+### Privacy Notes
+
+No raw Cursor, Codex, or Claude transcripts were committed. Local Cursor inspection was limited to schema/key-shape analysis and did not print or commit chat content. New committed Cursor content is synthetic and sanitized.
+
+### Verification
+
+- Ran `wt bootstrap`.
+- Ran `npm run test -w @codex-log-viewer/parser`.
+- Ran `npm run test -w @codex-log-viewer/analytics`.
+- Ran `npm run test -w @codex-log-viewer/server`.
+- Ran `npm run build`.
+- Ran `npm test`.
+- Ran `npm run lint`.
+- Ran `npm run privacy:scan`.
+- Ran `npm run build:mac`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`; the first attempt found the previously running packaged app, then passed after closing that instance.
+- Ran `npm run smoke:mac-ui`.
+- Relaunched `dist/macos/Codex Log Viewer.app`.
+
+## 2026-05-30 - Fix Provider Support Review Issues
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> Code review
+
+> Fix all these issues
+
+### Interpreted Intent
+
+The user wanted the provider-support branch reviewed for regressions, then wanted every identified issue fixed before the branch moved forward.
+
+### Response / Work Done
+
+- Reviewed the branch against `main` and identified issues in provider-filtered parsing, persistent parsed-cache reuse, SQLite search-index migration, audit repository scoping, and provider session counts.
+- Changed provider filtering so corpus parsing detects each JSONL source first, then filters by provider.
+- Updated parsed-cache reuse so cached detected provider records are filtered on read instead of being reparsed or reused under the wrong provider mode.
+- Added search-index schema reset logic for stale v2 SQLite databases and guarded async search-index rebuild failures.
+- Tightened audit repository filtering so Claude records without working-directory context are not included in arbitrary repository audits.
+- Aligned provider session counts with the same daily-session semantics used by the summary session list.
+- Added regression coverage for provider filtering with and without cache, stale search-index migration, no-cwd Claude audit exclusion, and provider daily-session counts.
+
+### Privacy Notes
+
+No raw Codex or Claude transcripts were added. New tests use existing sanitized fixtures and synthetic records.
+
+### Verification
+
+- Ran `npm run build`.
+- Ran `npm run test -w @codex-log-viewer/parser`.
+- Ran `npm run test -w @codex-log-viewer/analytics`.
+- Ran `npm run test -w @codex-log-viewer/server`.
+- Ran `npm test`.
+- Ran `npm run lint`.
+- Ran `npm run privacy:scan`.
+- Ran `npm run build:mac`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`.
+- Ran `npm run smoke:mac-ui`.
+- Ran `git diff --check`.
+- Relaunched `dist/macos/Codex Log Viewer.app`.
+
+## 2026-05-30 - Make Audit Worklogs Provider-Aware
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> Why is .data unsupported and what can we do about it?
+
+> The audit work log should include all systems not just codec
+
+> Commit
+
+> Since ChatGPT requires processing your exports, it is really not useful. Let’s remove it
+
+### Interpreted Intent
+
+The user wanted the audit worklog generator to stop treating Codex as the only auditable AI system, then decided ChatGPT export-based support should be removed before committing.
+
+### Response / Work Done
+
+- Explained that ChatGPT desktop `.data` cache files remain unsupported because they are opaque desktop cache material, while ChatGPT export zips and `conversations.json` are the dependable import path.
+- Updated audit generation to use provider-specific submitted user-message records for Codex and Claude Code.
+- Updated audit response grouping to stop at the next provider-specific submitted user message and to label output as AI responses instead of Codex responses.
+- Added provider metadata to audit Markdown, including provider labels, optional titles, and provider conversation ids.
+- Removed ChatGPT parser/import support, fixtures, provider filter options, tests, and documentation from the unified provider milestone before committing.
+- Updated CLI help, API coverage, documentation, and privacy notes for provider-aware audit worklogs.
+
+### Privacy Notes
+
+No raw Codex or Claude transcripts were added. New test coverage uses synthetic records only. ChatGPT export and desktop cache support is out of scope for this milestone.
+
+### Verification
+
+- Ran `npm run build`.
+- Ran `npm run test -w @codex-log-viewer/analytics`.
+- Ran `npm run test -w @codex-log-viewer/server`.
+- Ran `npm test`.
+- Ran `npm run lint`.
+- Ran `npm run privacy:scan`.
+- Ran `npm run build:mac`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`.
+- Ran `npm run smoke:mac-ui`.
+- Ran `git diff --check`.
+- Relaunched `dist/macos/Codex Log Viewer.app`.
+
+## 2026-05-30 - Implement Unified AI Log Provider Support
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> Can you take a look at the two plans we have?
+>
+> docs/unified-ai-log-provider-support-plan.md
+> docs/chatgpt-message-support-plan.md
+>
+> And reconcile them into one single plan
+
+> PLEASE IMPLEMENT THIS PLAN:
+> # Unified AI Log Provider Support Plan
+>
+> [The user pasted the unified implementation plan covering provider-aware parser APIs, Claude Code support, ChatGPT import support, provider filters, native UI updates, fixtures, tests, documentation, and verification.]
+
+> Are we in a branch?
+
+> Notice that main has been updated, so I want to start this work from the new baseline in main
+
+> Execute our plan then
+
+### Interpreted Intent
+
+The user wanted the two provider-support planning docs reconciled into one implementation plan, then wanted that plan implemented from the updated local `main` baseline on a new branch.
+
+### Response / Work Done
+
+- Created `codex/unified-ai-provider-support` from the updated local `main` baseline.
+- Added provider metadata to normalized parser records and kept existing Codex parser/cache APIs compatible.
+- Added provider-neutral parser/cache APIs for mixed local sources.
+- Added Claude Code JSONL parsing for user, assistant, system, usage, tool use/result, unknown records, and malformed lines.
+- Added provider filters and provider breakdowns across analytics, local API, CLI, search, exports, and the native macOS app.
+- Updated the native app with provider decoding, provider badges, a provider segmented control, and AI Interaction/AI Response copy.
+- Added sanitized Claude fixtures and provider-focused parser, analytics, and API tests.
+- Updated provider documentation, removed the separate ChatGPT plan, and removed ChatGPT implementation from this milestone.
+
+### Privacy Notes
+
+No raw Codex or Claude transcripts were added. New fixtures are synthetic and sanitized.
+
+### Verification
+
+- Ran `wt bootstrap`.
+- Ran `npm run build`.
+- Ran `npm run test -w @codex-log-viewer/analytics`.
+- Ran `npm run test -w @codex-log-viewer/server`.
+- Ran `npm test`.
+- Ran `npm run lint`.
+- Ran `npm run privacy:scan`.
+- Ran `swift build --package-path apps/macos`.
+- Ran `npm run build:mac`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`.
+- Ran `npm run smoke:mac-ui`.
 - Ran `git diff --check`.
 - Relaunched `dist/macos/Codex Log Viewer.app`.
 
@@ -2064,3 +2343,400 @@ No raw logs, private session content, secrets, or unsanitized local Codex data w
 
 - Confirmed the repository is public at `https://github.com/crispierry/codex-log-viewer`.
 - Confirmed the repository uses the MIT License and has privacy/security contribution guidance.
+
+## 2026-05-31 - Fix Provider-Specific Local Log Loading
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> Run the app from this branch
+
+> How do I select cursor or Claude? I missed it somewhere. Can you show me in the screenshots?
+
+> I'm getting a "could not connect to the server, try again" when I'm asking to fetch cloud messages. This doesn't seem right. I have cloud running locally. I want you to fetch the messages from my local logs
+
+### Interpreted Intent
+
+The user wanted the branch app running locally and expected the Claude provider filter to read local Claude Code logs, not fail through a crashed local parser helper or imply cloud fetching.
+
+### Response / Work Done
+
+- Reproduced the app-side failure and found the packaged local parser helper had crashed from a Node heap out-of-memory condition.
+- Identified that provider-specific loads with no custom source path still discovered the large default Codex log tree before filtering to Claude.
+- Added provider-specific default roots so Codex, Claude Code, Cursor, and explicit `all` provider loads discover the correct local source paths before parsing.
+- Updated cached parsing to use the provider-specific discovery scope and avoid pruning unrelated cached provider entries during explicit provider-filtered custom-path loads.
+- Updated summary filter metadata to report the provider-appropriate default source roots.
+- Renamed source-picker copy from Codex-specific wording to AI log wording and made the default-source label provider-aware.
+- Relaunched the rebuilt packaged macOS app and confirmed the Claude filter reads local Claude Code messages from `~/.claude/projects`.
+
+### Privacy Notes
+
+No raw local Codex, Claude, or Cursor transcripts were committed. Live validation printed only aggregate counts for local Claude files, sessions, messages, provider ids, and cache status.
+
+### Verification
+
+- Ran `wt bootstrap`.
+- Ran `npm run test -w @codex-log-viewer/parser`.
+- Ran `npm test`.
+- Ran `npm run lint`.
+- Ran `npm run privacy:scan`.
+- Ran an aggregate-only local Claude parse check.
+- Ran `npm run build:mac`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`.
+- Ran `npm run smoke:mac-ui`.
+- Relaunched the packaged macOS app from this branch.
+
+## 2026-05-31 - Stabilize All-Projects Provider Loading
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> Getting an error again: could not connect to the server when I selected all projects
+>
+> Another issue I noticed that when I went from cursor to Claude to Codex, not all the data was loaded. Remember I want to be loading the data in the background so right now I had to wait a long time until my Codex data showed up. Most importantly could not connect to the server when I selected all projects. The app is still running; you can just take a look
+
+### Interpreted Intent
+
+The user wanted the running branch app inspected in place, the all-projects local parser crash fixed, and provider data warmed in the background so switching between Cursor, Claude, and Codex does not feel like a cold load.
+
+### Response / Work Done
+
+- Inspected the running packaged app and confirmed the native app was alive while the local parser helper had crashed with a Node heap out-of-memory error.
+- Increased the packaged local parser helper heap limit, with an environment override available through `CODEX_LOG_VIEWER_NODE_MAX_OLD_SPACE_MB`.
+- Added foreground request recovery so the app restarts the local helper once after a local connection failure instead of leaving the UI pointed at a dead port.
+- Added provider cache warmup after foreground loads so default Codex, Claude, and Cursor sources can be prepared in the background.
+- Made the native app send explicit provider filters, including `all`, and changed the server to honor explicit `provider=all` while preserving Codex-only behavior when no provider is supplied.
+- Kept new default launches Codex-first by changing the native provider default to Codex.
+- Extended local API request timeouts so cold multi-gigabyte local scans can finish instead of being mistaken for connection loss.
+
+### Privacy Notes
+
+No raw local transcripts were committed. Live checks used aggregate API counts only: sessions, submitted-message totals, provider buckets, and helper process status.
+
+### Verification
+
+- Ran `npm test`.
+- Ran `npm run lint`.
+- Ran `npm run privacy:scan`.
+- Ran `npm run build:mac`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`.
+- Ran `npm run smoke:mac-ui`.
+- Relaunched the packaged macOS app from this branch.
+- Queried the running local API with `provider=all` and confirmed all-projects data returned across Codex, Claude, and Cursor while the helper stayed alive.
+
+## 2026-05-31 - Add App Version Process
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> Do we still not have an app version of any kind?
+>
+> If we don't have one in place, can we please create an app version and create a process for updating this app version with every code change we make?
+>
+> Every PR that we push should increment 0.x+1.0
+>
+> Every commit incerases 0.0.x+1
+
+### Interpreted Intent
+
+The user wanted a real app version visible in the native app and a repeatable workflow so PR branches and commits advance that version intentionally.
+
+### Response / Work Done
+
+- Replaced the old `major.minor (Build N)` app metadata with `major.minor.patch`.
+- Set this PR branch to app version `0.2.1`: one minor bump for the branch and one patch bump for this code change.
+- Added `npm run version:pr`, `npm run version:commit`, and `npm run version:sync`.
+- Changed local build, package, and run scripts to sync generated metadata without silently bumping versions.
+- Updated packaged app metadata and archive naming to use `0.2.1` style versions.
+- Added a PR version check that compares `app-version.json` against the PR target branch and requires the minor bump.
+- Updated release CI to verify tags against `app-version.json`.
+- Updated versioning, release, release-note, first-public-release, and PR-template docs.
+
+### Privacy Notes
+
+No raw local transcripts, local log content, secrets, or private data were added. The changes only affect version metadata, build/release scripts, CI checks, and documentation.
+
+### Verification
+
+- Ran `node scripts/check-app-version.mjs --compare-ref main --require-pr-minor`.
+- Ran `node scripts/check-app-version.mjs --tag v0.2.1`.
+- Ran `npm test`.
+- Ran `npm run lint`.
+- Ran `npm run privacy:scan`.
+- Ran `npm run build:mac`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`; closed the already-running packaged app after the smoke check correctly detected it, then reran successfully.
+- Ran `npm run smoke:mac-ui`.
+- Ran `npm run release:notes -- --tag v0.2.1 --output dist/macos/release-notes.md`.
+- Ran `git diff --check`.
+- Relaunched the packaged macOS app and confirmed its bundle short version and bundle version are both `0.2.1`.
+
+## 2026-05-31 - Show Version In About Box
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> I also want to make sure that the version number is visible in the about box
+
+### Interpreted Intent
+
+The user wanted the native macOS About box to visibly show the app version, not only carry it in bundle metadata.
+
+### Response / Work Done
+
+- Added an explicit `Version 0.2.2` line to the About box credits text while keeping the standard macOS About panel version fields populated.
+- Bumped the app patch version from `0.2.1` to `0.2.2` for this code change using the new commit-version workflow.
+- Rebuilt, packaged, smoke-tested, and relaunched the packaged macOS app.
+- Opened the running app's About box and captured a local-only screenshot confirming the version is visible.
+
+### Privacy Notes
+
+No raw local transcripts, log content, secrets, or private data were added. The About-box screenshot was saved under the ignored local audit folder and is not intended for commit.
+
+### Verification
+
+- Ran `npm run version:commit`.
+- Ran `npm run build:mac`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`; an initial parallel smoke attempt collided with the UI smoke app launch, then the package smoke was rerun sequentially and passed.
+- Ran `npm run smoke:mac-ui`.
+- Confirmed the packaged app `CFBundleShortVersionString` and `CFBundleVersion` are both `0.2.2`.
+- Relaunched the packaged app and opened the About box.
+
+## 2026-05-31 - Fix Provider Review Issues
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> code review
+
+> Fix all these issues
+
+### Interpreted Intent
+
+The user wanted the review findings fixed across the server cache, CLI provider filtering, warning visibility, and native source-label copy.
+
+### Response / Work Done
+
+- Fixed server corpus cache keys so omitted provider defaults and explicit `provider=all` do not share the same cached corpus.
+- Fixed CLI provider parsing so `--provider all` explicitly scans all default provider roots instead of falling back to Codex-only discovery.
+- Kept parse warnings visible for provider files that have warnings but no sessions, while preserving date/project filtering for files with timestamped activity.
+- Changed the native source label for the All provider from “Default Codex log locations” to “Default AI log locations.”
+- Added focused server, CLI, and analytics tests for the regressions.
+- Bumped the app patch version to `0.2.3` for this code change.
+
+### Privacy Notes
+
+No raw local transcripts, local log content, secrets, or private data were added. New tests use sanitized fixtures and temporary directories only.
+
+### Verification
+
+- Ran `npm run test -w @codex-log-viewer/server`.
+- Ran `npm run test -w @codex-log-viewer/analytics`.
+- Ran `npm run test -w @codex-log-viewer/cli`.
+- Ran `npm test`.
+- Ran `npm run lint`.
+- Ran `npm run privacy:scan`.
+- Ran `npm run build:mac`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`.
+- Ran `npm run smoke:mac-ui`.
+- Ran `node scripts/check-app-version.mjs --compare-ref main --require-pr-minor`.
+- Ran `node scripts/check-app-version.mjs --tag v0.2.3`.
+- Ran `git diff --check`.
+- Confirmed the packaged app `CFBundleShortVersionString` and `CFBundleVersion` are both `0.2.3`.
+- Relaunched the packaged macOS app from this branch.
+
+## 2026-05-31 - Restore Provider Switch Responsiveness
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> We still have a performance issue when I click on cursor then I go to cloud then I go back to Codex. It takes many seconds for the Codex messages to load and there is no loading message on the screen so the users are just puzzled, wondering if the app crashed. Also when I click on, the same issue happens. I thought we had addressed all the performance concerns but it looks like we left a gap.
+>
+> Keep in mind that all that's visible for the user is about 7 to 10 messages, maybe 7 to 15 messages on a really large screen, so that's all we need to load initially. The rest can be lazy loaded. Can you take a pass into understanding why the performance got worse now and what we can do about it? Also make sure that all the performance improvements we made are still present in this current tree
+
+> Make sure that PR17 is incorporated here
+
+### Interpreted Intent
+
+The user wanted the current provider-switch slowdown diagnosed from the live branch, wanted confirmation that PR17's performance work was present, and wanted the Browse list to load only the visible working set up front with clear loading feedback.
+
+### Response / Work Done
+
+- Confirmed PR17 is incorporated: PR17 head commit `4975e0c85f70bbc0f019b046ae00192364957886` is an ancestor of this branch, and the PR17 merge commit has no tree diff from that head commit.
+- Traced the slowdown to a gap layered on top of PR17: provider/project/date switches cleared Browse state before showing a loading state, while the first Browse request still asked for 500 messages.
+- Changed Browse to request 30 messages initially and append 100 messages at a time.
+- Marked Browse as loading immediately when provider, project, date, or source switches clear the current list.
+- Updated the foreground loading copy to say local AI logs instead of Codex-only sessions.
+- Made provider background warmup reset after completion, avoid repeated warmups for the same provider/filter/project key, and warm the other providers' first Browse page in addition to project metadata.
+- Bounded the in-memory fallback message search so stale or unavailable SQLite indexes do not force formatting and retaining every matching message when only one page is needed.
+- Updated performance documentation and bumped the app patch version to `0.2.4`.
+
+### Privacy Notes
+
+No raw local transcripts, local log content, secrets, or private data were added. PR17 verification used commit ancestry and tree comparison only.
+
+### Verification
+
+- Ran `npm run test -w @codex-log-viewer/analytics`.
+- Ran `npm test`.
+- Ran `npm run lint`.
+- Ran `npm run privacy:scan`.
+- Ran `npm run build:mac`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`; the first attempt correctly failed because the previous packaged app was still running, then passed after quitting that app.
+- Ran `npm run smoke:mac-ui`.
+- Ran `node scripts/check-app-version.mjs --compare-ref main --require-pr-minor`.
+- Ran `node scripts/check-app-version.mjs --tag v0.2.4`.
+- Ran `git diff --check`.
+- Confirmed the packaged app `CFBundleShortVersionString` and `CFBundleVersion` are both `0.2.4`.
+- Relaunched the packaged macOS app from this branch.
+
+## 2026-05-31 - Fix Provider Switch Review Findings
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> code review
+
+> Fix them
+
+### Interpreted Intent
+
+The user wanted the review findings fixed: stale project scope after provider switches and background warmup competing with foreground provider navigation.
+
+### Response / Work Done
+
+- Reset the selected project to All Projects when the provider filter changes, so switching from one provider to another cannot keep a project that does not exist in the new provider scope.
+- Cleared the audit path suggestion when the provider switch resets to All Projects.
+- Cancelled in-flight provider warmup before foreground refreshes.
+- Added a warmup generation guard so a cancelled warmup cannot clear a newer warmup task during fast user switching.
+- Bumped the app patch version to `0.2.5`.
+
+### Privacy Notes
+
+No raw local transcripts, local log content, secrets, or private data were added.
+
+### Verification
+
+- Ran `npm run build:mac`.
+- Ran `npm test`.
+- Ran `npm run lint`.
+- Ran `npm run privacy:scan`.
+- Ran `node scripts/check-app-version.mjs --compare-ref main --require-pr-minor`.
+- Ran `node scripts/check-app-version.mjs --tag v0.2.5`.
+- Ran `git diff --check`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`.
+- Ran `npm run smoke:mac-ui`.
+- Confirmed the packaged app `CFBundleShortVersionString` and `CFBundleVersion` are both `0.2.5`.
+- Relaunched the packaged macOS app from this branch.
+
+## 2026-05-31 - Make All Provider Browse Feel Incremental
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> I just timed it and when I went from cursor to all, it took 10 seconds for you to load my initial batch of messages
+>
+> That's what we said: we're going to load just a few initially while the rest loads up in the background. If you did that, it's not working
+
+### Interpreted Intent
+
+The user wanted the Cursor-to-All provider switch to show an initial visible batch immediately, instead of waiting for the full All-provider summary and corpus path before any Browse messages appear.
+
+### Response / Work Done
+
+- Kept the current provider's Browse messages visible as an immediate partial batch when switching to All.
+- Started Browse loading independently at the beginning of foreground refreshes, so message loading no longer waits for project and summary responses to finish first.
+- Added a visible “Loading latest” status while an existing partial Browse list is being replaced.
+- Added a server fast path for default-source `provider=all` message search that merges per-provider search pages from provider-specific caches instead of forcing the monolithic All-provider corpus path before returning the first page.
+- Added API coverage for default-source All-provider message search pagination.
+- Bumped the app patch version to `0.2.6`.
+
+### Privacy Notes
+
+No raw local transcripts, local log content, secrets, or private data were added. Testing uses sanitized fixtures and temporary directories.
+
+### Verification
+
+- Ran `npm run test -w @codex-log-viewer/server`.
+- Ran `npm run build:mac`.
+- Ran `npm test`.
+- Ran `npm run lint`.
+- Ran `npm run privacy:scan`.
+- Ran `node scripts/check-app-version.mjs --compare-ref main --require-pr-minor`.
+- Ran `node scripts/check-app-version.mjs --tag v0.2.6`.
+- Ran `git diff --check`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`.
+- Ran `npm run smoke:mac-ui`.
+- Confirmed the packaged app `CFBundleShortVersionString` and `CFBundleVersion` are both `0.2.6`.
+- Relaunched the packaged macOS app from this branch.
+- Queried the running packaged helper for aggregate All-provider first-page timing only; it returned one result with no message content printed.
+
+## 2026-05-31 - Cache Provider Browse Switching
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> I'm not quite happy with it. See this here? I see all the messages then I click on Codex And I get this dialogue box saying "Loading latest AI messages"
+>
+> This happens every time I switch a tab. We should keep a cache of it and this loading should be happening in the background
+>
+> So it really is not very practical to go from all to Codex and then back to all every time you're loading things up
+>
+> Do you understand what I mean? Can you fix it?
+
+### Interpreted Intent
+
+The user wanted provider switching to behave like cached tab navigation: no blocking modal every time, immediate reuse of already-loaded provider pages, and background refresh to update the cached view.
+
+### Response / Work Done
+
+- Added an in-memory Browse message page cache keyed by provider, selected project, source paths, and date filters.
+- Reused cached Browse pages immediately when switching providers.
+- Derived a partial provider page from the current All-provider page when a provider cache is not yet available.
+- Suppressed the modal loading notice for provider switches, while keeping the list status as a background refresh indicator.
+- Bumped the app patch version to `0.2.7`.
+
+### Privacy Notes
+
+No raw local transcripts, local log content, secrets, or private data were added.
+
+### Verification
+
+- Ran `npm run build -w @codex-log-viewer/server`.
+- Ran `npm run build:mac`.
+- Ran `npm test`.
+- Ran `npm run lint`.
+- Ran `npm run privacy:scan`.
+- Ran `node scripts/check-app-version.mjs --compare-ref main --require-pr-minor`.
+- Ran `node scripts/check-app-version.mjs --tag v0.2.7`.
+- Ran `git diff --check`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-package`.
+- Ran `npm run smoke:mac-ui`.
+- Confirmed the packaged app `CFBundleShortVersionString` and `CFBundleVersion` are both `0.2.7`.
+- Relaunched the packaged macOS app from this branch.

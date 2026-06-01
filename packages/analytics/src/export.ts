@@ -9,6 +9,8 @@ export function redactedProjectSummary(summary: ProjectSummary): ProjectSummary 
     },
     sessions: summary.sessions.map((session) => ({
       ...session,
+      title: session.title ? "[redacted]" : undefined,
+      providerConversationId: session.providerConversationId ? "[redacted]" : undefined,
       filePath: "[redacted]",
       cwd: session.cwd ? "[redacted]" : undefined
     })),
@@ -47,6 +49,7 @@ export function summaryToCsv(summary: ProjectSummary): string {
     ["assistant_messages", summary.totals.assistantMessages],
     ["unique_user_messages", summary.totals.uniqueUserMessages],
     ["repeated_user_messages", summary.repeatedUserMessages.length],
+    ["providers", summary.providers.map((provider) => provider.provider).join("|")],
     ["prompt_intent_classified_messages", summary.promptIntents.classifiedMessages],
     ["prompt_intent_unclassified_messages", summary.promptIntents.unclassifiedMessages],
     ["input_tokens", summary.tokens.inputTokens],
@@ -61,6 +64,11 @@ export function summaryToCsv(summary: ProjectSummary): string {
 
   for (const bucket of summary.promptIntents.buckets) {
     rows.push([`prompt_intent_${bucket.key}`, bucket.count]);
+  }
+
+  for (const provider of summary.providers) {
+    rows.push([`provider_${provider.provider}_messages`, provider.messages]);
+    rows.push([`provider_${provider.provider}_sessions`, provider.sessions]);
   }
 
   return rows.map((row) => row.map(csvCell).join(",")).join("\n") + "\n";

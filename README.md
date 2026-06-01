@@ -1,6 +1,6 @@
 # Codex Log Viewer
 
-Codex Log Viewer is a local-first native macOS app and parser for OpenAI Codex session logs.
+Codex Log Viewer is a local-first native macOS app and parser for OpenAI Codex, Claude Code, and Cursor session logs.
 
 The goal is to help developers understand how they use Codex across projects: message volume, unique and repeated prompts, token usage, model usage, session history, and time-based activity patterns.
 
@@ -20,6 +20,7 @@ This project has a working v0 implementation:
 ## Current Capabilities
 
 - Parse Codex JSONL sessions from `~/.codex/sessions` and `~/.codex/archived_sessions`
+- Parse user-selected Claude Code JSONL and Cursor local/export sources
 - Group sessions by project path and Codex worktree name
 - Count messages by project, session, day, and hour
 - Count unique normalized user messages
@@ -54,14 +55,14 @@ open "dist/macos/Codex Log Viewer.app"
 The app is the primary product experience. From the desktop UI you can:
 
 - scan default Codex logs
-- add custom files or directories from the native `Logs` menu
+- add custom files or directories from the native `Logs` menu, including Claude Code and Cursor sources
 - select projects or all projects
-- browse projects, submitted messages, and Codex interactions in a focused native layout, with an optional session browser
+- browse projects, submitted messages, and AI interactions in a focused native layout, with an optional session browser
 - switch between Browse, Overview, Search, and Audit sections for the selected project
 - filter by all time, day, week, month, year, or custom date range from the workspace header
 - search messages across projects
 - list the prompts you typed and submitted for the selected project
-- select a sent prompt and inspect the related Codex response, tool activity, context, tokens, and timing in organized native sections
+- select a sent prompt and inspect the related AI response, tool activity, context, tokens, and timing in organized native sections
 - filter message search by role, model, session, project, source, and date range
 - review repeated prompts for the current filters
 - refresh the scan, with startup/manual loading feedback and quiet background sync while the app stays open
@@ -91,7 +92,7 @@ npm run cli -- export --format json --output usage.json --project sample-app
 npm run cli -- audit --repo /path/to/repo --output /path/to/repo/docs/ai-worklog.md
 ```
 
-Use `--path <file-or-dir>` to scan a specific fixture, export, or alternate Codex home:
+Use `--path <file-or-dir>` to scan a specific fixture, export, alternate Codex home, Claude Code JSONL file, or Cursor source:
 
 ```sh
 npm run cli -- summary --path fixtures/codex/sample-session.jsonl

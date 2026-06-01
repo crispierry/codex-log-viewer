@@ -83,9 +83,10 @@ async function projectsCommand(parsed: ParsedArgs): Promise<void> {
   }
 
   printTable(
-    ["Project", "Sessions", "Turns", "Messages", "Tokens"],
+    ["Project", "Providers", "Sessions", "Turns", "Messages", "Tokens"],
     loaded.projects.map((project) => [
       project.project,
+      project.providers.join(", "),
       project.sessions,
       project.turns,
       project.messages,
@@ -103,9 +104,10 @@ async function sessionsCommand(parsed: ParsedArgs): Promise<void> {
   }
 
   printTable(
-    ["Session", "Project", "User Msgs", "Automations", "Tokens", "Last Seen"],
+    ["Session", "Provider", "Project", "User Msgs", "Automations", "Tokens", "Last Seen"],
     summary.sessions.map((session) => [
       session.sessionId,
+      session.provider,
       session.project,
       session.userMessages,
       session.automationMessages,
@@ -182,7 +184,8 @@ function summaryOptions(parsed: ParsedArgs): SummaryOptions {
     paths: paths.length > 0 ? paths : undefined,
     project: stringOption(parsed.options.project),
     since: stringOption(parsed.options.since),
-    until: stringOption(parsed.options.until)
+    until: stringOption(parsed.options.until),
+    provider: providerOption(parsed.options.provider)
   };
 }
 
@@ -201,6 +204,7 @@ function printSummary(summary: ProjectSummary): void {
       ["Assistant messages", summary.totals.assistantMessages],
       ["Unique user messages", summary.totals.uniqueUserMessages],
       ["Repeated user prompts", summary.repeatedUserMessages.length],
+      ["Providers", summary.providers.map((provider) => provider.provider).join(", ") || "none"],
       ["Classified prompt intents", summary.promptIntents.classifiedMessages],
       ["Unclassified prompt intents", summary.promptIntents.unclassifiedMessages],
       ["Input tokens", formatNumber(summary.tokens.inputTokens)],
@@ -254,14 +258,15 @@ function printHelp(): void {
   process.stdout.write(`Codex Log Viewer
 
 Usage:
-  codex-log-viewer projects [--path <file-or-dir>] [--json]
-  codex-log-viewer summary [--project <name>] [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--path <file-or-dir>] [--json]
-  codex-log-viewer sessions [--project <name>] [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--path <file-or-dir>] [--json]
+  codex-log-viewer projects [--provider all|codex|claude|cursor] [--path <file-or-dir>] [--json]
+  codex-log-viewer summary [--provider all|codex|claude|cursor] [--project <name>] [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--path <file-or-dir>] [--json]
+  codex-log-viewer sessions [--provider all|codex|claude|cursor] [--project <name>] [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--path <file-or-dir>] [--json]
   codex-log-viewer export [--format json|csv] [--output <file>] [summary options]
   codex-log-viewer export --format json --raw [summary options]
-  codex-log-viewer audit [--repo <path>] [--project <name>] [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--output <file>] [--raw] [--no-responses]
+  codex-log-viewer audit [--provider all|codex|claude|cursor] [--repo <path>] [--project <name>] [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--output <file>] [--raw] [--no-responses]
 
 Defaults scan ~/.codex/sessions and ~/.codex/archived_sessions.
+Custom paths can include Codex JSONL, Claude Code JSONL, Cursor state.vscdb, and explicit Cursor Markdown exports.
 `);
 }
 
@@ -278,6 +283,11 @@ function arrayOption(value: string | boolean | string[] | undefined): string[] {
     return value;
   }
   return typeof value === "string" ? [value] : [];
+}
+
+function providerOption(value: string | boolean | string[] | undefined): SummaryOptions["provider"] {
+  const provider = stringOption(value);
+  return provider || undefined;
 }
 
 function formatNumber(value: number): string {

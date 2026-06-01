@@ -382,11 +382,11 @@ Acceptance:
 
 Gap:
 
-- There is no versioning, changelog automation, release checklist, or update story.
+- App versioning, release notes, and release checks exist; changelog automation and an app update story are still incomplete.
 
 Plan:
 
-- Define semantic versioning for app and packages.
+- Keep app versioning tied to PR and commit workflow.
 - Add release notes template.
 - Add GitHub release workflow.
 - Decide whether v0.1 needs an auto-update framework or just manual downloads.

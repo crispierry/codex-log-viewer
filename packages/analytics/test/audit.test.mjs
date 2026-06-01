@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { generateAuditMarkdown, mergeAuditMarkdown } from "../dist/index.js";
 
-test("generateAuditMarkdown preserves submitted user messages with captured Codex responses", () => {
+test("generateAuditMarkdown preserves submitted user messages with captured AI responses", () => {
   const corpus = auditCorpus();
 
   const markdown = generateAuditMarkdown(corpus, {
@@ -12,12 +12,56 @@ test("generateAuditMarkdown preserves submitted user messages with captured Code
   });
 
   assert.match(markdown, /User messages: 2/);
-  assert.match(markdown, /Codex responses: 2/);
+  assert.match(markdown, /Providers: Codex/);
+  assert.match(markdown, /AI responses: 2/);
   assert.match(markdown, /> Ship the audit log\./);
   assert.match(markdown, /> Keep every user message\./);
   assert.match(markdown, /> Confirmed the audit generator is in place\./);
   assert.match(markdown, /> Also add the repo convention\./);
   assert.match(markdown, /> Added the worklog rule\./);
+});
+
+test("generateAuditMarkdown includes submitted user messages across providers", () => {
+  const corpus = mergeCorpora(
+    auditCorpus(),
+    auditCorpus({
+      sessionId: "claude-audit-session",
+      provider: "claude",
+      sourceLabel: "Claude Code",
+      userSourceEvent: "claude.user_message",
+      assistantSourceEvent: "claude.assistant_message",
+      firstUserMessage: "Use Claude for the architecture review.",
+      firstAssistantMessage: "Claude captured the design notes.",
+      secondUserMessage: "Add the Claude follow-up.",
+      secondAssistantMessage: "Claude added the follow-up."
+    }),
+    auditCorpus({
+      sessionId: "cursor-audit-session",
+      provider: "cursor",
+      sourceLabel: "Cursor",
+      userSourceEvent: "cursor.user_message",
+      assistantSourceEvent: "cursor.assistant_message",
+      firstUserMessage: "Use Cursor for the local editor workflow.",
+      firstAssistantMessage: "Cursor captured the editor workflow.",
+      secondUserMessage: "Add the Cursor follow-up.",
+      secondAssistantMessage: "Cursor added the follow-up."
+    })
+  );
+
+  const markdown = generateAuditMarkdown(corpus, {
+    generatedAt: "2026-05-19T12:00:00.000Z",
+    privacy: "raw"
+  });
+
+  assert.match(markdown, /Providers: Claude Code, Codex, Cursor/);
+  assert.match(markdown, /User messages: 6/);
+  assert.match(markdown, /AI responses: 6/);
+  assert.match(markdown, /Provider: `Claude Code`/);
+  assert.match(markdown, /Provider: `Cursor`/);
+  assert.match(markdown, /> Use Claude for the architecture review\./);
+  assert.match(markdown, /> Claude captured the design notes\./);
+  assert.match(markdown, /> Use Cursor for the local editor workflow\./);
+  assert.match(markdown, /> Cursor captured the editor workflow\./);
 });
 
 test("generateAuditMarkdown redacts obvious private strings in public mode", () => {
@@ -90,6 +134,30 @@ test("generateAuditMarkdown filters by repository path", () => {
 
   assert.match(markdown, /Ship the audit log/);
   assert.doesNotMatch(markdown, /Do not include this other project/);
+});
+
+test("generateAuditMarkdown excludes provider logs without repository context from repo audits", () => {
+  const corpus = auditCorpus({
+    sessionId: "claude-unscoped-session",
+    provider: "claude",
+    sourceLabel: "Claude Code",
+    userSourceEvent: "claude.user_message",
+    assistantSourceEvent: "claude.assistant_message",
+    cwd: undefined,
+    firstUserMessage: "Do not include this unscoped Claude work.",
+    firstAssistantMessage: "This response should stay out."
+  });
+
+  const markdown = generateAuditMarkdown(corpus, {
+    repoPath: "/Users/example/projects/sample-app",
+    paths: ["/Users/example/.claude/projects/unscoped.jsonl"],
+    generatedAt: "2026-05-19T12:00:00.000Z",
+    privacy: "raw"
+  });
+
+  assert.match(markdown, /Sessions: 0/);
+  assert.match(markdown, /No matching submitted user messages were found\./);
+  assert.doesNotMatch(markdown, /Do not include this unscoped Claude work/);
 });
 
 test("generateAuditMarkdown does not include unrelated repositories with the same basename", () => {
@@ -177,7 +245,18 @@ test("mergeAuditMarkdown skips generated sections when reviewed user messages al
 
 function auditCorpus(overrides = {}) {
   const sessionId = overrides.sessionId ?? "audit-session";
+  const provider = overrides.provider ?? "codex";
+  const sourceLabel = overrides.sourceLabel ?? "Codex";
+  const metadata = {
+    provider,
+    sourceLabel,
+    inputKind: overrides.inputKind ?? `${provider}-test`
+  };
+  const cwd = Object.hasOwn(overrides, "cwd") ? overrides.cwd : "/Users/example/projects/sample-app";
+  const userSourceEvent = overrides.userSourceEvent ?? "event_msg.user_message";
+  const assistantSourceEvent = overrides.assistantSourceEvent ?? "response_item.message";
   const file = {
+    ...metadata,
     filePath: `${sessionId}.jsonl`,
     sessionId,
     lineCount: 6,
@@ -191,13 +270,15 @@ function auditCorpus(overrides = {}) {
     warnings: []
   };
   const session = {
+    ...metadata,
     filePath: file.filePath,
     sessionId: file.sessionId,
-    cwd: overrides.cwd ?? "/Users/example/projects/sample-app",
+    cwd,
     timestamp: "2026-05-19T12:00:00.000Z"
   };
   const turns = [
     {
+      ...metadata,
       filePath: file.filePath,
       sessionId: file.sessionId,
       turnId: "audit-turn-1",
@@ -206,6 +287,7 @@ function auditCorpus(overrides = {}) {
       model: "gpt-5.5"
     },
     {
+      ...metadata,
       filePath: file.filePath,
       sessionId: file.sessionId,
       turnId: "audit-turn-2",
@@ -216,50 +298,54 @@ function auditCorpus(overrides = {}) {
   ];
   const messages = [
     {
+      ...metadata,
       filePath: file.filePath,
       sessionId: file.sessionId,
       lineNumber: 3,
       turnId: "audit-turn-1",
       timestamp: "2026-05-19T12:00:02.000Z",
       role: "user",
-      sourceEvent: "event_msg.user_message",
+      sourceEvent: userSourceEvent,
       content: overrides.firstUserMessage ?? "Ship the audit log.\nKeep every user message.",
       imagesCount: 0,
       localImagesCount: 0
     },
     {
+      ...metadata,
       filePath: file.filePath,
       sessionId: file.sessionId,
       lineNumber: 4,
       turnId: "audit-turn-1",
       timestamp: "2026-05-19T12:00:03.000Z",
       role: "assistant",
-      sourceEvent: "response_item.message",
-      content: "Confirmed the audit generator is in place.",
+      sourceEvent: assistantSourceEvent,
+      content: overrides.firstAssistantMessage ?? "Confirmed the audit generator is in place.",
       imagesCount: 0,
       localImagesCount: 0
     },
     {
+      ...metadata,
       filePath: file.filePath,
       sessionId: file.sessionId,
       lineNumber: 5,
       turnId: "audit-turn-2",
       timestamp: "2026-05-19T12:01:01.000Z",
       role: "user",
-      sourceEvent: "event_msg.user_message",
-      content: "Also add the repo convention.",
+      sourceEvent: userSourceEvent,
+      content: overrides.secondUserMessage ?? "Also add the repo convention.",
       imagesCount: 0,
       localImagesCount: 0
     },
     {
+      ...metadata,
       filePath: file.filePath,
       sessionId: file.sessionId,
       lineNumber: 6,
       turnId: "audit-turn-2",
       timestamp: "2026-05-19T12:01:02.000Z",
       role: "assistant",
-      sourceEvent: "event_msg.agent_message",
-      content: "Added the worklog rule.",
+      sourceEvent: assistantSourceEvent,
+      content: overrides.secondAssistantMessage ?? "Added the worklog rule.",
       imagesCount: 0,
       localImagesCount: 0
     }
@@ -270,6 +356,20 @@ function auditCorpus(overrides = {}) {
     sessions: [session],
     turns,
     messages,
+    tokenUsage: [],
+    taskTimings: [],
+    toolEvents: [],
+    unknownEvents: [],
+    warnings: []
+  };
+}
+
+function mergeCorpora(...corpora) {
+  return {
+    files: corpora.flatMap((corpus) => corpus.files),
+    sessions: corpora.flatMap((corpus) => corpus.sessions),
+    turns: corpora.flatMap((corpus) => corpus.turns),
+    messages: corpora.flatMap((corpus) => corpus.messages),
     tokenUsage: [],
     taskTimings: [],
     toolEvents: [],

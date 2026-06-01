@@ -11,6 +11,10 @@ fixtures/
     session-meta.jsonl
     turn-with-token-count.jsonl
     malformed-line.jsonl
+  claude/
+    basic-session.jsonl
+  cursor/
+    basic-export.md
 ```
 
 ## Rules
@@ -18,6 +22,7 @@ fixtures/
 - Use small, focused fixtures.
 - Prefer one behavior per fixture.
 - Preserve exact JSONL structure.
+- For SQLite-backed providers, prefer synthetic database fixtures built inside tests unless a tiny sanitized text export is enough.
 - Include malformed lines only in fixtures specifically testing malformed input.
 - Do not include secrets, private code, private URLs, or proprietary content.
 - Keep timestamps realistic but non-sensitive.
@@ -31,6 +36,7 @@ fixtures/
 - `turn-context-model.jsonl`
 - `exec-command-end.jsonl`
 - `unknown-event.jsonl`
+- `basic-session.jsonl`
 
 ## Review Checklist
 

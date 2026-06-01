@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { parseCodexCorpus } from "@codex-log-viewer/parser";
+import { parseCodexCorpus, parseLogCorpus } from "@codex-log-viewer/parser";
 import {
   classifyPromptIntent,
   evalMessageId,
@@ -17,6 +17,8 @@ import {
 
 const testDir = dirname(fileURLToPath(import.meta.url));
 const fixturePath = resolve(testDir, "../../../fixtures/codex/sample-session.jsonl");
+const claudeFixturePath = resolve(testDir, "../../../fixtures/claude/basic-session.jsonl");
+const cursorMarkdownFixturePath = resolve(testDir, "../../../fixtures/cursor/basic-export.md");
 
 test("summarizeParsedCorpus aggregates messages, unique messages, tokens, models, and warnings", async () => {
   const corpus = await parseCodexCorpus({ paths: [fixturePath] });
@@ -38,6 +40,69 @@ test("summarizeParsedCorpus aggregates messages, unique messages, tokens, models
   const projects = projectsFromCorpus(corpus);
   assert.equal(projects[0]?.firstSeen, "2026-04-27T19:01:00.745Z");
   assert.equal(projects[0]?.lastSeen, "2026-04-27T19:01:12.000Z");
+});
+
+test("summaries and search support mixed provider filtering", async () => {
+  const corpus = await parseLogCorpus({ paths: [fixturePath, claudeFixturePath, cursorMarkdownFixturePath] });
+  const allSummary = summarizeParsedCorpus(corpus);
+
+  assert.deepEqual(allSummary.providers.map((provider) => provider.provider).sort(), ["claude", "codex", "cursor"]);
+  assert.equal(allSummary.totals.userMessages, 3);
+  assert.equal(allSummary.promptIntents.totalMessages, 1);
+
+  const claudeSearch = searchMessages(corpus, { provider: "claude", submittedOnly: true });
+  assert.equal(claudeSearch.totalMatches, 1);
+  assert.equal(claudeSearch.results[0]?.provider, "claude");
+  assert.equal(claudeSearch.results[0]?.content, "Add Claude fixture support");
+
+  const cursorSearch = searchMessages(corpus, { provider: "cursor", submittedOnly: true });
+  assert.equal(cursorSearch.totalMatches, 1);
+  assert.equal(cursorSearch.results[0]?.provider, "cursor");
+  assert.equal(cursorSearch.results[0]?.content, "Add Cursor Markdown import support.");
+});
+
+test("summaries keep parse warnings for provider files without sessions", () => {
+  const warningOnlyFile = {
+    provider: "cursor",
+    inputKind: "cursor-vscdb",
+    sourceLabel: "Cursor",
+    filePath: "state.vscdb",
+    sessionId: "state",
+    lineCount: 0,
+    sessions: [],
+    turns: [],
+    messages: [],
+    tokenUsage: [],
+    taskTimings: [],
+    toolEvents: [],
+    unknownEvents: [],
+    warnings: [
+      {
+        provider: "cursor",
+        inputKind: "cursor-vscdb",
+        sourceLabel: "Cursor",
+        filePath: "state.vscdb",
+        lineNumber: 0,
+        code: "unsupported_cursor_vscdb",
+        message: "Cursor SQLite database does not contain cursorDiskKV chat storage."
+      }
+    ]
+  };
+  const summary = summarizeParsedCorpus({
+    files: [warningOnlyFile],
+    sessions: [],
+    turns: [],
+    messages: [],
+    tokenUsage: [],
+    taskTimings: [],
+    toolEvents: [],
+    unknownEvents: [],
+    warnings: warningOnlyFile.warnings
+  }, { provider: "cursor" });
+
+  assert.equal(summary.totals.sessions, 0);
+  assert.equal(summary.totals.parseWarnings, 1);
+  assert.equal(summary.providers[0]?.provider, "cursor");
 });
 
 test("projectsFromCorpus uses token and turn timestamps for activity metadata", () => {
@@ -1351,6 +1416,7 @@ test("summarizeParsedCorpus splits long raw sessions into daily session slices",
   const secondDay = summary.sessions.find((session) => session.firstSeen === "2026-01-02T12:00:00.000Z");
 
   assert.equal(summary.totals.sessions, 2);
+  assert.equal(summary.providers[0]?.sessions, 2);
   assert.equal(new Set(summary.sessions.map((session) => session.dateKey)).size, 2);
   assert.equal(firstDay?.userMessages, 1);
   assert.equal(firstDay?.assistantMessages, 1);
@@ -1527,6 +1593,8 @@ test("summarizeParsedCorpus filters diagnostics by visible project sessions and 
 test("redactedProjectSummary removes local source paths from JSON exports", async () => {
   const corpus = await parseCodexCorpus({ paths: [fixturePath] });
   const summary = summarizeParsedCorpus(corpus, { project: "sample-app", paths: [fixturePath] });
+  summary.sessions[0].title = "Sensitive Cursor plan";
+  summary.sessions[0].providerConversationId = "cursor-conversation-private-id";
 
   const redacted = redactedProjectSummary(summary);
   const body = summaryToJson(summary, { redacted: true });
@@ -1534,6 +1602,10 @@ test("redactedProjectSummary removes local source paths from JSON exports", asyn
   assert.equal(redacted.filters.paths[0], "[redacted]");
   assert.equal(redacted.sessions[0]?.filePath, "[redacted]");
   assert.equal(redacted.sessions[0]?.cwd, "[redacted]");
+  assert.equal(redacted.sessions[0]?.title, "[redacted]");
+  assert.equal(redacted.sessions[0]?.providerConversationId, "[redacted]");
   assert.equal(body.includes("fixtures/codex/sample-session.jsonl"), false);
   assert.equal(body.includes("/Users/example/projects/sample-app"), false);
+  assert.equal(body.includes("Sensitive Cursor plan"), false);
+  assert.equal(body.includes("cursor-conversation-private-id"), false);
 });

@@ -12,7 +12,7 @@ import {
 } from "@codex-log-viewer/analytics";
 import type { MessageRecord, ParsedCodexCorpus, TurnRecord } from "@codex-log-viewer/parser";
 
-const INDEX_SCHEMA_VERSION = 2;
+const INDEX_SCHEMA_VERSION = 3;
 
 export interface SearchIndexHandle {
   search(options: MessageSearchOptions): MessageSearchSummary | undefined;
@@ -65,12 +65,16 @@ class SqliteSearchIndex implements SearchIndexHandle {
       where.push("m.project = ?");
       params.push(project);
     }
+    if (options.provider && options.provider !== "all") {
+      where.push("m.provider = ?");
+      params.push(options.provider);
+    }
     if (options.role && options.role !== "all") {
       where.push("m.role = ?");
       params.push(options.role);
     }
     if (options.submittedOnly) {
-      where.push("m.source_event = 'event_msg.user_message'");
+      where.push("(m.source_event = 'event_msg.user_message' OR m.source_event = 'claude.user_message' OR m.source_event = 'cursor.user_message')");
     }
     if (options.model?.trim()) {
       where.push("COALESCE(m.model, 'unknown') = ?");
@@ -128,6 +132,10 @@ class SqliteSearchIndex implements SearchIndexHandle {
 
 interface IndexedMessageRow {
   id: string;
+  provider: string;
+  source_label: string | null;
+  title: string | null;
+  provider_conversation_id: string | null;
   session_id: string;
   file_path: string;
   date_key: string;
@@ -146,14 +154,19 @@ interface IndexedMessageRow {
 }
 
 function ensureSchema(database: DatabaseSync): void {
+  database.exec("PRAGMA journal_mode = WAL;");
+  resetSearchSchemaIfNeeded(database);
   database.exec(`
-    PRAGMA journal_mode = WAL;
     CREATE TABLE IF NOT EXISTS metadata (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
     CREATE TABLE IF NOT EXISTS messages (
       id TEXT PRIMARY KEY,
+      provider TEXT NOT NULL,
+      source_label TEXT,
+      title TEXT,
+      provider_conversation_id TEXT,
       session_id TEXT NOT NULL,
       file_path TEXT NOT NULL,
       date_key TEXT NOT NULL,
@@ -172,11 +185,38 @@ function ensureSchema(database: DatabaseSync): void {
       content TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS messages_browse_idx
-      ON messages(project, source_event, timestamp DESC);
+      ON messages(provider, project, source_event, timestamp DESC);
     CREATE INDEX IF NOT EXISTS messages_session_idx
       ON messages(session_id, file_path, date_key);
     CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts
       USING fts5(content, content='messages', content_rowid='rowid');
+  `);
+}
+
+function resetSearchSchemaIfNeeded(database: DatabaseSync): void {
+  const table = database.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'messages'").get();
+  if (!table) {
+    return;
+  }
+
+  const columns = new Set(
+    (database.prepare("PRAGMA table_info(messages)").all() as Array<{ name: string }>)
+      .map((column) => column.name)
+  );
+  const requiredColumns = [
+    "provider",
+    "source_label",
+    "title",
+    "provider_conversation_id"
+  ];
+  if (requiredColumns.every((column) => columns.has(column))) {
+    return;
+  }
+
+  database.exec(`
+    DROP TABLE IF EXISTS messages_fts;
+    DROP TABLE IF EXISTS messages;
+    DROP TABLE IF EXISTS metadata;
   `);
 }
 
@@ -192,9 +232,9 @@ function rebuildIndex(database: DatabaseSync, corpus: ParsedCodexCorpus, fingerp
   );
   const insert = database.prepare(`
     INSERT INTO messages (
-      id, session_id, file_path, date_key, project, cwd, line_number, turn_id,
+      id, provider, source_label, title, provider_conversation_id, session_id, file_path, date_key, project, cwd, line_number, turn_id,
       model, timestamp, role, source_event, category, prompt_intent_key, prompt_intent, normalized_content, content
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   database.exec("BEGIN");
@@ -202,11 +242,15 @@ function rebuildIndex(database: DatabaseSync, corpus: ParsedCodexCorpus, fingerp
     database.exec("DELETE FROM messages_fts; DELETE FROM messages; DELETE FROM metadata;");
     for (const [index, message] of corpus.messages.entries()) {
       const context = projectContextForFile(message, corpus);
-      const promptIntent = message.sourceEvent === "event_msg.user_message"
+      const promptIntent = message.provider === "codex" && message.sourceEvent === "event_msg.user_message"
         ? classifyPromptIntent(message.content)
         : undefined;
       insert.run(
         searchResultId(message, index),
+        message.provider,
+        message.sourceLabel ?? null,
+        message.title ?? null,
+        message.providerConversationId ?? null,
         message.sessionId,
         message.filePath,
         localDateKey(message.timestamp),
@@ -222,7 +266,7 @@ function rebuildIndex(database: DatabaseSync, corpus: ParsedCodexCorpus, fingerp
         message.timestamp ?? null,
         message.role,
         message.sourceEvent,
-        message.sourceEvent === "event_msg.user_message" ? userMessageCategoryLabel(message.content) ?? null : null,
+        message.provider === "codex" && message.sourceEvent === "event_msg.user_message" ? userMessageCategoryLabel(message.content) ?? null : null,
         promptIntent?.key ?? null,
         promptIntent?.label ?? null,
         normalizeSearchText(message.content),
@@ -243,6 +287,10 @@ function rebuildIndex(database: DatabaseSync, corpus: ParsedCodexCorpus, fingerp
 function indexedRowToSearchResult(row: IndexedMessageRow, query: string): MessageSearchResult {
   return {
     id: row.id,
+    provider: row.provider,
+    sourceLabel: row.source_label ?? undefined,
+    title: row.title ?? undefined,
+    providerConversationId: row.provider_conversation_id ?? undefined,
     sessionId: row.session_id,
     filePath: row.file_path,
     dateKey: row.date_key,
@@ -275,6 +323,7 @@ function corpusFingerprint(corpus: ParsedCodexCorpus): string {
   hash.update(JSON.stringify({
     files: corpus.files.map((file) => ({
       filePath: file.filePath,
+      provider: file.provider,
       sessionId: file.sessionId,
       lineCount: file.lineCount,
       messages: file.messages.length,
@@ -293,6 +342,7 @@ function latestTimestamp(values: Array<string | undefined>): string | undefined 
 function searchResultId(message: MessageRecord, index: number): string {
   return [
     message.filePath,
+    message.provider,
     message.sessionId,
     message.lineNumber ?? "",
     message.turnId ?? "",

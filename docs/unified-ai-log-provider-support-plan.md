@@ -1,67 +1,52 @@
 # Unified AI Log Provider Support
 
-Date: 2026-05-29
-Status: Planned
+Date: 2026-05-30
+Status: Implemented
 
 ## Summary
 
-Support Claude Code and future AI-agent logs through a provider adapter framework instead of folding every source into the current Codex-specific parser.
+Codex Log Viewer now has a provider-aware parser and analytics surface for local AI logs. Codex remains the default local source, while user-selected files and folders can include Codex JSONL, Claude Code JSONL, Cursor SQLite state databases, and explicit Cursor Markdown exports.
 
-Claude Code is a strong first non-Codex provider because its local sessions are JSONL files under `~/.claude/projects/`. Those records can be normalized into the viewer's existing concepts: sessions, messages, tool activity, model usage, token usage, warnings, and unknown events.
+The product model is one local AI log viewer: normalized sessions, messages, tool activity, token usage, warnings, search results, summaries, and native interaction views carry provider metadata and can be filtered by provider.
 
-The product should become a unified AI log viewer in behavior: one project/session/message experience with provider filters and source labels. Cloud-backed material should enter through explicit local imports or future connectors, not silent authenticated scraping.
+## Implemented Provider Model
 
-Relevant Claude Code documentation:
+- Normalized records include `provider`, `inputKind`, `sourceLabel`, optional `title`, and optional `providerConversationId`.
+- Compatibility APIs such as `parseCodexCorpus`, `parseCodexLogFile`, and `parseCodexCorpusWithCache` remain available.
+- Provider-neutral APIs include `parseLogCorpus`, `parseLogFile`, and `parseLogCorpusWithCache`.
+- Provider filters are available in analytics, local API query parameters, CLI options, and the macOS workspace header.
 
-- [Sessions](https://code.claude.com/docs/en/sessions)
-- [Claude directory](https://code.claude.com/docs/en/claude-directory)
-- [Remote Control](https://code.claude.com/docs/en/remote-control)
-- [Claude Code on the web](https://code.claude.com/docs/en/web-quickstart)
+## Provider Support
 
-## Key Changes
+- Codex:
+  - Local default remains `~/.codex/sessions` and `~/.codex/archived_sessions`.
+  - Existing Codex JSONL parsing, token aggregation, tool events, audit worklog generation, Project Focus, and interaction reconstruction remain compatible.
+- Claude Code:
+  - Local JSONL records are normalized from user, assistant, system, tool use, tool result, usage, attachment, and unknown record shapes.
+  - Anthropic usage fields include separate cache creation and cache read token counts.
+  - Tool content blocks become tool events.
+- Cursor:
+  - User-selected `state.vscdb` files are normalized from Cursor's local SQLite chat bubble storage when the expected `cursorDiskKV` records are present.
+  - Cursor composer headers provide optional title, provider-native conversation id, and workspace-derived working-directory metadata when the sibling `workspaceStorage/<id>/workspace.json` file is available.
+  - Explicit Markdown export files can be imported when they use recognizable user/assistant role sections.
+  - Cursor tokens are included only when the local bubble record exposes token counts. Unsupported or malformed local database records become parse warnings or unknown events.
+## UI And Product Behavior
 
-- Add a provider adapter layer:
-  - Add `provider: "codex" | "claude" | string` to normalized sessions, turns, messages, token usage, tool events, warnings, and unknown events.
-  - Keep the current Codex parser as the `codex` adapter.
-  - Add a Claude adapter for local `~/.claude/projects/**/*.jsonl` transcripts.
-  - Keep compatibility exports such as `parseCodexCorpus`, while adding generic `parseLogCorpus` APIs.
-- Normalize Claude Code records:
-  - Top-level `user` records with `message.content` become submitted user messages.
-  - Top-level `assistant` records become assistant messages, with text extracted from Anthropic content blocks.
-  - `tool_use` and `tool_result` content blocks become tool events.
-  - Claude `message.usage` maps into token usage, including separate cache creation and cache read fields.
-  - `system`, `attachment`, `queue-operation`, title, and future records are preserved as provider events or unknown events.
-- Extend discovery:
-  - Default local discovery scans Codex and Claude local roots.
-  - User-selected files/directories can contain mixed providers.
-  - Cloud sessions are supported as explicit imported/exported local files until a real connector exists.
-- Update analytics and API:
-  - Add provider filters to projects, summaries, sessions, search, exports, and audit endpoints.
-  - Add provider breakdowns without breaking project, model, date, repeated-prompt, and search workflows.
-  - Keep audit-worklog generation conservative until provider-specific response reconstruction is tested.
-- Update the macOS app:
-  - Present mixed data as unified AI logs.
-  - Add provider badges and a provider filter: All, Codex, Claude.
-  - Rename mixed-provider surfaces from "Codex Interaction" to "AI Interaction".
-  - Keep repository and package names unchanged for this milestone.
-- Update documentation:
-  - Add an architecture decision record for provider adapters and cloud-import boundaries.
-  - Add `fixtures/claude` fixture guidance.
-  - Update architecture, usage, privacy/redaction, parser schema notes, README, and this worklog as implementation progresses.
+- Default launch remains Codex-only because no custom sources are selected and the default roots are Codex roots.
+- Custom selected files/folders can contain mixed providers.
+- The macOS app shows provider badges and a provider segmented control: All, Codex, Claude, Cursor.
+- Mixed-provider interaction surfaces use "AI Interaction" and "AI Response" copy.
+- Audit worklog generation uses provider-specific submitted user-message records and captured assistant responses across enabled providers.
 
-## Test Plan
+## Verification Coverage
 
-- Confirm worktree bootstrap before running repo-local tooling.
-- Add sanitized Claude fixtures for user messages, assistant text, usage, tool use/result, attachment records, queue operations, system hook records, title records, and malformed lines.
-- Add mixed-corpus tests proving Codex and Claude can be parsed together, filtered by provider, grouped by project, searched, and summarized.
-- Add token tests covering Claude cache creation and cache read tokens separately.
-- Add server/API tests for provider filters and mixed source paths.
-- Add macOS decoding and interaction reconstruction smoke coverage with sanitized mixed-provider fixtures.
-- Run `npm test`, `npm run build`, `npm run privacy:scan`, and macOS smoke checks for user-visible UI changes.
+- Sanitized fixtures cover Codex compatibility, Claude JSONL, Claude usage/tool records, Cursor Markdown exports, synthetic Cursor SQLite records, malformed provider records, and mixed-provider corpora.
+- Parser tests cover provider normalization, Claude cache tokens, Cursor local SQLite records, Cursor Markdown records, malformed lines, and mixed sources.
+- Analytics and API tests cover provider filters, mixed summaries, search, provider metadata, and existing Codex behaviors.
+- macOS compile coverage verifies native decoding, provider filter query construction, provider badges, and renamed AI interaction copy.
 
-## Assumptions
+## Boundaries
 
-- The first implementation remains local-first and fixture-driven.
-- No raw local Claude or Codex transcripts are committed.
-- Cloud support means imported/exported cloud transcripts or future session-store adapters, not logging into hosted Claude services from the app.
-- The product experience becomes a unified AI log viewer, but a repository or package rename is deferred.
+- No raw local Codex, Claude, or Cursor transcripts are committed.
+- Cloud-backed material enters through explicit local imports or future connectors, not silent authenticated scraping.
+- Repository and package names remain unchanged for this milestone.

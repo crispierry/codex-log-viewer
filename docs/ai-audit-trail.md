@@ -1,6 +1,6 @@
 # AI Audit Trail
 
-Codex Log Viewer can generate a Markdown audit trail from local Codex session logs. The goal is to preserve user intent across projects without committing raw private session files.
+Codex Log Viewer can generate a Markdown audit trail from local AI system logs. The goal is to preserve user intent across projects without committing raw private session files.
 
 ## Recommended Files
 
@@ -17,7 +17,7 @@ Each worklog entry should include:
 
 - user messages, verbatim or minimally redacted
 - interpreted intent
-- Codex response or work performed
+- AI response or work performed
 - files or areas changed
 - verification run
 - follow-ups or known gaps
@@ -33,7 +33,9 @@ The CLI can also generate an audit draft for a repository:
 npm run cli -- audit --repo /path/to/repo --output /path/to/repo/docs/ai-worklog.md
 ```
 
-By default, the audit command scans local Codex logs, filters sessions for the repository, includes submitted user messages and captured Codex responses, and writes public-mode Markdown. Public mode preserves intent while redacting obvious local home paths, email addresses, and token-like strings.
+By default, the audit command scans the selected local sources, filters sessions for the repository when repository context is available, includes submitted user messages from Codex, Claude Code, and Cursor, and writes public-mode Markdown. Captured AI responses are included by default. Public mode preserves intent while redacting obvious local home paths, email addresses, and token-like strings.
+
+Use `--provider all|codex|claude|cursor` and `--path` to control which local AI sources contribute to the audit draft.
 
 Smart merge mode preserves existing reviewed Markdown and appends only generated session sections that are not already present in the target worklog.
 
@@ -43,7 +45,7 @@ Use raw mode only for private local review:
 npm run cli -- audit --repo /path/to/repo --raw --output .codex/audit/raw-ai-worklog.md
 ```
 
-Suppress Codex responses when you only want the user-intent trail:
+Suppress AI responses when you only want the user-intent trail:
 
 ```sh
 npm run cli -- audit --repo /path/to/repo --no-responses
@@ -60,7 +62,7 @@ Generated audit drafts are not automatically safe to publish. Before committing 
 - screenshots or image references
 - local paths that identify private machines or folders
 
-Do not commit raw Codex session JSONL files. The audit trail should be derived, reviewed, and intentionally sanitized.
+Do not commit raw Codex, Claude Code, or Cursor transcript files. The audit trail should be derived, reviewed, and intentionally sanitized.
 
 ## Ongoing Workflow
 

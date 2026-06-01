@@ -15,7 +15,7 @@ const notaryProfile = process.env.CODEX_LOG_VIEWER_NOTARY_PROFILE?.trim();
 const notaryKeychain = process.env.CODEX_LOG_VIEWER_NOTARY_KEYCHAIN?.trim();
 const requireNotarization = process.env.CODEX_LOG_VIEWER_REQUIRE_NOTARIZATION === "1";
 verifyReleaseSigningConfiguration();
-const appVersion = bumpAppBuildVersion();
+const appVersion = readAppVersion();
 const version = appVersion.marketingVersion;
 const buildVersion = appVersion.bundleVersion;
 const buildDir = resolve(repoRoot, "dist/macos");
@@ -246,7 +246,7 @@ async function createReleaseArchive() {
     return;
   }
 
-  const archiveName = `Codex-Log-Viewer-v${version}-build${buildVersion}-macOS.zip`;
+  const archiveName = `Codex-Log-Viewer-v${version}-macOS.zip`;
   const archivePath = join(buildDir, archiveName);
   const checksumPath = `${archivePath}.sha256`;
   await rm(archivePath, { force: true });
@@ -365,8 +365,8 @@ function resolveDylibPath(dependency, referencingBinaryPath, sourceNodePath) {
   return existsSync(dependency) ? dependency : undefined;
 }
 
-function bumpAppBuildVersion() {
-  return JSON.parse(execFileSync("node", ["scripts/update-app-version.mjs", "--bump-build", "--json"], {
+function readAppVersion() {
+  return JSON.parse(execFileSync("node", ["scripts/update-app-version.mjs", "--json"], {
     cwd: repoRoot,
     encoding: "utf8"
   }));

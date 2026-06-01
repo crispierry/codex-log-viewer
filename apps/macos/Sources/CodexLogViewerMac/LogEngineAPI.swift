@@ -243,6 +243,7 @@ struct LogEngineAPI {
     components.queryItems = query.isEmpty ? nil : query
 
     var request = URLRequest(url: components.url!)
+    request.timeoutInterval = 600
     request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
 
     let (data, response) = try await URLSession.shared.data(for: request)
@@ -263,6 +264,7 @@ struct LogEngineAPI {
     for path in filters.paths {
       items.append(URLQueryItem(name: "path", value: path))
     }
+    items.append(URLQueryItem(name: "provider", value: filters.provider.rawValue))
     if includeDateRange {
       if let since = filters.since {
         items.append(URLQueryItem(name: "since", value: since))

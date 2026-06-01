@@ -19,6 +19,14 @@ private struct SessionDetailCacheKey: Hashable {
   let filePath: String?
 }
 
+private struct BrowseMessagesCacheKey: Hashable {
+  let provider: String
+  let project: String
+  let sourcePaths: String
+  let since: String?
+  let until: String?
+}
+
 @MainActor
 final class AppModel: ObservableObject {
   enum Status: Equatable {
@@ -71,6 +79,7 @@ final class AppModel: ObservableObject {
   @Published var pathDraft = ""
   @Published var sourcePaths: [String] = []
   @Published var recentSourcePaths: [String] = []
+  @Published var providerFilter: ProviderFilter = .codex
   @Published var hasSinceFilter = false
   @Published var hasUntilFilter = false
   @Published var sinceDate = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
@@ -113,6 +122,8 @@ final class AppModel: ObservableObject {
   private var evalsTask: Task<Void, Never>?
   private var evalReviewTask: Task<Void, Never>?
   private var backgroundSyncTask: Task<Void, Never>?
+  private var providerWarmupTask: Task<Void, Never>?
+  private var providerWarmupGeneration = 0
   private var reloadRequestID = 0
   private var detailRequestID = 0
   private var quietDetailRefreshRequestID = 0
@@ -125,17 +136,22 @@ final class AppModel: ObservableObject {
   private var pendingSearchConversationResult: MessageSearchResult?
   private var sessionDetailCache: [SessionDetailCacheKey: SessionDetail] = [:]
   private var sessionDetailCacheOrder: [SessionDetailCacheKey] = []
+  private var browseMessagesCache: [BrowseMessagesCacheKey: MessageSearchSummary] = [:]
+  private var browseMessagesCacheOrder: [BrowseMessagesCacheKey] = []
   private var detailCacheGeneration = 0
   private var pendingInteractionRenderStartedAt: Date?
   private var pendingInteractionRenderSource = ""
   private var pendingInteractionRenderID: String?
   private var isLogRefreshInFlight = false
+  private var warmedProviderCacheKeys: Set<String> = []
   private let isEphemeralSettingsRun = ProcessInfo.processInfo.environment["CODEX_LOG_VIEWER_EPHEMERAL_SETTINGS"] == "1" ||
     ProcessInfo.processInfo.environment["CODEX_LOG_VIEWER_UI_TEST"] == "1"
   private var hasScheduledUITestQuit = false
   private static let backgroundSyncInterval: Duration = .seconds(60)
   private static let sessionDetailCacheCapacity = 12
-  private static let browseMessagesPageSize = 500
+  private static let browseMessagesCacheCapacity = 24
+  private static let initialBrowseMessagesPageSize = 30
+  private static let browseMessagesAppendPageSize = 100
   private static let evalMessagesPageSize = 500
 
   private enum RefreshMode {
@@ -158,6 +174,7 @@ final class AppModel: ObservableObject {
     evalsTask?.cancel()
     evalReviewTask?.cancel()
     backgroundSyncTask?.cancel()
+    providerWarmupTask?.cancel()
   }
 
   var browseMessages: [MessageSearchResult] {
@@ -283,7 +300,7 @@ final class AppModel: ObservableObject {
         status = .starting
         logLoadingNotice = LogLoadingNotice(
           title: "Starting Log Engine",
-          message: "Preparing to scan your local Codex logs."
+          message: "Preparing to scan your local AI logs."
         )
         let connection = try await LocalLogEngineServer.shared.start()
         api = LogEngineAPI(baseURL: connection.baseURL, authToken: connection.authToken)
@@ -338,7 +355,7 @@ final class AppModel: ObservableObject {
 
   var sourceSummaryText: String {
     guard !sourcePaths.isEmpty else {
-      return "Default Codex log locations"
+      return defaultSourceSummaryText
     }
     if sourcePaths.count == 1, let path = sourcePaths.first {
       return URL(fileURLWithPath: path).lastPathComponent.isEmpty ? path : URL(fileURLWithPath: path).lastPathComponent
@@ -347,7 +364,20 @@ final class AppModel: ObservableObject {
   }
 
   var sourceMenuLabel: String {
-    "Source: \(sourceSummaryText)"
+    "Source: \(sourceSummaryText) · Provider: \(providerFilter.label)"
+  }
+
+  private var defaultSourceSummaryText: String {
+    switch providerFilter {
+    case .all:
+      return "Default AI log locations"
+    case .codex:
+      return "Default Codex log locations"
+    case .claude:
+      return "Default Claude Code log locations"
+    case .cursor:
+      return "Default Cursor log locations"
+    }
   }
 
   var auditTargetPathText: String {
@@ -392,7 +422,7 @@ final class AppModel: ObservableObject {
   var dateRangeDetailText: String {
     switch dateRangeMode {
     case .all:
-      return "Showing all local Codex activity."
+      return "Showing all local AI activity."
     default:
       return "Showing \(Self.displayDateOnly(sinceDate)) through \(Self.displayDateOnly(untilDate))."
     }
@@ -402,20 +432,37 @@ final class AppModel: ObservableObject {
     Self.startOfToday()
   }
 
-  func refresh(force: Bool = false, rebuildCache: Bool = false) {
-    refresh(force: force, rebuildCache: rebuildCache, mode: .foreground)
+  func refresh(force: Bool = false, rebuildCache: Bool = false, suppressLoadingNotice: Bool = false) {
+    refresh(
+      force: force,
+      rebuildCache: rebuildCache,
+      mode: .foreground,
+      suppressLoadingNotice: suppressLoadingNotice
+    )
   }
 
-  private func refresh(force: Bool = false, rebuildCache: Bool = false, mode: RefreshMode) {
+  private func refresh(
+    force: Bool = false,
+    rebuildCache: Bool = false,
+    mode: RefreshMode,
+    allowEngineRestart: Bool = true,
+    suppressLoadingNotice: Bool = false
+  ) {
     guard let api else { return }
     if mode == .background, shouldSkipBackgroundSync {
       return
     }
+    if mode == .foreground {
+      cancelProviderWarmup()
+    }
 
     let shouldRefreshCache = force || rebuildCache || mode == .background
-    let shouldShowLoadingNotice = mode == .foreground && (summary == nil || force || rebuildCache)
+    let shouldShowLoadingNotice = !suppressLoadingNotice &&
+      mode == .foreground &&
+      (summary == nil || browseMessagesSummary == nil || force || rebuildCache)
     if shouldRefreshCache {
       refreshToken += 1
+      warmedProviderCacheKeys.removeAll()
       cacheMetadata = CacheMetadata(
         cacheStatus: "checking",
         reusedFiles: 0,
@@ -441,6 +488,13 @@ final class AppModel: ObservableObject {
       }
     }
     beginLogRefresh(mode: mode, showLoadingNotice: shouldShowLoadingNotice, rebuildCache: rebuildCache)
+    let shouldLoadBrowseMessagesEarly = mode == .foreground &&
+      !showSessionBrowser &&
+      pendingSearchConversationResult == nil &&
+      (isBrowseMessagesLoading || browseMessagesSummary == nil)
+    if shouldLoadBrowseMessagesEarly {
+      loadBrowseMessages(selectFirstIfNeeded: true)
+    }
 
     reloadTask = Task {
       do {
@@ -471,13 +525,18 @@ final class AppModel: ObservableObject {
         if showSessionBrowser && pendingSearchConversationResult == nil {
           selectLatestSessionIfNeeded(in: summary)
         }
-        loadBrowseMessages(selectFirstIfNeeded: mode == .foreground && !showSessionBrowser && pendingSearchConversationResult == nil)
+        if !shouldLoadBrowseMessagesEarly {
+          loadBrowseMessages(selectFirstIfNeeded: mode == .foreground && !showSessionBrowser && pendingSearchConversationResult == nil)
+        }
         if mode == .background {
           refreshSelectedSessionQuietly(api: api, filters: currentFilters(), project: project)
         } else {
           status = .ready
         }
         finishLogRefresh(requestID: requestID)
+        if mode == .foreground {
+          startProviderWarmupIfNeeded(api: api)
+        }
         scheduleUITestWorkflowIfNeeded(api: api, filters: filters)
       } catch is CancellationError {
         return
@@ -485,6 +544,23 @@ final class AppModel: ObservableObject {
         guard requestID == reloadRequestID else { return }
         finishLogRefresh(requestID: requestID)
         if mode == .foreground {
+          if allowEngineRestart, isLocalConnectionFailure(error) {
+            do {
+              let connection = try await LocalLogEngineServer.shared.start()
+              self.api = LogEngineAPI(baseURL: connection.baseURL, authToken: connection.authToken)
+              refresh(
+                force: force,
+                rebuildCache: rebuildCache,
+                mode: mode,
+                allowEngineRestart: false,
+                suppressLoadingNotice: suppressLoadingNotice
+              )
+              return
+            } catch {
+              status = .failed(error.localizedDescription)
+              return
+            }
+          }
           status = .failed(error.localizedDescription)
         }
       }
@@ -536,6 +612,64 @@ final class AppModel: ObservableObject {
     refresh(force: true, mode: .background)
   }
 
+  private func startProviderWarmupIfNeeded(api: LogEngineAPI) {
+    guard providerWarmupTask == nil, !isEphemeralSettingsRun, sourcePaths.isEmpty, providerFilter != .all else { return }
+    providerWarmupGeneration += 1
+    let generation = providerWarmupGeneration
+    providerWarmupTask = Task { [weak self] in
+      defer {
+        Task { @MainActor [weak self] in
+          guard let self, self.providerWarmupGeneration == generation else { return }
+          self.providerWarmupTask = nil
+        }
+      }
+      do {
+        try await Task.sleep(for: .seconds(2))
+      } catch {
+        return
+      }
+      guard !Task.isCancelled else { return }
+      await self?.warmProviderCaches(api: api)
+    }
+  }
+
+  private func cancelProviderWarmup() {
+    providerWarmupGeneration += 1
+    providerWarmupTask?.cancel()
+    providerWarmupTask = nil
+  }
+
+  private func warmProviderCaches(api: LogEngineAPI) async {
+    let warmProviders = ProviderFilter.allCases.filter { $0 != .all && $0 != providerFilter }
+    let project = selectedProject
+    for provider in warmProviders {
+      guard !Task.isCancelled, sourcePaths.isEmpty else { return }
+      var filters = currentFilters()
+      filters.provider = provider
+      filters.refreshToken = 0
+      filters.rebuildCache = false
+      let warmupKey = providerWarmupCacheKey(provider: provider, project: project, filters: filters)
+      guard !warmedProviderCacheKeys.contains(warmupKey) else { continue }
+      do {
+        _ = try await api.projectsWithMetadata(filters: filters)
+        _ = try await api.searchMessagesWithMetadata(
+          query: "",
+          role: .user,
+          model: AppConstants.allModelsName,
+          sessionID: nil,
+          project: project,
+          filters: filters,
+          submittedOnly: true,
+          limit: Self.initialBrowseMessagesPageSize,
+          offset: 0
+        )
+        warmedProviderCacheKeys.insert(warmupKey)
+      } catch {
+        continue
+      }
+    }
+  }
+
   private func beginLogRefresh(mode: RefreshMode, showLoadingNotice: Bool, rebuildCache: Bool) {
     isLogRefreshInFlight = true
     isBackgroundSyncing = mode == .background
@@ -547,10 +681,10 @@ final class AppModel: ObservableObject {
 
     if showLoadingNotice {
       logLoadingNotice = LogLoadingNotice(
-        title: rebuildCache ? "Rebuilding Local Cache" : "Loading Latest Logs",
+        title: rebuildCache ? "Rebuilding Local Cache" : "Loading Latest AI Logs",
         message: rebuildCache
-          ? "Reparsing your local Codex sessions. This can take a moment for large histories."
-          : "Checking your local Codex sessions for the newest activity."
+          ? "Reparsing your local AI logs. This can take a moment for large histories."
+          : "Checking your local AI logs for the newest activity."
       )
     } else {
       logLoadingNotice = nil
@@ -562,6 +696,17 @@ final class AppModel: ObservableObject {
     isLogRefreshInFlight = false
     isBackgroundSyncing = false
     logLoadingNotice = nil
+  }
+
+  private func isLocalConnectionFailure(_ error: Error) -> Bool {
+    let nsError = error as NSError
+    guard nsError.domain == NSURLErrorDomain else {
+      return error.localizedDescription.localizedCaseInsensitiveContains("could not connect")
+    }
+    return [
+      NSURLErrorCannotConnectToHost,
+      NSURLErrorNetworkConnectionLost
+    ].contains(nsError.code)
   }
 
   private func refreshSelectedSessionQuietly(api: LogEngineAPI, filters: LogFilters, project: String) {
@@ -615,7 +760,7 @@ final class AppModel: ObservableObject {
     selectedProject = project
     updateAuditRepoPathSuggestion(force: true)
     clearAuditPreview()
-    clearSelectionState()
+    clearSelectionState(markBrowseLoading: true)
     refresh()
   }
 
@@ -629,7 +774,7 @@ final class AppModel: ObservableObject {
 
   func chooseSourcePaths() {
     let panel = NSOpenPanel()
-    panel.title = "Choose Codex Logs"
+    panel.title = "Choose AI Logs"
     panel.prompt = "Choose"
     panel.canChooseFiles = true
     panel.canChooseDirectories = true
@@ -655,8 +800,26 @@ final class AppModel: ObservableObject {
   func filtersChanged() {
     saveSettings()
     clearAuditPreview()
-    clearSelectionState()
+    clearSelectionState(markBrowseLoading: true)
     refresh()
+  }
+
+  func setProviderFilter(_ provider: ProviderFilter) {
+    guard providerFilter != provider else { return }
+    storeCurrentBrowseMessagesInCache()
+    let currentBrowseMessagesSummary = browseMessagesSummary
+    providerFilter = provider
+    selectedProject = AppConstants.allProjectsName
+    let cachedOrPartialBrowseMessages = cachedBrowseMessagesForCurrentFilters() ??
+      partialBrowseMessagesForProviderSwitch(to: provider, from: currentBrowseMessagesSummary)
+    saveSettings()
+    updateAuditRepoPathSuggestion(force: true)
+    clearAuditPreview()
+    clearSelectionState(markBrowseLoading: true, preserveBrowseMessages: cachedOrPartialBrowseMessages != nil)
+    if let cachedOrPartialBrowseMessages {
+      browseMessagesSummary = cachedOrPartialBrowseMessages
+    }
+    refresh(suppressLoadingNotice: true)
   }
 
   func setDateRangeMode(_ mode: DateRangeMode) {
@@ -850,11 +1013,11 @@ final class AppModel: ObservableObject {
     let requestID = browseMessagesRequestID
     let filters = currentFilters()
     let project = selectedProject
-    let limit = Self.browseMessagesPageSize
+    let limit = append ? Self.browseMessagesAppendPageSize : Self.initialBrowseMessagesPageSize
+    isBrowseMessagesLoading = true
 
     browseMessagesTask = Task {
       do {
-        isBrowseMessagesLoading = true
         let searchResult = try await api.searchMessagesWithMetadata(
           query: "",
           role: .user,
@@ -871,6 +1034,7 @@ final class AppModel: ObservableObject {
           ? mergedBrowseSearch(existing: existingSummary, incoming: searchResult.search)
           : searchResult.search
         browseMessagesSummary = updatedSearch
+        storeBrowseMessagesInCache(updatedSearch, key: currentBrowseMessagesCacheKey())
         cacheMetadata = searchResult.cache ?? cacheMetadata
         isBrowseMessagesLoading = false
         let visibleResults = visibleBrowseMessages(in: updatedSearch.results)
@@ -1051,7 +1215,7 @@ final class AppModel: ObservableObject {
     evalsTask?.cancel()
     evalsRequestID += 1
     let requestID = evalsRequestID
-    let filters = LogFilters(paths: sourcePaths)
+    let filters = LogFilters(paths: sourcePaths, provider: .codex)
     let project = AppConstants.allProjectsName
     let query = evalQuery.trimmingCharacters(in: .whitespacesAndNewlines)
     let categoryKey = evalCategoryKeyFilter
@@ -1174,6 +1338,10 @@ final class AppModel: ObservableObject {
   func showConversation(for evalMessage: PromptIntentEvalMessage) {
     pendingSearchConversationResult = MessageSearchResult(
       id: evalMessage.evalId,
+      provider: "codex",
+      sourceLabel: "Codex",
+      title: nil,
+      providerConversationId: nil,
       sessionId: evalMessage.sessionId,
       filePath: evalMessage.filePath,
       dateKey: evalMessage.dateKey,
@@ -1489,9 +1657,9 @@ final class AppModel: ObservableObject {
     return alert.runModal() == .alertFirstButtonReturn
   }
 
-  private func clearSelectionState() {
+  private func clearSelectionState(markBrowseLoading: Bool = false, preserveBrowseMessages: Bool = false) {
     clearSelectedSession()
-    clearBrowseMessages()
+    clearBrowseMessages(markLoading: markBrowseLoading, preserveMessages: preserveBrowseMessages)
     clearSearchResults()
   }
 
@@ -1508,12 +1676,14 @@ final class AppModel: ObservableObject {
     isDetailLoading = false
   }
 
-  private func clearBrowseMessages() {
+  private func clearBrowseMessages(markLoading: Bool = false, preserveMessages: Bool = false) {
     browseMessagesTask?.cancel()
     browseMessagesRequestID += 1
-    browseMessagesSummary = nil
+    if !preserveMessages {
+      browseMessagesSummary = nil
+    }
     selectedBrowseMessageID = nil
-    isBrowseMessagesLoading = false
+    isBrowseMessagesLoading = markLoading && api != nil
   }
 
   private func clearSearchResults() {
@@ -1698,6 +1868,62 @@ final class AppModel: ObservableObject {
       limit: results.count,
       offset: 0,
       results: results
+    )
+  }
+
+  private func storeCurrentBrowseMessagesInCache() {
+    guard let browseMessagesSummary else { return }
+    storeBrowseMessagesInCache(browseMessagesSummary, key: currentBrowseMessagesCacheKey())
+  }
+
+  private func storeBrowseMessagesInCache(_ summary: MessageSearchSummary, key: BrowseMessagesCacheKey) {
+    browseMessagesCache[key] = summary
+    browseMessagesCacheOrder.removeAll { $0 == key }
+    browseMessagesCacheOrder.append(key)
+    while browseMessagesCacheOrder.count > Self.browseMessagesCacheCapacity {
+      let removedKey = browseMessagesCacheOrder.removeFirst()
+      browseMessagesCache.removeValue(forKey: removedKey)
+    }
+  }
+
+  private func cachedBrowseMessagesForCurrentFilters() -> MessageSearchSummary? {
+    let key = currentBrowseMessagesCacheKey()
+    guard let cached = browseMessagesCache[key] else { return nil }
+    browseMessagesCacheOrder.removeAll { $0 == key }
+    browseMessagesCacheOrder.append(key)
+    return cached
+  }
+
+  private func partialBrowseMessagesForProviderSwitch(
+    to provider: ProviderFilter,
+    from summary: MessageSearchSummary?
+  ) -> MessageSearchSummary? {
+    guard let summary else { return nil }
+    if provider == .all {
+      return summary
+    }
+
+    let providerResults = summary.results.filter { $0.provider == provider.rawValue }
+    guard !providerResults.isEmpty else { return nil }
+    return MessageSearchSummary(
+      query: summary.query,
+      project: AppConstants.allProjectsName,
+      generatedAt: summary.generatedAt,
+      totalMatches: providerResults.count,
+      limit: providerResults.count,
+      offset: 0,
+      results: providerResults
+    )
+  }
+
+  private func currentBrowseMessagesCacheKey() -> BrowseMessagesCacheKey {
+    let filters = currentFilters()
+    return BrowseMessagesCacheKey(
+      provider: filters.provider.rawValue,
+      project: selectedProject,
+      sourcePaths: filters.paths.joined(separator: "\n"),
+      since: filters.since,
+      until: filters.until
     )
   }
 
@@ -1908,7 +2134,7 @@ final class AppModel: ObservableObject {
   }
 
   private func browseMessageID(for result: MessageSearchResult) -> MessageSearchResult.ID? {
-    guard result.sourceEvent == "event_msg.user_message" else { return nil }
+    guard isSubmittedUserMessage(result) else { return nil }
     return visibleBrowseMessages(in: browseMessagesSummary?.results ?? [])
       .first { browseResultRepresentsSameUserMessage($0, as: result) }?
       .id
@@ -1918,7 +2144,7 @@ final class AppModel: ObservableObject {
     for message: MessageDetail,
     in detail: SessionDetail
   ) -> MessageSearchResult.ID? {
-    guard message.sourceEvent == "event_msg.user_message" else { return nil }
+    guard isSubmittedUserMessage(message) else { return nil }
     return visibleBrowseMessages(in: browseMessagesSummary?.results ?? [])
       .first { result in
         browseResultRepresentsUserMessage(result, message: message, detail: detail)
@@ -1930,7 +2156,7 @@ final class AppModel: ObservableObject {
     _ browseResult: MessageSearchResult,
     as target: MessageSearchResult
   ) -> Bool {
-    guard browseResult.sourceEvent == "event_msg.user_message",
+    guard isSubmittedUserMessage(browseResult),
       browseResult.sessionId == target.sessionId,
       browseResult.filePath == target.filePath,
       browseResult.dateKey == target.dateKey,
@@ -1954,7 +2180,7 @@ final class AppModel: ObservableObject {
     message: MessageDetail,
     detail: SessionDetail
   ) -> Bool {
-    guard result.sourceEvent == "event_msg.user_message",
+    guard isSubmittedUserMessage(result),
       result.sessionId == detail.file.sessionId,
       result.filePath == detail.file.filePath,
       result.dateKey == codexLocalDateKey(message.timestamp),
@@ -1977,7 +2203,7 @@ final class AppModel: ObservableObject {
     let userMessageOffsets = SessionInteractionBuilder.userMessageOffsets(in: detail)
     guard !userMessageOffsets.isEmpty else { return nil }
 
-    if target.sourceEvent == "event_msg.user_message" {
+    if isSubmittedUserMessage(target) {
       if let lineNumber = target.lineNumber,
         let exactMatch = userMessageOffsets.first(where: { $0.element.lineNumber == lineNumber }) {
         return exactMatch.offset
@@ -2055,7 +2281,7 @@ final class AppModel: ObservableObject {
     updateRecentSourcePaths(uniquePaths)
     saveSettings()
     selectedProject = AppConstants.allProjectsName
-    clearSelectionState()
+    clearSelectionState(markBrowseLoading: true)
     refresh(force: true)
     DispatchQueue.main.async {
       Self.restoreViewerWindow(activate: true)
@@ -2120,6 +2346,10 @@ final class AppModel: ObservableObject {
       let sortOption = ProjectSortOption(rawValue: savedProjectSort) {
       projectSortOption = sortOption
     }
+    if let savedProvider = UserDefaults.standard.string(forKey: DefaultsKeys.providerFilter),
+      let provider = ProviderFilter(rawValue: savedProvider) {
+      providerFilter = provider
+    }
     let savedHiddenOperationalCategories = Set(Self.stringArray(forKey: DefaultsKeys.hiddenOperationalMessageCategories))
     let savedOperationalCategoryVersion = UserDefaults.standard.integer(
       forKey: DefaultsKeys.operationalMessageCategoriesVersion
@@ -2158,6 +2388,7 @@ final class AppModel: ObservableObject {
     UserDefaults.standard.set(dateRangeMode.rawValue, forKey: DefaultsKeys.dateRangeMode)
     UserDefaults.standard.set(Self.dateFormatter.string(from: dateAnchorDate), forKey: DefaultsKeys.dateAnchorDate)
     UserDefaults.standard.set(projectSortOption.rawValue, forKey: DefaultsKeys.projectSortOption)
+    UserDefaults.standard.set(providerFilter.rawValue, forKey: DefaultsKeys.providerFilter)
     UserDefaults.standard.set(Array(hiddenOperationalMessageCategories).sorted(), forKey: DefaultsKeys.hiddenOperationalMessageCategories)
     UserDefaults.standard.set(Self.operationalMessageCategoriesVersion, forKey: DefaultsKeys.operationalMessageCategoriesVersion)
     UserDefaults.standard.removeObject(forKey: DefaultsKeys.showOperationalMessages)
@@ -2202,7 +2433,7 @@ final class AppModel: ObservableObject {
     }
     if reload {
       clearAuditPreview()
-      clearSelectionState()
+      clearSelectionState(markBrowseLoading: true)
       refresh()
     }
   }
@@ -2405,7 +2636,7 @@ final class AppModel: ObservableObject {
       ),
       !interaction.assistantMessages.isEmpty
     else {
-      throw AppSmokeError.unexpected("The selected user message did not reconstruct its Codex response.")
+      throw AppSmokeError.unexpected("The selected user message did not reconstruct its AI response.")
     }
     let assistantSearch = try await api.searchMessages(
       query: "parser test fixture",
@@ -2539,11 +2770,21 @@ final class AppModel: ObservableObject {
   private func currentFilters(refreshToken: Int = 0, rebuildCache: Bool = false) -> LogFilters {
     LogFilters(
       paths: sourcePaths,
+      provider: providerFilter,
       since: hasSinceFilter ? Self.dateFormatter.string(from: sinceDate) : nil,
       until: hasUntilFilter ? Self.dateFormatter.string(from: untilDate) : nil,
       refreshToken: refreshToken,
       rebuildCache: rebuildCache
     )
+  }
+
+  private func providerWarmupCacheKey(provider: ProviderFilter, project: String, filters: LogFilters) -> String {
+    [
+      provider.rawValue,
+      project,
+      filters.since ?? "",
+      filters.until ?? ""
+    ].joined(separator: "\n")
   }
 
   private func defaultExportDirectoryURL() -> URL {
@@ -2807,7 +3048,13 @@ final class AppModel: ObservableObject {
 
   static func showAboutBox() {
     let credits = NSAttributedString(
-      string: "A local-first native macOS viewer for Codex session logs.\n\nCodex logs stay on this Mac unless you explicitly export data.",
+      string: """
+      Version \(AppVersion.displayVersion)
+
+      A local-first native macOS viewer for Codex session logs.
+
+      Codex logs stay on this Mac unless you explicitly export data.
+      """,
       attributes: [
         .font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize),
         .foregroundColor: NSColor.secondaryLabelColor
@@ -2827,7 +3074,7 @@ final class AppModel: ObservableObject {
     alert.messageText = "Codex Log Viewer Help"
     alert.informativeText = """
     Browse
-    Choose a project, pick a submitted message, and read the matching Codex interaction.
+    Choose a project, pick a submitted message, and read the matching AI interaction.
 
     Overview
     Project Focus shows the main types of work in the current project and date range.
@@ -2839,7 +3086,7 @@ final class AppModel: ObservableObject {
     Search finds messages across the current filters. Audit prepares a reviewed AI worklog for the selected repository.
 
     Logs
-    Use Logs > Choose Codex Log Location to change sources. Exports are redacted by default, but still review them before sharing. Your Codex logs stay on this Mac unless you export them.
+    Use Logs > Choose AI Log Location to change sources. Exports are redacted by default, but still review them before sharing. Your AI logs stay on this Mac unless you export them.
     """
     alert.alertStyle = .informational
     alert.addButton(withTitle: "OK")
@@ -2916,6 +3163,22 @@ private struct SearchResultSelectionTarget {
   }
 }
 
+private func isSubmittedUserMessage(_ result: MessageSearchResult) -> Bool {
+  result.role == "user" && (
+    result.sourceEvent == "event_msg.user_message" ||
+      result.sourceEvent == "claude.user_message" ||
+      result.sourceEvent == "cursor.user_message"
+  )
+}
+
+private func isSubmittedUserMessage(_ target: SearchResultSelectionTarget) -> Bool {
+  target.role == "user" && (
+    target.sourceEvent == "event_msg.user_message" ||
+      target.sourceEvent == "claude.user_message" ||
+      target.sourceEvent == "cursor.user_message"
+  )
+}
+
 private enum DefaultsKeys {
   static let sourcePaths = "sourcePaths"
   static let recentSourcePaths = "recentSourcePaths"
@@ -2927,6 +3190,7 @@ private enum DefaultsKeys {
   static let dateRangeMode = "dateRangeMode"
   static let dateAnchorDate = "dateAnchorDate"
   static let projectSortOption = "projectSortOption"
+  static let providerFilter = "providerFilter"
   static let showOperationalMessages = "showOperationalMessages"
   static let hiddenOperationalMessageCategories = "hiddenOperationalMessageCategories"
   static let operationalMessageCategoriesVersion = "operationalMessageCategoriesVersion"
