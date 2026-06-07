@@ -73,6 +73,8 @@ const KNOWN_PAYLOAD_TYPES = new Set([
   "exec_command_end",
   "function_call",
   "function_call_output",
+  "image_generation_call",
+  "image_generation_end",
   "message",
   "patch_apply_end",
   "reasoning",
@@ -94,6 +96,10 @@ const CLAUDE_KNOWN_RECORD_TYPES = new Set([
 ]);
 
 const USER_REQUEST_MARKER = "## My request for Codex:";
+const MAX_UNKNOWN_RAW_STRING_LENGTH = 4_096;
+const MAX_UNKNOWN_RAW_ARRAY_ITEMS = 20;
+const MAX_UNKNOWN_RAW_OBJECT_KEYS = 50;
+const MAX_UNKNOWN_RAW_DEPTH = 6;
 
 export async function parseCodexCorpus(options: ParseOptions = {}): Promise<ParsedCodexCorpus> {
   const files = await discoverCodexLogFiles(options.paths);
@@ -625,7 +631,7 @@ function classifyCodexEvent(context: ClassifyContext): void {
       timestamp,
       eventType: payloadType ?? topLevelType ?? "unknown_tool_event",
       name: stringValue(payload.name),
-      callId: stringValue(payload.call_id),
+      callId: stringValue(payload.call_id) ?? stringValue(payload.id),
       content: toolEventContent(payload),
       cwd: stringValue(payload.cwd),
       exitCode: numberValue(payload.exit_code),
@@ -796,6 +802,7 @@ function addUnknown(
   topLevelType?: string,
   payloadType?: string
 ): void {
+  const raw = boundedUnknownRaw(context.raw);
   context.unknownEvents.push({
     provider: context.state.provider,
     inputKind: context.state.inputKind,
@@ -808,7 +815,8 @@ function addUnknown(
     timestamp,
     topLevelType,
     payloadType,
-    raw: context.raw
+    rawTruncated: raw.truncated ? true : undefined,
+    raw: raw.value
   });
 }
 
@@ -1230,8 +1238,9 @@ function isToolEvent(topLevelType?: string, payloadType?: string): boolean {
     (payloadType === "function_call" ||
       payloadType === "function_call_output" ||
       payloadType === "custom_tool_call" ||
-      payloadType === "custom_tool_call_output")
-  ) || payloadType === "exec_command_end" || payloadType === "patch_apply_end";
+      payloadType === "custom_tool_call_output" ||
+      payloadType === "image_generation_call")
+  ) || payloadType === "exec_command_end" || payloadType === "patch_apply_end" || payloadType === "image_generation_end";
 }
 
 function sessionIdFromFile(filePath: string): string {
@@ -1486,4 +1495,79 @@ function numberValue(value: unknown): number | undefined {
 
 function arrayValue(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
+}
+
+function boundedUnknownRaw(value: JsonObject): { value: JsonObject; truncated: boolean } {
+  const bounded = boundJsonValue(value, 0);
+  return {
+    value: isObject(bounded.value) ? bounded.value : {},
+    truncated: bounded.truncated
+  };
+}
+
+function boundJsonValue(value: unknown, depth: number): { value: unknown; truncated: boolean } {
+  if (typeof value === "string") {
+    if (value.length <= MAX_UNKNOWN_RAW_STRING_LENGTH) {
+      return { value, truncated: false };
+    }
+    return {
+      value: {
+        truncated: true,
+        type: "string",
+        length: value.length
+      },
+      truncated: true
+    };
+  }
+
+  if (Array.isArray(value)) {
+    let truncated = false;
+    const items = value.slice(0, MAX_UNKNOWN_RAW_ARRAY_ITEMS).map((item) => {
+      const bounded = boundJsonValue(item, depth + 1);
+      truncated = truncated || bounded.truncated;
+      return bounded.value;
+    });
+    if (value.length > MAX_UNKNOWN_RAW_ARRAY_ITEMS) {
+      items.push({
+        truncated: true,
+        type: "array",
+        remainingItems: value.length - MAX_UNKNOWN_RAW_ARRAY_ITEMS
+      });
+      truncated = true;
+    }
+    return { value: items, truncated };
+  }
+
+  if (isObject(value)) {
+    if (depth >= MAX_UNKNOWN_RAW_DEPTH) {
+      return {
+        value: {
+          truncated: true,
+          type: "object",
+          keys: Object.keys(value).length
+        },
+        truncated: true
+      };
+    }
+
+    let truncated = false;
+    const entries = Object.entries(value);
+    const output: JsonObject = {};
+    for (const [key, child] of entries.slice(0, MAX_UNKNOWN_RAW_OBJECT_KEYS)) {
+      const bounded = boundJsonValue(child, depth + 1);
+      output[key] = bounded.value;
+      truncated = truncated || bounded.truncated;
+    }
+    if (entries.length > MAX_UNKNOWN_RAW_OBJECT_KEYS) {
+      output.__truncated = {
+        truncated: true,
+        type: "object",
+        remainingKeys: entries.length - MAX_UNKNOWN_RAW_OBJECT_KEYS
+      };
+      truncated = true;
+    }
+    return { value: output, truncated };
+  }
+
+  return { value, truncated: false };
 }

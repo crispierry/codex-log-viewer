@@ -1,6 +1,6 @@
 {
   "name": "codex-log-viewer",
-  "version": "0.2.8",
+  "version": "0.3.0",
   "private": true,
   "description": "Local-first native macOS app and parser for OpenAI Codex session logs.",
   "license": "MIT",
@@ -20,7 +20,8 @@
   "workspaces": [
     "packages/*",
     "apps/cli",
-    "apps/server"
+    "apps/server",
+    "apps/web-demo"
   ],
   "scripts": {
     "build": "npm run build -w @codex-log-viewer/parser && npm run build -w @codex-log-viewer/analytics && npm run build -w @codex-log-viewer/server && npm run build -w @codex-log-viewer/cli",
@@ -46,6 +47,12 @@
     "check:mac-accessibility": "node scripts/check-native-accessibility.mjs",
     "benchmark:search": "npm run build -w @codex-log-viewer/parser && npm run build -w @codex-log-viewer/analytics && node scripts/benchmark-search.mjs",
     "check:reference": "npm run build -w @codex-log-viewer/parser && npm run build -w @codex-log-viewer/analytics && node scripts/check-reference-report.mjs",
+    "demo:data": "npm run build -w @codex-log-viewer/parser && npm run build -w @codex-log-viewer/analytics && node scripts/generate-web-demo-data.mjs",
+    "check:web-demo-data": "npm run build -w @codex-log-viewer/parser && npm run build -w @codex-log-viewer/analytics && node scripts/generate-web-demo-data.mjs --check",
+    "check:web-demo-privacy": "node scripts/check-web-demo-privacy.mjs",
+    "build:web-demo": "npm run build -w @codex-log-viewer/web-demo",
+    "dev:web-demo": "npm run dev -w @codex-log-viewer/web-demo",
+    "preview:web-demo": "npm run preview -w @codex-log-viewer/web-demo",
     "app:mac": "npm run build:native-engine && npm run version:sync && CODEX_LOG_VIEWER_REPO=$PWD swift run --package-path apps/macos CodexLogViewerMac",
     "desktop": "npm run app:mac",
     "desktop:dev": "npm run app:mac",

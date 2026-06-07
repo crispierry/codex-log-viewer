@@ -113,6 +113,7 @@ export interface UnknownEventRecord extends ProviderMetadata {
   timestamp?: string;
   topLevelType?: string;
   payloadType?: string;
+  rawTruncated?: boolean;
   raw: JsonObject;
 }
 

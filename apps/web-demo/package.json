@@ -1,0 +1,26 @@
+{
+  "name": "@codex-log-viewer/web-demo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Static synthetic web demo for Codex Log Viewer.",
+  "type": "module",
+  "scripts": {
+    "generate:data": "node ../../scripts/generate-web-demo-data.mjs",
+    "pregenerate:data": "npm run build -w @codex-log-viewer/parser && npm run build -w @codex-log-viewer/analytics",
+    "dev": "npm run generate:data && vite --host 127.0.0.1 --port 5174",
+    "build": "npm run generate:data && vite build",
+    "preview": "vite preview --host 127.0.0.1 --port 4174",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.2",
+    "vite": "^8.0.16"
+  },
+  "dependencies": {
+    "lucide-react": "^1.17.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  }
+}
