@@ -2,6 +2,40 @@
 
 Sanitized audit trail of AI-assisted work on this project.
 
+## 2026-06-07 - Fix PR 22 Version Check Failure
+
+Status: Completed
+Related commit/PR: PR #22
+
+### User Messages
+
+> the PR is failing again
+
+> Implement your fix
+
+### Interpreted Intent
+
+The user wanted the failing GitHub Actions check on PR #22 diagnosed and corrected so the web demo Browse layout PR can pass the repository verification policy.
+
+### Response / Work Done
+
+- Inspected PR #22 checks and confirmed the `verify` job failed on the required app-version check.
+- Updated the branch from `origin/main`.
+- Ran the PR version bump workflow to update app metadata from `0.3.0` to `0.4.0`.
+
+### Privacy Notes
+
+No raw Codex logs, private prompts, session contents, screenshots, recordings, export payloads, credentials, secrets, or local session paths were added.
+
+### Verification
+
+- Ran `wt bootstrap`.
+- Ran `node scripts/check-app-version.mjs --compare-ref origin/main --require-pr-minor`.
+- Ran `npm run typecheck -w @codex-log-viewer/web-demo`.
+- Ran `npm run check:web-demo-privacy`.
+- Ran `npm run build:web-demo`.
+- Ran `git diff --check`.
+
 ## 2026-06-07 - Limit Web Demo Browse Message Window
 
 Status: Completed
