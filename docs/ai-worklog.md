@@ -2,6 +2,35 @@
 
 Sanitized audit trail of AI-assisted work on this project.
 
+## 2026-06-07 - Fix PR Version Check Failure
+
+Status: Completed
+Related commit/PR: PR #21
+
+### User Messages
+
+> I'm getting a git error. Can you check what it is and why it's failing?
+
+> Please fix it
+
+### Interpreted Intent
+
+The user wanted the failing GitHub/CI condition on the pushed PR diagnosed and corrected so the branch can pass the required checks.
+
+### Response / Work Done
+
+- Inspected PR #21 status and identified the failing `verify` job.
+- Confirmed the failure was the required PR app-version bump: `main` was `0.2.8`, while the branch was only `0.2.9`.
+- Ran the repository version bump workflow to update the app version metadata to `0.3.0`.
+
+### Privacy Notes
+
+No raw Codex logs, private prompts, session contents, screenshots, recordings, export payloads, credentials, secrets, or local session paths were added.
+
+### Verification
+
+- Ran `node scripts/check-app-version.mjs --compare-ref origin/main --require-pr-minor`.
+
 ## 2026-06-07 - Align Web Demo With Native Overview
 
 Status: Completed
