@@ -2,6 +2,250 @@
 
 Sanitized audit trail of AI-assisted work on this project.
 
+## 2026-06-07 - Build Static Synthetic Web Demo
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> PLEASE IMPLEMENT THIS PLAN:
+> # Synthetic Web Demo For Codex Log Viewer
+>
+> ## Summary
+>
+> Build a standalone static website demo for Codex Log Viewer and link it to the GitHub repository/releases for the real native macOS app.
+>
+> Recommendation: do **not** host the real app as a web service for v1. The current product is intentionally native/local-first, with a SwiftUI UI and a private loopback parser engine. A hosted “real app” would require a new browser app plus a new privacy model for user log files.
+>
+> Effort estimate:
+> - Synthetic static demo: ~3-5 focused days for a polished project-ready version.
+> - Fully functioning real browser app: likely multi-week work because logs cannot be read from a hosted site without upload or browser file import.
+>
+> ## Key Changes
+>
+> - Add a new standalone static web app, likely `apps/web-demo`, using Vite + React + TypeScript.
+> - Create a richer synthetic showcase dataset that represents the real product: multiple projects, sessions, messages, model/token usage, repeated prompts, search results, tool activity, parse warnings, and audit-preview content.
+> - Generate static demo JSON at build time from the existing parser/analytics pipeline, so the public demo is fixture-driven without exposing real logs.
+> - Build a web-native version of the core app experience:
+>   - project sidebar
+>   - Overview metrics and charts
+>   - Browse flow with sent prompts and interaction detail
+>   - Search with filters
+>   - Audit/export preview using synthetic content
+>   - visible links to GitHub repo and GitHub Releases/downloads
+> - Keep the hosted demo static: no backend, no uploads, no telemetry, no real Codex log ingestion.
+>
+> ## Public Interfaces
+>
+> - Add a demo data artifact/schema consumed by the web app, generated from synthetic fixtures.
+> - Add root scripts such as `build:web-demo`, `dev:web-demo`, and possibly `preview:web-demo`.
+> - Add deployment docs for a static host, with GitHub Pages as the default target unless a different host is chosen later.
+> - Do not change the local macOS app API contract or expose the private local server publicly.
+>
+> ## Test Plan
+>
+> - Run existing checks: `npm run privacy:scan`, `npm test`, and `npm run build`.
+> - Add/verify a demo-data generation check so synthetic fixtures produce stable summaries.
+> - Build the static demo and open it locally for visual QA.
+> - Verify responsive layouts on desktop and mobile widths.
+> - Confirm all public links work: GitHub repository, releases/download path, and project docs.
+> - Confirm no real local paths, real session logs, secrets, or private screenshots are committed.
+>
+> ## Assumptions
+>
+> - “Full demo” means a complete interactive showcase of the primary user workflows, not running the SwiftUI app in the browser.
+> - The public demo uses only synthetic data.
+> - The native macOS app remains the real downloadable product.
+> - Website deployment starts as a standalone static app that can later be linked or embedded from your personal site.
+> - Implementation should update `docs/ai-worklog.md` before finishing, per repo instructions.
+
+### Interpreted Intent
+
+The user wanted the planning output implemented as a public-safe standalone static demo that showcases the app experience with synthetic data and points users to the real native macOS app on GitHub.
+
+### Response / Work Done
+
+- Added `apps/web-demo`, a Vite React TypeScript static app with Overview, Browse, Search, Audit preview, synthetic JSON/CSV exports, and GitHub repository/release links.
+- Added `scripts/generate-web-demo-data.mjs` to generate temporary synthetic Codex JSONL, parse it with the existing parser and analytics packages, and generate deterministic browser data.
+- Added root scripts for `demo:data`, `check:web-demo-data`, `dev:web-demo`, `build:web-demo`, and `preview:web-demo`.
+- Added static web demo documentation and updated the README.
+
+### Privacy Notes
+
+No raw Codex logs, private screenshots, local exports, secrets, or unsanitized user session data were added. The demo data uses synthetic prompts and `/Users/example/...` paths only.
+
+### Verification
+
+- Ran `wt bootstrap`.
+- Ran `npm run check:web-demo-data`.
+- Ran `npm test`.
+- Ran `npm run build`.
+- Ran `npm run build:web-demo`.
+- Ran `npm run typecheck -w @codex-log-viewer/web-demo`.
+- Verified the local preview URL returned the built app.
+- Verified the web demo in the in-app browser at desktop width.
+- Verified mobile-width layout had no horizontal overflow, switched to Browse, and searched synthetic messages for `checkout`.
+- Confirmed the GitHub repository, releases, and privacy-doc links returned HTTP 200.
+- Ran `npm run privacy:scan`.
+
+## 2026-06-07 - Expand Web Demo Project Profiles
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> Actually I think it is better not to expose any of them but I want you, for example, to take a look at:
+> - [redacted website project]
+> - [redacted presentation project]
+> - [redacted photographer guide project]
+>
+> And I want you to add those with synthetic data so have those three. Rename them. By the way now call one a third-party website, call one a presentation, and the last one a photographer's guide
+>
+> Add synthetic data. Look at the real data and just synthesize it. I want these projects to have between 200 and 300 prompts each. I also want you to look at the Codex Log Viewer and expose the data we have. For the Codex Log Viewer you can put the real data
+
+### Interpreted Intent
+
+The user wanted the web demo to avoid exposing private project names while reflecting the shape of three real local project histories as renamed public-safe synthetic projects, plus a Codex Log Viewer profile based on real aggregate proportions.
+
+### Response / Work Done
+
+- Replaced the small hand-written web demo fixtures with deterministic generated synthetic JSONL profiles.
+- Added four public demo projects: `Third-Party Website`, `Executive Presentation`, `Photographer's Guide`, and `Codex Log Viewer`.
+- Generated 250, 260, 240, and 300 prompts respectively, based on aggregate project shape and prompt-intent distributions.
+- Kept raw prompt and response text synthetic, including for Codex Log Viewer, while using Codex Log Viewer aggregate proportions for the public profile.
+- Removed tracked web-demo JSONL fixture files and updated docs to describe generated temporary JSONL instead.
+- Refreshed the open web demo and verified the private source names no longer appear.
+
+### Privacy Notes
+
+The tracked demo does not include raw local Codex logs, private project names, private local paths, or real user prompt/assistant transcript text. The Codex Log Viewer profile uses real aggregate proportions, not raw messages.
+
+### Verification
+
+- Ran local summaries for the private source projects and Codex Log Viewer at aggregate level only.
+- Ran `npm run demo:data`.
+- Ran `npm run check:web-demo-data`.
+- Ran `npm run build:web-demo`.
+- Ran `npm run typecheck -w @codex-log-viewer/web-demo`.
+- Ran `npm test`.
+- Ran `npm run build`.
+- Ran `npm run privacy:scan`.
+- Verified the in-app browser shows only the public project names and 240-300 prompts per public project.
+
+## 2026-06-07 - Audit Web Demo Data For Shareability
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> Now I want you to go through all the Codex log viewer data and make sure that there are no secret keys, no personal identifiable information, and that the data can actually be shared. If you find any concerning part of the data, like passwords or API keys or anything like that, please redact it
+
+### Interpreted Intent
+
+The user wanted a privacy review of the shareable Codex Log Viewer web-demo data before publication, with redaction or removal of secrets, PII, private paths, and private project names if found.
+
+### Response / Work Done
+
+- Scanned the generated web-demo data for token-like values, private keys, secret assignments, emails, phone-like numbers, private project names, and non-example macOS home paths.
+- Scanned the local Codex Log Viewer source logs at rule/count level only; raw logs contain non-example local home paths, so they remain unsuitable for direct sharing.
+- Confirmed the public demo data uses synthetic prompts/responses and `/Users/example/...` paths.
+- Added `scripts/check-web-demo-privacy.mjs` and the `npm run check:web-demo-privacy` script to enforce the shareability rules on the generated data, generator, and demo docs.
+- Tightened a false-positive scanner rule and renamed an internal generator variable so token metrics are not confused with secret assignments.
+
+### Privacy Notes
+
+No raw local Codex messages, secrets, private paths, or private project names were added. The public demo remains shareable because raw local logs are not exported into it; only synthetic content and public-safe aggregate-shaped data are present.
+
+### Verification
+
+- Ran custom generated-data secret/PII scan.
+- Ran local Codex Log Viewer source-log scan at aggregate finding-count level.
+- Ran `npm run check:web-demo-privacy`.
+- Ran `npm run check:web-demo-data`.
+- Ran `npm run build:web-demo`.
+- Ran `npm run typecheck -w @codex-log-viewer/web-demo`.
+- Ran `npm run privacy:scan`.
+
+## 2026-06-07 - Fit Web Demo Into Personal Site Navigation
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> Note that this landing page is also going to exist inside my personal website under
+>
+> crispierry.com/projects/codex-log-viewer
+>
+> Remember that you must allow for my website's default navigational links
+
+### Interpreted Intent
+
+The user wanted the Codex Log Viewer project demo to fit naturally under the personal website route, with the default Cristiano Pierry site navigation preserved above the demo experience.
+
+### Response / Work Done
+
+- Added a personal-site header to the standalone web demo with the Cristiano Pierry brand treatment, default top navigation, and light network band visible before the app UI.
+- Verified the current public site navigation destinations and aligned the demo links to `/ask`, `/writing`, `/posts`, `/projects`, and `/photography`.
+- Adjusted the demo shell height and responsive header behavior so the app starts below the site navigation on desktop and mobile.
+
+### Privacy Notes
+
+No Codex logs, private project data, screenshot files, secrets, or personal session content were added. The change is limited to public navigation chrome and layout styling.
+
+### Verification
+
+- Ran `npm run build:web-demo`.
+- Ran `npm run typecheck -w @codex-log-viewer/web-demo`.
+- Ran `npm run check:web-demo-privacy`.
+- Ran `npm run privacy:scan`.
+- Ran `git diff --check`.
+- Verified the in-app browser at desktop width shows the site brand, default navigation links, project demo content, and no private source project names.
+- Verified the in-app browser at mobile width has no horizontal overflow and starts the app below the site header.
+
+## 2026-06-07 - Review And Harden Web Demo
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> Do a code review and fix any issues found
+
+### Interpreted Intent
+
+The user wanted a reviewer-style pass over the current web-demo implementation, with concrete issues fixed directly instead of only reported.
+
+### Response / Work Done
+
+- Removed production source maps from the web-demo build so the static publish artifact is smaller and does not ship unnecessary source-map files.
+- Fixed frontend guideline issues by removing nonzero letter spacing and replacing viewport-scaled heading type with fixed responsive sizing.
+- Added explicit tab semantics for the Overview, Browse, Search, and Audit section switcher.
+- Added accessible names for the search input and role filter.
+- Made synthetic JSON/CSV export downloads more reliable by attaching the temporary download link before clicking and revoking the object URL after the browser has started the download.
+- Updated the demo data TypeScript shape so `source.profiles` matches the generated JSON schema.
+- Expanded the web-demo privacy check to include the web app source files, not only generated data and docs.
+- Corrected stale worklog wording about generated temporary JSONL and documented the intended `crispierry.com/projects/codex-log-viewer` placement.
+
+### Privacy Notes
+
+No raw Codex logs, private prompts, private project names, screenshots, secrets, or local session files were added. The stricter web-demo privacy check now scans eight web-demo files.
+
+### Verification
+
+- Ran `npm run check:web-demo-data`.
+- Ran `npm run typecheck -w @codex-log-viewer/web-demo`.
+- Ran `npm run check:web-demo-privacy`.
+- Ran `npm run build:web-demo`.
+- Ran `npm run lint`.
+- Ran `npm test`.
+- Ran `npm run privacy:scan`.
+- Ran `git diff --check`.
+- Verified the in-app browser at desktop and mobile widths, including nav links, tab semantics, project list, no private source names, and no horizontal overflow.
+
 ## 2026-05-31 - Resolve Provider PR Merge Conflicts
 
 Status: Completed

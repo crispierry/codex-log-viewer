@@ -13,6 +13,7 @@ This project has a working v0 implementation:
 - CLI summaries and exports
 - Private local API engine for the app
 - Native SwiftUI macOS app
+- Static synthetic web demo for project showcases
 - Cross-project message search
 - Sanitized fixtures and tests
 - GitHub Actions CI
@@ -50,6 +51,12 @@ npm run package:mac
 open "dist/macos/Codex Log Viewer.app"
 ```
 
+To run the static synthetic web demo:
+
+```sh
+npm run dev:web-demo
+```
+
 ## macOS App
 
 The app is the primary product experience. From the desktop UI you can:
@@ -79,6 +86,16 @@ npm run app:mac
 The macOS app is native SwiftUI. It reuses the local parser, analytics, and private API engine so parsing stays fixture-driven and local.
 
 Packaged releases bundle the local engine and a known Node runtime so end users do not need to run a terminal setup. Source builds still require Node and Swift tooling.
+
+## Web Demo
+
+The web demo is a standalone static showcase built from generated synthetic Codex JSONL profiles. It mirrors the primary product workflows with project metrics, Browse, Search, Audit preview, and synthetic JSON/CSV exports, while linking users to the GitHub repository and macOS releases for the real app.
+
+It does not upload, ingest, or parse real user logs in the browser. Build it with:
+
+```sh
+npm run build:web-demo
+```
 
 ## CLI
 
@@ -125,6 +142,8 @@ npm run smoke:mac-ui # macOS only
 npm run release:mac # macOS only, package plus smoke tests
 npm run benchmark:search
 npm run check:reference -- --reference fixtures/codex/sample-reference-summary.json --path fixtures/codex/sample-session.jsonl --project sample-app
+npm run check:web-demo-data
+npm run build:web-demo
 ```
 
 ## Documentation
@@ -145,6 +164,7 @@ npm run check:reference -- --reference fixtures/codex/sample-reference-summary.j
 - [Milestones](docs/milestones.md)
 - [Usage](docs/usage.md)
 - [UI test plan](docs/ui-test-plan.md)
+- [Static web demo](docs/web-demo.md)
 
 ## Development Principles
 
