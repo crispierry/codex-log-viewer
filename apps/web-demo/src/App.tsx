@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   CalendarDays,
   CheckCircle2,
@@ -435,9 +435,33 @@ function Browse(props: {
   selectedInteraction?: BrowseInteraction;
   onSelect: (id: string) => void;
 }) {
+  const promptListRef = useRef<HTMLDivElement>(null);
+  const [browseRowHeight, setBrowseRowHeight] = useState(52);
   const messageWindowSubtitle = props.interactions.length > browseVisibleMessageCount
     ? `${formatNumber(props.interactions.length)} sent · ${browseVisibleMessageCount} at a time`
     : `${formatNumber(props.interactions.length)} sent`;
+
+  useEffect(() => {
+    const promptList = promptListRef.current;
+    if (!promptList) {
+      return;
+    }
+
+    const updateRowHeight = () => {
+      const availableHeight = promptList.clientHeight;
+      const rowGapTotal = 4 * (browseVisibleMessageCount - 1);
+      const nextHeight = Math.max(
+        52,
+        Math.floor((availableHeight - rowGapTotal) / browseVisibleMessageCount)
+      );
+      setBrowseRowHeight(nextHeight);
+    };
+
+    updateRowHeight();
+    const resizeObserver = new ResizeObserver(updateRowHeight);
+    resizeObserver.observe(promptList);
+    return () => resizeObserver.disconnect();
+  }, []);
 
   return (
     <section className="browser-grid">
@@ -446,7 +470,11 @@ function Browse(props: {
           <Send size={19} aria-hidden="true" />
           <h2>User Messages</h2>
         </div>
-        <div className="prompt-list">
+        <div
+          className="prompt-list"
+          ref={promptListRef}
+          style={{ "--browse-row-height": `${browseRowHeight}px` } as CSSProperties}
+        >
           {props.interactions.map((interaction) => (
             <button
               key={interaction.id}

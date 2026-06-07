@@ -19,9 +19,11 @@ Related commit/PR: TBD
 
 > The messages should symbolize the end of the app. Right now there is a dead space at the end so either let the messages go all the way to the bottom or move the bottom up
 
+> The messages should symbolize the end of the app. Right now there is a dead space at the end so either let the messages go all the way to the bottom or move the bottom up
+
 ### Interpreted Intent
 
-The user wanted the static web demo Browse view to stop expanding the page with every message and instead show a finite ten-message window with an internal scrollbar, while preserving a visible Projects sidebar/column like the native app, making the date range control interactive, and removing the dead space below the capped message list.
+The user wanted the static web demo Browse view to stop expanding the page with every message and instead show a finite ten-message window with an internal scrollbar, while preserving a visible Projects sidebar/column like the native app, making the date range control interactive, and removing the dead space by letting the message rows define the Browse panel height.
 
 ### Response / Work Done
 
@@ -33,7 +35,7 @@ The user wanted the static web demo Browse view to stop expanding the page with 
 - Added a folder icon and truncation behavior to keep the project column visible in compact rows.
 - Restored the Projects sidebar as a desktop column in the web demo shell.
 - Made the date range control open a menu and filter Browse/Search data for all time, last 7 days, or last 30 days.
-- Moved the Browse message panel bottom/status edge up so it ends directly below the capped message list instead of leaving a large blank area.
+- Sized the Browse message rows dynamically so the ten-row message viewport fills the available message column height instead of leaving a large blank area.
 
 ### Privacy Notes
 
@@ -46,7 +48,7 @@ No raw Codex logs, private prompts, private paths, screenshots, recordings, expo
 - Ran `npm run check:web-demo-privacy`.
 - Ran `npm run build:web-demo`.
 - Ran `git diff --check`.
-- Verified the local web demo preview in the in-app browser: the Projects sidebar displayed as a desktop column, Browse showed 10 fully visible message rows, the page itself did not overflow, the message list had scrollable overflow, the message panel bottom sat directly under the capped list, the date menu opened and filtered Browse data, and there were no browser console errors.
+- Verified the local web demo preview in the in-app browser: the Projects sidebar displayed as a desktop column, Browse showed 10 fully visible message rows, the page itself did not overflow, the message list had scrollable overflow, the message rows filled the message column height, the date menu opened and filtered Browse data, and there were no browser console errors.
 
 ## 2026-06-07 - Fix PR Version Check Failure
 
