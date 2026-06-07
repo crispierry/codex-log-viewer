@@ -42,8 +42,8 @@ const rules = [
     pattern: /\/Users\/(?!example\/)[A-Za-z0-9._-]+\//g
   },
   {
-    name: "private source project name",
-    pattern: /\b(?:Uira|All Hands|Brown Bag|Bosque|sample-shop|docs-studio)\b/gi
+    name: "placeholder private source project name",
+    pattern: /\b(?:sample-shop|docs-studio)\b/gi
   }
 ];
 

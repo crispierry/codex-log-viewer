@@ -198,7 +198,8 @@ Cursor's public docs describe regular Agent chat history as local SQLite data an
 - Aggregate per-turn tokens from `last_token_usage` when present.
 - Use cumulative `total_token_usage` for reconciliation, not as the primary sum.
 - Ignore token usage for `token_count` events with `info: null`.
-- Preserve unknown events and include counts in parser summaries.
+- Preserve unknown event metadata and include counts in parser summaries. Bound raw unknown-event previews so large binary/image payloads cannot overwhelm local caches.
+- Treat image-generation call and completion payloads as tool events while omitting generated image data from normalized records.
 - Use normalized line numbers and turn ids to reconstruct the AI interaction that follows a selected submitted user message.
 
 ## Schema Change Policy

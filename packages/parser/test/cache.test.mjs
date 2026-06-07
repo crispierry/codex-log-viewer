@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { copyFile, mkdir, mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, rm, stat, unlink, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import test from "node:test";
@@ -178,6 +178,58 @@ test("parseLogCorpusWithCache uses provider-specific default roots", async () =>
     const codexOnly = await parseLogCorpusWithCache({ cacheDir, homeDir: tempHome });
     assert.equal(codexOnly.cache.totalFiles, 1);
     assert.deepEqual(codexOnly.corpus.files.map((file) => file.provider), ["codex"]);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("parseCodexCorpusWithCache writes bounded cache files for large unknown payloads", async () => {
+  const tempDir = await mkdtemp(`${tmpdir()}/codex-log-viewer-cache-large-unknown-`);
+  const sourceDir = join(tempDir, "logs");
+  const cacheDir = join(tempDir, "cache");
+  const sessionPath = join(sourceDir, "large-unknown.jsonl");
+
+  try {
+    await mkdir(sourceDir, { recursive: true });
+    await writeFile(
+      sessionPath,
+      [
+        JSON.stringify({
+          timestamp: "2026-01-01T00:00:00.000Z",
+          type: "session_meta",
+          payload: {
+            id: "large-unknown",
+            timestamp: "2026-01-01T00:00:00.000Z",
+            cwd: "/tmp/cache-app"
+          }
+        }),
+        JSON.stringify({
+          timestamp: "2026-01-01T00:00:01.000Z",
+          type: "event_msg",
+          payload: {
+            type: "future_payload",
+            result: "x".repeat(2_000_000)
+          }
+        })
+      ].join("\n") + "\n",
+      "utf8"
+    );
+
+    const cold = await parseCodexCorpusWithCache({ paths: [sourceDir], cacheDir });
+    assert.equal(cold.cache.cacheStatus, "updated");
+    assert.equal(cold.cache.parsedFiles, 1);
+    assert.equal(cold.corpus.unknownEvents[0]?.rawTruncated, true);
+
+    const manifest = JSON.parse(await readFile(resolve(cacheDir, "manifest.json"), "utf8"));
+    const entry = Object.values(manifest.entries)[0];
+    const cacheFilePath = resolve(cacheDir, "files", entry.cacheFile);
+    const cacheFile = await stat(cacheFilePath);
+    assert.equal(cacheFile.size < 20_000, true);
+
+    const warm = await parseCodexCorpusWithCache({ paths: [sourceDir], cacheDir });
+    assert.equal(warm.cache.cacheStatus, "ready");
+    assert.equal(warm.cache.reusedFiles, 1);
+    assert.equal(warm.corpus.unknownEvents[0]?.raw.payload.result.length, 2_000_000);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }

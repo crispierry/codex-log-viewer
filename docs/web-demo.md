@@ -8,7 +8,7 @@ The static web demo is a public-safe project showcase for Codex Log Viewer. It i
 - The generator writes temporary synthetic JSONL, parses it with the existing parser and analytics packages, then removes the temporary files.
 - Generated browser data is written to `apps/web-demo/src/data/demo-data.generated.json`.
 - `apps/web-demo` is a Vite React app that ships as static files with relative asset URLs.
-- The standalone page is designed to fit under `crispierry.com/projects/codex-log-viewer` and preserves the personal website navigation links above the demo experience.
+- The standalone page is chrome-free and iframe-ready. The real `crispierry.com/projects/codex-log-viewer` route supplies the personal website navigation above the demo experience.
 
 ## Commands
 
@@ -30,6 +30,14 @@ npm run build:web-demo
 ```
 
 Publish the contents of `apps/web-demo/dist/`.
+
+For the personal website, publish from the website repo with:
+
+```sh
+npm run build:codex-log-viewer
+```
+
+That command builds this source demo and refreshes `public/project-apps/codex-log-viewer/` in the website repo.
 
 ## Privacy
 

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { copyFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import test from "node:test";
 import { tmpdir } from "node:os";
-import { dirname, resolve } from "node:path";
+import test from "node:test";
+import { dirname, join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 import { discoverLogFiles, parseCodexLogFile, parseLogCorpus, parseLogFile } from "../dist/index.js";
@@ -198,7 +198,7 @@ test("parseCodexLogFile normalizes response items and tool events", async () => 
   assert.equal(parsed.taskTimings[0]?.durationMs, 12000);
   assert.equal(parsed.taskTimings[0]?.timeToFirstTokenMs, 700);
 
-  assert.equal(parsed.toolEvents.length, 6);
+  assert.equal(parsed.toolEvents.length, 8);
   assert.deepEqual(
     parsed.toolEvents.map((event) => event.eventType),
     [
@@ -207,11 +207,19 @@ test("parseCodexLogFile normalizes response items and tool events", async () => 
       "custom_tool_call",
       "custom_tool_call_output",
       "exec_command_end",
-      "patch_apply_end"
+      "patch_apply_end",
+      "image_generation_call",
+      "image_generation_end"
     ]
   );
   assert.equal(parsed.toolEvents.find((event) => event.eventType === "exec_command_end")?.exitCode, 0);
   assert.equal(parsed.toolEvents.find((event) => event.eventType === "exec_command_end")?.durationMs, 42);
+  const imageGenerationEvents = parsed.toolEvents.filter((event) => event.eventType.startsWith("image_generation_"));
+  assert.deepEqual(
+    imageGenerationEvents.map((event) => event.callId),
+    ["image-call-1", "image-call-1"]
+  );
+  assert.equal(imageGenerationEvents.some((event) => event.content?.includes("redacted-base64-image-data")), false);
   assert.equal(parsed.unknownEvents.length, 2);
   assert.deepEqual(
     parsed.unknownEvents.map((event) => [event.topLevelType, event.payloadType]),
@@ -220,6 +228,41 @@ test("parseCodexLogFile normalizes response items and tool events", async () => 
       ["future_top_level", "future_payload"]
     ]
   );
+});
+
+test("parseCodexLogFile bounds raw previews for oversized unknown events", async () => {
+  const tempDir = await mkdtemp(`${tmpdir()}/codex-log-viewer-large-unknown-`);
+  const fixture = join(tempDir, "large-unknown.jsonl");
+
+  try {
+    await mkdir(tempDir, { recursive: true });
+    await writeFile(
+      fixture,
+      `${JSON.stringify({
+        timestamp: "2026-04-28T10:00:00.000Z",
+        type: "event_msg",
+        payload: {
+          type: "future_payload",
+          value: "x".repeat(10_000)
+        }
+      })}\n`,
+      "utf8"
+    );
+
+    const parsed = await parseCodexLogFile(fixture);
+    const unknown = parsed.unknownEvents[0];
+
+    assert.equal(parsed.unknownEvents.length, 1);
+    assert.equal(unknown?.rawTruncated, true);
+    assert.deepEqual(unknown?.raw.payload.value, {
+      truncated: true,
+      type: "string",
+      length: 10_000
+    });
+    assert.equal(JSON.stringify(parsed).includes("x".repeat(1_000)), false);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
 });
 
 test("parseCodexLogFile extracts visual review comments instead of generated image captions", async () => {

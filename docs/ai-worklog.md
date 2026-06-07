@@ -2,6 +2,84 @@
 
 Sanitized audit trail of AI-assisted work on this project.
 
+## 2026-06-07 - Align Web Demo With Native Overview
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> The web simulation you created does not match the user interface of the real app
+
+### Interpreted Intent
+
+The user wanted the static web demo to visually match the native macOS app Overview instead of presenting a chart-heavy simulation that drifted away from the real product interface.
+
+### Response / Work Done
+
+- Changed the web demo to open on the Overview section by default.
+- Matched the native Overview order: workspace header, date range control, segmented tabs, metric tiles, Project Focus, then charts below.
+- Added the native-style Project Focus donut chart, top-category pill, category rows, session/example metadata, and show-all-category toggle.
+- Retuned the web demo to the dark macOS grouped-panel visual language shown in the real app screenshot.
+- Made the public simulation workspace-first so it starts at the `All Projects` view rather than showing a separate web sidebar.
+- Fixed narrow viewport layout so Project Focus stacks cleanly without horizontal overflow.
+
+### Privacy Notes
+
+No raw Codex logs, private prompts, private project names, screenshots, recordings, export payloads, credentials, secrets, or local session paths were added. The demo remains synthetic.
+
+### Verification
+
+- Ran `npm run build:web-demo`.
+- Ran `npm run check:web-demo-privacy`.
+- Ran `git diff --check`.
+- Verified the local web demo in the in-app browser at desktop and mobile widths, including no console errors and no horizontal overflow on mobile.
+
+## 2026-06-07 - Fix Large Cache Parser Failure
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> Launch my local app
+
+> Why am I getting this error code?
+
+> Please fix this issue -- You need to be able to handle a large cash
+
+### Interpreted Intent
+
+The user wanted the local macOS app launched, then wanted the launch-time parser `HTTP 500` diagnosed and fixed so very large local Codex log caches can be parsed without crashing.
+
+### Response / Work Done
+
+- Reproduced the local parser failure and traced it to parsed-cache serialization of a very large newly discovered session.
+- Identified image-generation log payloads as the immediate trigger: generated image result data was being preserved inside unknown-event raw payloads.
+- Added bounded unknown-event raw previews so future unsupported event shapes cannot duplicate huge binary or image payloads into the parsed cache.
+- Treated image-generation call and completion records as normalized tool events while omitting generated image data from normalized records.
+- Added parser and cache regression tests using sanitized synthetic data.
+- Updated parser schema notes to document bounded unknown-event previews and image-generation event handling.
+- Rebuilt and repackaged the native macOS app so the bundled local parser engine includes the fix.
+
+### Privacy Notes
+
+No raw Codex logs, private prompts, generated image data, session contents, screenshots, recordings, export payloads, credentials, secrets, or local session paths were added. Investigation used aggregate counts and sanitized event-shape metadata only.
+
+### Verification
+
+- Ran `wt bootstrap`.
+- Ran `npm run build -w @codex-log-viewer/parser`.
+- Ran `node --test packages/parser/test/parser.test.mjs packages/parser/test/cache.test.mjs`.
+- Ran a local aggregate-only corpus load against the app cache and confirmed it completed without `Invalid string length`.
+- Ran a direct `/api/projects` endpoint check against the app cache and confirmed `HTTP 200`.
+- Ran `npm test`.
+- Ran `npm run lint`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-ui`.
+- Ran `npm run smoke:mac-package` after cleaning up the earlier app instance.
+- Ran `npm run privacy:scan`.
+
 ## 2026-06-07 - Build Static Synthetic Web Demo
 
 Status: Completed

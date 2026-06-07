@@ -14,6 +14,8 @@
 {"timestamp":"2026-04-28T10:00:11.000Z","type":"response_item","payload":{"type":"custom_tool_call_output","call_id":"call-2"}}
 {"timestamp":"2026-04-28T10:00:12.000Z","type":"event_msg","payload":{"type":"exec_command_end","cwd":"/Users/example/projects/shape-app","exit_code":0,"duration":{"millis":42}}}
 {"timestamp":"2026-04-28T10:00:13.000Z","type":"event_msg","payload":{"type":"patch_apply_end","duration":{"millis":25}}}
+{"timestamp":"2026-04-28T10:00:13.250Z","type":"response_item","payload":{"type":"image_generation_call","id":"image-call-1","status":"completed","revised_prompt":"Sanitized prompt for a generated test image.","result":"redacted-base64-image-data"}}
+{"timestamp":"2026-04-28T10:00:13.500Z","type":"event_msg","payload":{"type":"image_generation_end","call_id":"image-call-1","status":"completed","revised_prompt":"Sanitized prompt for a generated test image.","result":"redacted-base64-image-data","saved_path":"/Users/example/Desktop/redacted.png"}}
 {"timestamp":"2026-04-28T10:00:14.000Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"shape-turn-1","completed_at":1777399214000,"duration_ms":12000,"time_to_first_token_ms":700,"last_agent_message":"Done."}}
 {"timestamp":"2026-04-28T10:00:15.000Z","type":"event_msg","payload":{"type":"future_payload","value":"preserved"}}
 {"timestamp":"2026-04-28T10:00:16.000Z","type":"future_top_level","payload":{"type":"future_payload","value":"preserved"}}
