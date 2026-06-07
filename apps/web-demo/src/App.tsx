@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   CalendarDays,
   CheckCircle2,
@@ -28,6 +28,7 @@ import type {
 
 type Section = "overview" | "browse" | "search" | "audit";
 type SearchRole = MessageRole | "all";
+type DateRange = "all" | "last7" | "last30";
 
 interface BrowseInteraction extends DemoInteraction {
   project: string;
@@ -37,6 +38,13 @@ interface BrowseInteraction extends DemoInteraction {
 
 const demoData = demoDataRaw as DemoData;
 const allProjectsName = "All Projects";
+const browseVisibleMessageCount = 10;
+const latestDemoTimestamp = latestInteractionTimestamp(demoData.sessionDetails);
+const dateRangeOptions: Array<{ id: DateRange; label: string }> = [
+  { id: "all", label: "All Time" },
+  { id: "last7", label: "Last 7 Days" },
+  { id: "last30", label: "Last 30 Days" }
+];
 const sections: Array<{ id: Section; label: string }> = [
   { id: "browse", label: "Browse" },
   { id: "overview", label: "Overview" },
@@ -51,17 +59,24 @@ export default function App() {
   const [query, setQuery] = useState("");
   const [role, setRole] = useState<SearchRole>("all");
   const [selectedSearchId, setSelectedSearchId] = useState<string>();
+  const [selectedDateRange, setSelectedDateRange] = useState<DateRange>("all");
+  const [isDateMenuOpen, setIsDateMenuOpen] = useState(false);
 
   const summary = demoData.summaries[selectedProject] ?? demoData.summaries[allProjectsName];
-  const browseInteractions = useMemo(
+  const dateRangeLabel = dateRangeOptions.find((option) => option.id === selectedDateRange)?.label ?? "All Time";
+  const projectInteractions = useMemo(
     () => interactionsForProject(demoData.sessionDetails, selectedProject),
     [selectedProject]
+  );
+  const browseInteractions = useMemo(
+    () => filterInteractionsByDateRange(projectInteractions, selectedDateRange, latestDemoTimestamp),
+    [projectInteractions, selectedDateRange]
   );
   const selectedInteraction = browseInteractions.find((item) => item.id === selectedInteractionId) ??
     browseInteractions[0];
   const searchResults = useMemo(
-    () => searchMessages(demoData.messages, selectedProject, query, role),
-    [selectedProject, query, role]
+    () => searchMessages(demoData.messages, selectedProject, query, role, selectedDateRange, latestDemoTimestamp),
+    [selectedDateRange, selectedProject, query, role]
   );
   const selectedSearchResult = searchResults.find((item) => item.id === selectedSearchId) ?? searchResults[0];
   const selectedTabId = `section-tab-${selectedSection}`;
@@ -151,10 +166,45 @@ export default function App() {
               <p>{activityRange(summary)} <span aria-hidden="true">·</span> Up to date.</p>
             </div>
 
-            <button className="date-range-button" type="button">
-              <CalendarDays size={15} aria-hidden="true" />
-              <span>All Time</span>
-            </button>
+            <div
+              className="date-range-control"
+              onBlur={(event) => {
+                const nextFocusedElement = event.relatedTarget;
+                if (!(nextFocusedElement instanceof Node) || !event.currentTarget.contains(nextFocusedElement)) {
+                  setIsDateMenuOpen(false);
+                }
+              }}
+            >
+              <button
+                className="date-range-button"
+                type="button"
+                aria-haspopup="menu"
+                aria-expanded={isDateMenuOpen}
+                onClick={() => setIsDateMenuOpen((current) => !current)}
+              >
+                <CalendarDays size={15} aria-hidden="true" />
+                <span>{dateRangeLabel}</span>
+              </button>
+              {isDateMenuOpen && (
+                <div className="date-range-menu" role="menu" aria-label="Date range">
+                  {dateRangeOptions.map((option) => (
+                    <button
+                      key={option.id}
+                      className={option.id === selectedDateRange ? "active" : ""}
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked={option.id === selectedDateRange}
+                      onClick={() => {
+                        setSelectedDateRange(option.id);
+                        setIsDateMenuOpen(false);
+                      }}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
 
             <div className="section-tabs" role="tablist" aria-label="Sections">
               {sections.map((section) => {
@@ -385,6 +435,34 @@ function Browse(props: {
   selectedInteraction?: BrowseInteraction;
   onSelect: (id: string) => void;
 }) {
+  const promptListRef = useRef<HTMLDivElement>(null);
+  const [browseRowHeight, setBrowseRowHeight] = useState(52);
+  const messageWindowSubtitle = props.interactions.length > browseVisibleMessageCount
+    ? `${formatNumber(props.interactions.length)} sent · ${browseVisibleMessageCount} at a time`
+    : `${formatNumber(props.interactions.length)} sent`;
+
+  useEffect(() => {
+    const promptList = promptListRef.current;
+    if (!promptList) {
+      return;
+    }
+
+    const updateRowHeight = () => {
+      const availableHeight = promptList.clientHeight;
+      const rowGapTotal = 4 * (browseVisibleMessageCount - 1);
+      const nextHeight = Math.max(
+        52,
+        Math.floor((availableHeight - rowGapTotal) / browseVisibleMessageCount)
+      );
+      setBrowseRowHeight(nextHeight);
+    };
+
+    updateRowHeight();
+    const resizeObserver = new ResizeObserver(updateRowHeight);
+    resizeObserver.observe(promptList);
+    return () => resizeObserver.disconnect();
+  }, []);
+
   return (
     <section className="browser-grid">
       <div className="list-panel">
@@ -392,7 +470,11 @@ function Browse(props: {
           <Send size={19} aria-hidden="true" />
           <h2>User Messages</h2>
         </div>
-        <div className="prompt-list">
+        <div
+          className="prompt-list"
+          ref={promptListRef}
+          style={{ "--browse-row-height": `${browseRowHeight}px` } as CSSProperties}
+        >
           {props.interactions.map((interaction) => (
             <button
               key={interaction.id}
@@ -402,15 +484,18 @@ function Browse(props: {
             >
               <span className="prompt-row-meta">
                 <PromptIntentBadge label={interaction.promptIntent} intentKey={interaction.promptIntentKey} />
-                <span>{interaction.project}</span>
-                <span>{formatDateTime(interaction.timestamp)}</span>
+                <span className="prompt-project" title={interaction.project}>
+                  <Folder size={12} aria-hidden="true" />
+                  <span>{interaction.project}</span>
+                </span>
+                <span title={formatDateTime(interaction.timestamp)}>{formatDateTime(interaction.timestamp)}</span>
                 <span>{interaction.model}</span>
               </span>
               <strong>{interaction.userMessage}</strong>
             </button>
           ))}
         </div>
-        <BrowserStatusBar title="User Messages" subtitle={`${formatNumber(props.interactions.length)} sent`} />
+        <BrowserStatusBar title="User Messages" subtitle={messageWindowSubtitle} />
       </div>
 
       <div className="detail-panel">
@@ -798,11 +883,17 @@ function searchMessages(
   messages: MessageSearchResult[],
   project: string,
   query: string,
-  role: SearchRole
+  role: SearchRole,
+  dateRange: DateRange,
+  latestTimestamp?: string
 ) {
   const normalizedQuery = query.trim().toLowerCase();
+  const cutoff = dateRangeCutoff(dateRange, latestTimestamp);
   return messages.filter((message) => {
     if (project !== allProjectsName && message.project !== project) {
+      return false;
+    }
+    if (cutoff && !isTimestampInRange(message.timestamp, cutoff)) {
       return false;
     }
     if (role !== "all" && message.role !== role) {
@@ -813,6 +904,47 @@ function searchMessages(
     }
     return `${message.content} ${message.snippet} ${message.project}`.toLowerCase().includes(normalizedQuery);
   });
+}
+
+function filterInteractionsByDateRange(
+  interactions: BrowseInteraction[],
+  dateRange: DateRange,
+  latestTimestamp?: string
+) {
+  const cutoff = dateRangeCutoff(dateRange, latestTimestamp);
+  if (!cutoff) {
+    return interactions;
+  }
+  return interactions.filter((interaction) => isTimestampInRange(interaction.timestamp, cutoff));
+}
+
+function latestInteractionTimestamp(sessionDetails: SessionDetail[]) {
+  return sessionDetails
+    .flatMap((session) => session.interactions.map((interaction) => interaction.timestamp).filter(Boolean))
+    .sort()
+    .at(-1);
+}
+
+function dateRangeCutoff(dateRange: DateRange, latestTimestamp?: string) {
+  if (dateRange === "all" || !latestTimestamp) {
+    return undefined;
+  }
+  const latestDate = new Date(latestTimestamp);
+  if (Number.isNaN(latestDate.getTime())) {
+    return undefined;
+  }
+  const days = dateRange === "last7" ? 7 : 30;
+  const cutoff = new Date(latestDate);
+  cutoff.setDate(cutoff.getDate() - days);
+  return cutoff;
+}
+
+function isTimestampInRange(timestamp: string | undefined, cutoff: Date) {
+  if (!timestamp) {
+    return false;
+  }
+  const date = new Date(timestamp);
+  return !Number.isNaN(date.getTime()) && date >= cutoff;
 }
 
 function interactionSubtitle(interaction: BrowseInteraction) {

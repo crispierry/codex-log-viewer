@@ -2,6 +2,88 @@
 
 Sanitized audit trail of AI-assisted work on this project.
 
+## 2026-06-07 - Fix PR 22 Version Check Failure
+
+Status: Completed
+Related commit/PR: PR #22
+
+### User Messages
+
+> the PR is failing again
+
+> Implement your fix
+
+### Interpreted Intent
+
+The user wanted the failing GitHub Actions check on PR #22 diagnosed and corrected so the web demo Browse layout PR can pass the repository verification policy.
+
+### Response / Work Done
+
+- Inspected PR #22 checks and confirmed the `verify` job failed on the required app-version check.
+- Updated the branch from `origin/main`.
+- Ran the PR version bump workflow to update app metadata from `0.3.0` to `0.4.0`.
+
+### Privacy Notes
+
+No raw Codex logs, private prompts, session contents, screenshots, recordings, export payloads, credentials, secrets, or local session paths were added.
+
+### Verification
+
+- Ran `wt bootstrap`.
+- Ran `node scripts/check-app-version.mjs --compare-ref origin/main --require-pr-minor`.
+- Ran `npm run typecheck -w @codex-log-viewer/web-demo`.
+- Ran `npm run check:web-demo-privacy`.
+- Ran `npm run build:web-demo`.
+- Ran `git diff --check`.
+
+## 2026-06-07 - Limit Web Demo Browse Message Window
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> The web demo for the app has one major mistake. We should only show ten messages. Right now it's infinite and it's showing all the messages. We don't want to do that so when I click on Browse, you have an infinite page size. The page size should be finite and there should be a scroll bar to scroll through the messages
+
+> You're also missing the project column
+
+> Where is the Projects column?
+
+> Clicking here is not doing anything
+
+> The messages should symbolize the end of the app. Right now there is a dead space at the end so either let the messages go all the way to the bottom or move the bottom up
+
+> The messages should symbolize the end of the app. Right now there is a dead space at the end so either let the messages go all the way to the bottom or move the bottom up
+
+### Interpreted Intent
+
+The user wanted the static web demo Browse view to stop expanding the page with every message and instead show a finite ten-message window with an internal scrollbar, while preserving a visible Projects sidebar/column like the native app, making the date range control interactive, and removing the dead space by letting the message rows define the Browse panel height.
+
+### Response / Work Done
+
+- Capped the Browse message list presentation to a fixed ten-row viewport.
+- Kept all synthetic Browse messages available in the internal scrollable list.
+- Made the Browse page itself viewport-bounded so the document no longer grows with the message count.
+- Added a compact Browse row treatment and status text that reflects the ten-at-a-time message window.
+- Changed Browse rows to use distinct metadata columns for category, project, date/time, and model.
+- Added a folder icon and truncation behavior to keep the project column visible in compact rows.
+- Restored the Projects sidebar as a desktop column in the web demo shell.
+- Made the date range control open a menu and filter Browse/Search data for all time, last 7 days, or last 30 days.
+- Sized the Browse message rows dynamically so the ten-row message viewport fills the available message column height instead of leaving a large blank area.
+
+### Privacy Notes
+
+No raw Codex logs, private prompts, private paths, screenshots, recordings, export payloads, credentials, secrets, or local session content were added. The web demo remains synthetic.
+
+### Verification
+
+- Ran `wt bootstrap`.
+- Ran `npm run typecheck -w @codex-log-viewer/web-demo`.
+- Ran `npm run check:web-demo-privacy`.
+- Ran `npm run build:web-demo`.
+- Ran `git diff --check`.
+- Verified the local web demo preview in the in-app browser: the Projects sidebar displayed as a desktop column, Browse showed 10 fully visible message rows, the page itself did not overflow, the message list had scrollable overflow, the message rows filled the message column height, the date menu opened and filtered Browse data, and there were no browser console errors.
+
 ## 2026-06-07 - Fix PR Version Check Failure
 
 Status: Completed
