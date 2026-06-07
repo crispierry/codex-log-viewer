@@ -238,7 +238,11 @@ button {
 }
 
 .workspace {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   min-width: 0;
+  height: 100vh;
+  overflow: hidden;
   background: var(--content-bg);
 }
 
@@ -371,7 +375,8 @@ button {
 }
 
 #section-panel {
-  min-height: calc(100vh - 73px);
+  min-height: 0;
+  overflow: auto;
 }
 
 .section-stack {
@@ -727,7 +732,7 @@ button {
   --browse-row-height: 52px;
   display: grid;
   grid-template-columns: minmax(260px, 380px) minmax(360px, 1fr);
-  height: calc(100vh - 73px);
+  height: 100%;
   min-height: 0;
   overflow: hidden;
 }
@@ -742,7 +747,11 @@ button {
 }
 
 .list-panel {
+  grid-template-rows: auto auto auto;
+  align-self: start;
+  overflow: hidden;
   border-right: 1px solid var(--sidebar-border);
+  border-bottom: 1px solid var(--sidebar-border);
 }
 
 .column-title {
@@ -1358,6 +1367,7 @@ button {
 
   .browser-grid {
     grid-template-columns: 1fr;
+    height: auto;
     min-height: 0;
   }
 
