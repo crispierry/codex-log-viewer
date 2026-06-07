@@ -2,6 +2,49 @@
 
 Sanitized audit trail of AI-assisted work on this project.
 
+## 2026-06-07 - Limit Web Demo Browse Message Window
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> The web demo for the app has one major mistake. We should only show ten messages. Right now it's infinite and it's showing all the messages. We don't want to do that so when I click on Browse, you have an infinite page size. The page size should be finite and there should be a scroll bar to scroll through the messages
+
+> You're also missing the project column
+
+> Where is the Projects column?
+
+> Clicking here is not doing anything
+
+### Interpreted Intent
+
+The user wanted the static web demo Browse view to stop expanding the page with every message and instead show a finite ten-message window with an internal scrollbar, while preserving a visible Projects sidebar/column like the native app and making the date range control interactive.
+
+### Response / Work Done
+
+- Capped the Browse message list presentation to a fixed ten-row viewport.
+- Kept all synthetic Browse messages available in the internal scrollable list.
+- Made the Browse page itself viewport-bounded so the document no longer grows with the message count.
+- Added a compact Browse row treatment and status text that reflects the ten-at-a-time message window.
+- Changed Browse rows to use distinct metadata columns for category, project, date/time, and model.
+- Added a folder icon and truncation behavior to keep the project column visible in compact rows.
+- Restored the Projects sidebar as a desktop column in the web demo shell.
+- Made the date range control open a menu and filter Browse/Search data for all time, last 7 days, or last 30 days.
+
+### Privacy Notes
+
+No raw Codex logs, private prompts, private paths, screenshots, recordings, export payloads, credentials, secrets, or local session content were added. The web demo remains synthetic.
+
+### Verification
+
+- Ran `wt bootstrap`.
+- Ran `npm run typecheck -w @codex-log-viewer/web-demo`.
+- Ran `npm run check:web-demo-privacy`.
+- Ran `npm run build:web-demo`.
+- Ran `git diff --check`.
+- Verified the local web demo preview in the in-app browser: the Projects sidebar displayed as a desktop column, Browse showed 10 fully visible message rows, the page itself did not overflow, the message list had scrollable overflow, the date menu opened and filtered Browse data, and there were no browser console errors.
+
 ## 2026-06-07 - Fix PR Version Check Failure
 
 Status: Completed
