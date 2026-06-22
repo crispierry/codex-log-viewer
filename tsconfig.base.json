@@ -6,11 +6,13 @@
     "strict": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
+    "types": ["node"],
     "resolveJsonModule": true,
     "skipLibCheck": true,
     "declaration": true,
     "sourceMap": true,
     "declarationMap": true,
+    "ignoreDeprecations": "6.0",
     "baseUrl": ".",
     "paths": {
       "@codex-log-viewer/parser": ["packages/parser/src/index.ts"],
