@@ -2,6 +2,47 @@
 
 Sanitized audit trail of AI-assisted work on this project.
 
+## 2026-06-24 - Fix Dependabot PR 25 TypeScript 6 CI Failure
+
+Status: Completed
+Related commit/PR: PR #25, follow-up fix PR TBD
+
+### User Messages
+
+> Automation: Daily GitHub Attention Check
+>
+> Use the connected GitHub account for Cris Pierry (`crispierry`) to check GitHub repositories, pull requests, failed pushes/checks, and related GitHub issues for items that need Cris's attention.
+
+### Interpreted Intent
+
+The automation needed the current GitHub attention surface checked, safe fixes applied where possible, and any remaining actionable items summarized for Cris.
+
+### Response / Work Done
+
+- Queried Cris's open PRs, review requests, assigned issues, and recent repository workflow state.
+- Identified `crispierry/codex-log-viewer` PR #25 as the only current blocking failure that could be fixed safely.
+- Inspected the failing GitHub Actions logs and confirmed TypeScript 6 rejected the shared `baseUrl` setting and stopped picking up Node builtin types implicitly.
+- Added `ignoreDeprecations: "6.0"` and shared Node types in `tsconfig.base.json` so the workspace builds under TypeScript 6.
+- Opened a follow-up PR from the repaired branch and then applied the required repository version bump when the `verify` check enforced the minor-version policy.
+- Prepared a follow-up fix branch from the Dependabot PR head for review.
+
+### Privacy Notes
+
+No raw Codex logs, private prompts, session contents, screenshots, recordings, export payloads, credentials, secrets, or unsanitized local session paths were added.
+
+### Verification
+
+- Ran `wt` to create and bootstrap an isolated worktree from the Dependabot branch.
+- Ran `python3 .../inspect_pr_checks.py --repo . --pr 25`.
+- Ran `npm run build:native-engine`.
+- Ran `npm run privacy:scan`.
+- Ran `npm test`.
+- Ran `npm run build`.
+- Ran `npm run build:mac`.
+- Ran `npm run package:mac`.
+- Ran `npm run version:pr`.
+- Ran `git diff --check`.
+
 ## 2026-06-24 - Fix PR 26 Version Check Failure
 
 Status: Completed
