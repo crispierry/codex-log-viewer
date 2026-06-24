@@ -23,6 +23,7 @@ The automation needed the current GitHub attention surface checked, safe fixes a
 - Identified `crispierry/codex-log-viewer` PR #25 as the only current blocking failure that could be fixed safely.
 - Inspected the failing GitHub Actions logs and confirmed TypeScript 6 rejected the shared `baseUrl` setting and stopped picking up Node builtin types implicitly.
 - Added `ignoreDeprecations: "6.0"` and shared Node types in `tsconfig.base.json` so the workspace builds under TypeScript 6.
+- Opened a follow-up PR from the repaired branch and then applied the required repository version bump when the `verify` check enforced the minor-version policy.
 - Prepared a follow-up fix branch from the Dependabot PR head for review.
 
 ### Privacy Notes
@@ -39,6 +40,7 @@ No raw Codex logs, private prompts, session contents, screenshots, recordings, e
 - Ran `npm run build`.
 - Ran `npm run build:mac`.
 - Ran `npm run package:mac`.
+- Ran `npm run version:pr`.
 - Ran `git diff --check`.
 
 ## 2026-06-24 - Fix PR 26 Version Check Failure
