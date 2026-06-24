@@ -99,6 +99,7 @@ final class AppModel: ObservableObject {
   @Published var auditReviewMarkdown = ""
   @Published var auditStatusMessage: String?
   @Published var isAuditLoading = false
+  @Published private var auditSavedTargetPath: String?
   @Published var evalsSummary: PromptIntentEvalMessageSummary?
   @Published var selectedEvalMessageID: PromptIntentEvalMessage.ID?
   @Published var evalCategoryKeyFilter: String?
@@ -400,6 +401,11 @@ final class AppModel: ObservableObject {
 
   var canApproveAudit: Bool {
     auditPreview != nil && !auditReviewMarkdown.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isAuditLoading
+  }
+
+  var canOpenAuditWorklog: Bool {
+    guard let auditPreview else { return false }
+    return auditPreview.existingMarkdown != nil || auditSavedTargetPath == auditPreview.targetPath
   }
 
   var dateRangeButtonTitle: String {
@@ -1550,6 +1556,7 @@ final class AppModel: ObservableObject {
         guard !Task.isCancelled, requestID == auditRequestID else { return }
         auditPreview = preview
         auditReviewMarkdown = preview.mergedMarkdown
+        auditSavedTargetPath = nil
         auditStatusMessage = auditStatusText(for: preview)
         isAuditLoading = false
       } catch is CancellationError {
@@ -1582,6 +1589,7 @@ final class AppModel: ObservableObject {
         auditStatusMessage = "Saving audit worklog."
         let result = try await api.writeAudit(repoPath: repoPath, targetPath: auditPreview.targetPath, markdown: markdown)
         guard !Task.isCancelled, requestID == auditRequestID else { return }
+        auditSavedTargetPath = result.targetPath
         auditStatusMessage = "Saved \(result.bytesWritten.formatted()) bytes to \(URL(fileURLWithPath: result.targetPath).lastPathComponent)."
         isAuditLoading = false
       } catch is CancellationError {
@@ -1595,7 +1603,7 @@ final class AppModel: ObservableObject {
   }
 
   func openAuditWorklog() {
-    guard let auditPreview else { return }
+    guard let auditPreview, canOpenAuditWorklog else { return }
     NSWorkspace.shared.open(URL(fileURLWithPath: auditPreview.targetPath))
   }
 
@@ -1611,6 +1619,7 @@ final class AppModel: ObservableObject {
     auditPreview = nil
     auditReviewMarkdown = ""
     auditStatusMessage = nil
+    auditSavedTargetPath = nil
     isAuditLoading = false
   }
 
@@ -1635,7 +1644,7 @@ final class AppModel: ObservableObject {
       return "No new generated sections. Existing worklog is up to date for this selection."
     }
     let sectionText = preview.appendedSections == 1 ? "section" : "sections"
-    return "Ready to review \(preview.appendedSections.formatted()) new \(sectionText)."
+    return "Ready to review \(preview.appendedSections.formatted()) new \(sectionText). Save Worklog writes the file."
   }
 
   private func targetWorklogPath(for repoPath: String) -> String {
@@ -2759,12 +2768,54 @@ final class AppModel: ObservableObject {
     exportDirectoryPath = previousExportDirectoryPath
 
     let previousAuditRepoPath = auditRepoPathDraft
-    setAuditRepoPathDraft(FileManager.default.temporaryDirectory.appendingPathComponent("codex-log-viewer-audit-smoke").path)
+    let auditSmokeURL = FileManager.default.temporaryDirectory.appendingPathComponent("codex-log-viewer-audit-smoke-\(UUID().uuidString)")
+    defer {
+      auditRepoPathDraft = previousAuditRepoPath
+      clearAuditPreview()
+      try? FileManager.default.removeItem(at: auditSmokeURL)
+    }
+    setAuditRepoPathDraft(auditSmokeURL.path)
     guard canGenerateAudit else {
       throw AppSmokeError.unexpected("Manual Audit repository path entry did not enable preview generation.")
     }
-    auditRepoPathDraft = previousAuditRepoPath
-    clearAuditPreview()
+    let auditSmokePreview = try await api.auditPreview(
+      repoPath: auditSmokeURL.path,
+      project: AppConstants.allProjectsName,
+      filters: dateFilters,
+      includeResponses: true
+    )
+    auditPreview = auditSmokePreview
+    auditReviewMarkdown = auditSmokePreview.mergedMarkdown
+    auditSavedTargetPath = nil
+    let expectedAuditTarget = auditSmokeURL
+      .appendingPathComponent("docs")
+      .appendingPathComponent("ai-worklog.md")
+      .path
+    guard auditSmokePreview.targetPath == expectedAuditTarget else {
+      throw AppSmokeError.unexpected("The Audit preview target path did not match the selected repository.")
+    }
+    guard !FileManager.default.fileExists(atPath: auditSmokePreview.targetPath) else {
+      throw AppSmokeError.unexpected("The Audit preview unexpectedly created the worklog before approval.")
+    }
+    guard !canOpenAuditWorklog else {
+      throw AppSmokeError.unexpected("The Audit Open Worklog action enabled before a worklog file existed.")
+    }
+    let auditSmokeWrite = try await api.writeAudit(
+      repoPath: auditSmokeURL.path,
+      targetPath: auditSmokePreview.targetPath,
+      markdown: auditSmokePreview.mergedMarkdown
+    )
+    auditSavedTargetPath = auditSmokeWrite.targetPath
+    guard FileManager.default.fileExists(atPath: auditSmokePreview.targetPath) else {
+      throw AppSmokeError.unexpected("The Audit approval did not create the worklog file.")
+    }
+    let savedAuditMarkdown = try String(contentsOfFile: auditSmokePreview.targetPath, encoding: .utf8)
+    guard auditSmokeWrite.bytesWritten > 0,
+      savedAuditMarkdown.contains("# AI Worklog"),
+      canOpenAuditWorklog
+    else {
+      throw AppSmokeError.unexpected("The Audit approval did not save a readable worklog.")
+    }
   }
 
   private func currentFilters(refreshToken: Int = 0, rebuildCache: Bool = false) -> LogFilters {

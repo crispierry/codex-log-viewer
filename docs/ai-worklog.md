@@ -2,6 +2,45 @@
 
 Sanitized audit trail of AI-assisted work on this project.
 
+## 2026-06-24 - Clarify Native Audit Preview And Save Flow
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> I went to our app, selected the content campaign animation project
+>
+> then I tried to generate the audit file - but nothing was created
+>
+> has this regressed?
+
+### Interpreted Intent
+
+The user wanted to know whether the native Audit workflow had regressed after selecting a project and attempting to generate an audit worklog, because no file appeared.
+
+### Response / Work Done
+
+- Traced the native Audit flow through the Swift app and local server.
+- Confirmed the server write endpoint still creates `docs/ai-worklog.md` when the reviewed Markdown is saved.
+- Clarified the native Audit controls so the first action is labeled `Generate Preview` and the file-writing action is labeled `Save Worklog`.
+- Prevented `Open Worklog` from enabling after a preview when no saved file exists yet.
+- Added native smoke coverage that proves preview does not create the worklog, then save creates a readable worklog file.
+- Rebuilt, packaged, smoke-tested, and relaunched the native macOS app for review.
+
+### Privacy Notes
+
+No raw Codex logs, private prompts, session contents, screenshots, recordings, export payloads, credentials, secrets, or local session paths were added. Verification used sanitized fixtures and temporary smoke-test directories.
+
+### Verification
+
+- Ran `wt bootstrap`.
+- Ran `npm run build:mac`.
+- Ran `npm run package:mac`.
+- Ran `npm run smoke:mac-ui`; the first attempt left the packaged app and bundled engine running, then passed on a clean rerun after cleanup.
+- Ran `npm run smoke:mac-package`.
+- Ran `npm run check:mac-accessibility`.
+
 ## 2026-06-07 - Fix PR 22 Version Check Failure
 
 Status: Completed
