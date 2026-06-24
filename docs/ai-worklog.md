@@ -2,6 +2,37 @@
 
 Sanitized audit trail of AI-assisted work on this project.
 
+## 2026-06-24 - Fix PR 26 Version Check Failure
+
+Status: Completed
+Related commit/PR: PR #26
+
+### User Messages
+
+> github is failing
+
+> do it
+
+### Interpreted Intent
+
+The user wanted the failing GitHub Actions check on PR #26 diagnosed and fixed.
+
+### Response / Work Done
+
+- Inspected PR #26 checks and confirmed the `verify` job failed on the required app-version check.
+- Ran the PR version bump workflow to update app metadata from `0.4.0` to `0.5.0`.
+
+### Privacy Notes
+
+No raw Codex logs, private prompts, session contents, screenshots, recordings, export payloads, credentials, secrets, or local session paths were added.
+
+### Verification
+
+- Ran `npm run version:pr`.
+- Ran `node scripts/check-app-version.mjs --compare-ref origin/main --require-pr-minor`.
+- Ran `npm run version:check`.
+- Ran `git diff --check`.
+
 ## 2026-06-24 - Clarify Native Audit Preview And Save Flow
 
 Status: Completed
