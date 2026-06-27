@@ -2,6 +2,38 @@
 
 Sanitized audit trail of AI-assisted work on this project.
 
+## 2026-06-27 - Exempt Workflow-Only PRs From App Version Gate
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> Automation: Daily GitHub Attention Check
+>
+> Use the connected GitHub account for Cris Pierry (`crispierry`) to check GitHub repositories, pull requests, failed pushes/checks, and related GitHub issues for items that need Cris's attention.
+
+### Interpreted Intent
+
+The user wanted actionable GitHub attention triaged and, where safe, fixed directly before reporting anything back.
+
+### Response / Work Done
+
+- Inspected open GitHub work and identified `crispierry/codex-log-viewer#24` as the only current failing PR that needed action.
+- Confirmed the failure came from the PR app-version gate, even though the Dependabot change only updated GitHub workflow files.
+- Updated the app-version check script so workflow-only pull requests skip the required minor-version bump.
+- Ran the repository PR version bump workflow for the fix branch so the policy change itself still satisfies the normal release guard.
+
+### Privacy Notes
+
+No raw Codex logs, private prompts, session contents, screenshots, recordings, export payloads, credentials, secrets, or unsanitized local session paths were added.
+
+### Verification
+
+- Ran `node scripts/check-app-version.mjs --compare-ref origin/main --require-pr-minor`.
+- Verified the original failing PR diff against `origin/main` contains only `.github/workflows/ci.yml` and `.github/workflows/release.yml`.
+- Ran `git diff --check`.
+
 ## 2026-06-24 - Fix PR 26 Version Check Failure
 
 Status: Completed
