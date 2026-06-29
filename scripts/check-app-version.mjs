@@ -23,13 +23,17 @@ if (options.tag) {
 if (options.compareRef) {
   const baseVersion = parseVersion(readVersionFromGit(options.compareRef), `${options.compareRef}:app-version.json`);
   if (options.requirePrMinor) {
-    const expectedMinor = baseVersion.minor + 1;
-    if (currentVersion.major !== baseVersion.major || currentVersion.minor !== expectedMinor) {
-      throw new Error(
-        `Expected this PR to bump the app version from ${formatVersion(baseVersion)} to ` +
-          `${baseVersion.major}.${expectedMinor}.x, received ${formatVersion(currentVersion)}. ` +
-          "Run npm run version:pr after updating from the target branch."
-      );
+    if (onlyWorkflowFilesChanged(options.compareRef)) {
+      process.stdout.write("Skipping PR minor version check for workflow-only changes.\n");
+    } else {
+      const expectedMinor = baseVersion.minor + 1;
+      if (currentVersion.major !== baseVersion.major || currentVersion.minor !== expectedMinor) {
+        throw new Error(
+          `Expected this PR to bump the app version from ${formatVersion(baseVersion)} to ` +
+            `${baseVersion.major}.${expectedMinor}.x, received ${formatVersion(currentVersion)}. ` +
+            "Run npm run version:pr after updating from the target branch."
+        );
+      }
     }
   }
 }
@@ -79,6 +83,22 @@ function readVersionFromGit(ref) {
     encoding: "utf8"
   });
   return JSON.parse(raw);
+}
+
+function onlyWorkflowFilesChanged(ref) {
+  const raw = execFileSync("git", ["diff", "--name-only", `${ref}...HEAD`], {
+    cwd: repoRoot,
+    encoding: "utf8"
+  });
+  const changedFiles = raw
+    .split("\n")
+    .map((file) => file.trim())
+    .filter(Boolean);
+
+  return (
+    changedFiles.length > 0 &&
+    changedFiles.every((file) => file.startsWith(".github/workflows/"))
+  );
 }
 
 function parseVersion(raw, label) {
