@@ -34,6 +34,42 @@ No raw Codex logs, private session content, secrets, or unsanitized local paths 
 - Ran `node scripts/check-app-version.mjs --compare-ref origin/main --require-pr-minor`.
 - Ran `git diff --check`.
 
+## 2026-06-30 - Fix Workflow-Only PR Detection On Merge Refs
+
+Status: Completed
+Related commit/PR: TBD
+
+### User Messages
+
+> Automation: Daily GitHub Attention Check
+>
+> Use the connected GitHub account for Cris Pierry (`crispierry`) to check GitHub repositories, pull requests, failed pushes/checks, and related GitHub issues for items that need Cris's attention.
+
+### Interpreted Intent
+
+The automation needed current GitHub blockers triaged, safe fixes applied directly, and only remaining owner actions escalated.
+
+### Response / Work Done
+
+- Identified `crispierry/codex-log-viewer#24` as the only open PR that still needed owner attention.
+- Confirmed the failing `verify` job was caused by the app-version gate reading changed files from GitHub's synthetic PR merge commit instead of the PR head.
+- Updated the version-check script so workflow-only pull requests are detected against the PR head when CI runs on a merge ref.
+- Re-ran the repository PR version workflow after `origin/main` advanced so the fix branch moved from `0.8.0` to `0.9.0` and satisfied the repository policy.
+- Prepared a follow-up fix branch so Cris can merge the policy repair before revisiting the Dependabot PR.
+
+### Privacy Notes
+
+No raw Codex logs, private prompts, session contents, screenshots, recordings, export payloads, credentials, secrets, or unsanitized local session paths were added.
+
+### Verification
+
+- Ran `wt bootstrap`.
+- Ran `git diff --name-only origin/main...pr-24`.
+- Ran `git diff --name-only origin/main...pr-24-merge`.
+- Ran `node scripts/check-app-version.mjs --compare-ref origin/main --require-pr-minor` from the synthetic merge-ref checkout after the patch.
+- Ran `npm run version:pr`.
+- Ran `node scripts/check-app-version.mjs --compare-ref origin/main --require-pr-minor`.
+
 ## 2026-06-27 - Exempt Workflow-Only PRs From App Version Gate
 
 Status: Completed
