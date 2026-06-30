@@ -59,7 +59,7 @@
     "cli": "npm run build -w @codex-log-viewer/parser && npm run build -w @codex-log-viewer/analytics && npm run build -w @codex-log-viewer/cli && node apps/cli/dist/index.js"
   },
   "devDependencies": {
-    "@types/node": "^24.0.0",
+    "@types/node": "^26.0.1",
     "typescript": "^6.0.3"
   }
 }
