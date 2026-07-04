@@ -3387,3 +3387,35 @@ No raw local logs, private session content, secrets, or private data were added.
 - Ran `npm run package:mac`.
 - Ran `npm run smoke:mac-package`.
 - Ran `npm run smoke:mac-ui`.
+
+## 2026-07-04 Dependabot PR #30 version bump
+
+### User Prompt
+
+> Automation: Daily GitHub Attention Check
+>
+> Use the connected GitHub account for Cris Pierry (`crispierry`) to check GitHub repositories, pull requests, failed pushes/checks, and related GitHub issues for items that need Cris's attention.
+>
+> Before asking Cris for help, attempt to fix every actionable item that can be handled safely.
+
+### Interpreted Intent
+
+The automation found a current failing Dependabot pull request and wanted the smallest safe fix applied before escalating anything to Cris.
+
+### Response / Work Done
+
+- Inspected the failing `verify` GitHub Actions job for Dependabot PR #30.
+- Confirmed the failure was the required PR app-version bump against `origin/main`.
+- Ran `npm run version:pr` on the PR branch so the branch version advances from `0.8.0` to `0.9.0`.
+
+### Privacy Notes
+
+No raw local logs, secrets, or private session content were added. The work used sanitized repository files and GitHub workflow output only.
+
+### Verification
+
+- Ran `node scripts/check-app-version.mjs --compare-ref origin/main --require-pr-minor`.
+- Ran `npm run privacy:scan`.
+- Ran `npm run lint`.
+- Ran `npm test`.
+- Ran `npm run build`.
