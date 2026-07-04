@@ -130,6 +130,11 @@ function waitForExit(process) {
 
 async function cleanupLaunchedApp() {
   if (child.exitCode !== null || child.signalCode !== null) {
+    if (await waitForProcessesGone(2_000)) {
+      return;
+    }
+
+    killLeakedProcesses();
     await waitForProcessesGone(2_000);
     return;
   }

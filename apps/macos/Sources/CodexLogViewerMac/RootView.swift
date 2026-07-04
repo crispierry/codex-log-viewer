@@ -1167,7 +1167,7 @@ struct AuditControlBar: View {
         Button {
           model.generateAuditPreview()
         } label: {
-          Label("Generate", systemImage: "wand.and.stars")
+          Label("Generate Preview", systemImage: "wand.and.stars")
         }
         .disabled(!model.canGenerateAudit)
         .accessibilityIdentifier("audit-generate-button")
@@ -1175,7 +1175,7 @@ struct AuditControlBar: View {
         Button {
           model.approveAuditMarkdown()
         } label: {
-          Label("Approve", systemImage: "checkmark.seal")
+          Label("Save Worklog", systemImage: "square.and.arrow.down")
         }
         .buttonStyle(.borderedProminent)
         .disabled(!model.canApproveAudit)
@@ -1217,7 +1217,8 @@ struct AuditPreviewHeader: View {
       } label: {
         Label("Open Worklog", systemImage: "arrow.up.forward.app")
       }
-      .disabled(model.auditPreview == nil)
+      .disabled(!model.canOpenAuditWorklog)
+      .help(model.canOpenAuditWorklog ? "Open saved worklog" : "Save the worklog before opening it")
       .accessibilityIdentifier("audit-open-worklog-button")
     }
     .padding(.horizontal, 18)
