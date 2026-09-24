@@ -15,9 +15,8 @@ import {
   Wand2,
   Wrench
 } from "lucide-react";
-import demoDataRaw from "./data/demo-data.generated.json";
+import { demoData } from "./data/demo-data";
 import type {
-  DemoData,
   DemoInteraction,
   MessageRole,
   MessageSearchResult,
@@ -36,7 +35,6 @@ interface BrowseInteraction extends DemoInteraction {
   sessionFirstSeen?: string;
 }
 
-const demoData = demoDataRaw as DemoData;
 const allProjectsName = "All Projects";
 const browseVisibleMessageCount = 10;
 const latestDemoTimestamp = latestInteractionTimestamp(demoData.sessionDetails);

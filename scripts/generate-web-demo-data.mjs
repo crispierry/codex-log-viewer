@@ -1,3 +1,4 @@
+import { gzipSync, gunzipSync } from "node:zlib";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve } from "node:path";
@@ -19,6 +20,7 @@ import {
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "..");
 const outputPath = resolve(repoRoot, "apps/web-demo/src/data/demo-data.generated.json");
+const compressedOutputPath = resolve(repoRoot, "apps/web-demo/public/demo-data.json.gz");
 const stableGeneratedAt = "2026-06-07T12:00:00.000Z";
 const generatedSourcePath = "generated/synthetic-web-demo";
 const args = new Set(process.argv.slice(2));
@@ -276,15 +278,24 @@ try {
 
   if (checkOnly) {
     const current = await readFile(outputPath, "utf8");
+    const compressed = await readFile(compressedOutputPath).catch((error) => {
+      if (error.code === "ENOENT") return null;
+      throw error;
+    });
+    if (compressed && gunzipSync(compressed).toString("utf8") !== JSON.stringify(data)) {
+      throw new Error("Compressed demo data is stale. Run npm run demo:data.");
+    }
     if (current !== body) {
       process.stderr.write(`${relative(repoRoot, outputPath)} is out of date. Run npm run demo:data.\n`);
       process.exitCode = 1;
     } else {
-      process.stdout.write("Web demo data is up to date.\n");
+      process.stdout.write(compressed ? "Web demo data and compressed artifact are up to date.\n" : "Web demo data is up to date; build:web-demo generates the compressed artifact.\n");
     }
   } else {
     await mkdir(dirname(outputPath), { recursive: true });
     await writeFile(outputPath, body, "utf8");
+    await mkdir(dirname(compressedOutputPath), { recursive: true });
+    await writeFile(compressedOutputPath, gzipSync(JSON.stringify(data), { level: 9 }));
     process.stdout.write(`Wrote ${relative(repoRoot, outputPath)} from generated synthetic profiles.\n`);
   }
 } finally {

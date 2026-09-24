@@ -3387,3 +3387,19 @@ No raw local logs, private session content, secrets, or private data were added.
 - Ran `npm run package:mac`.
 - Ran `npm run smoke:mac-package`.
 - Ran `npm run smoke:mac-ui`.
+
+## 2026-09-23 — Website artifact capacity
+
+User instructions: “Let's do a complete code review of the website.
+- Make sure the architecture is solid.
+- Make sure it's maintainable.
+- Make sure it's performant.
+- Identify any areas that we need to work on.” Follow-up: “Fix all these issues. Do a code review, commit, and push”
+
+The website review found its project-app asset directory close to its standing
+budget. The web demo embedded a large repetitive synthetic dataset in JavaScript.
+Codex moved the exact data to a generated gzip asset, added an immediate loading
+shell and controlled failure message, and retained the existing UI and dataset.
+Verification: source typecheck, demo build, privacy scan, exact decompression
+comparison, and Chromium/WebKit smoke checks in the website artifact. This change
+affects only the static web demo; no native app rebuild or relaunch is applicable.

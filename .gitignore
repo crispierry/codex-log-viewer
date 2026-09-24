@@ -31,3 +31,6 @@ codex-logs/
 .turbo/
 .cache/
 *.tsbuildinfo
+
+# Generated compressed web-demo data (recreated by generate:data)
+apps/web-demo/public/demo-data.json.gz

@@ -1459,3 +1459,5 @@ button {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+.demo-loading { padding: 2rem; font-family: system-ui, sans-serif; }

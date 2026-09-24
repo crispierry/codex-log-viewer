@@ -42,3 +42,12 @@ That command builds this source demo and refreshes `public/project-apps/codex-lo
 ## Privacy
 
 The demo uses synthetic prompts and responses, with public-safe project names. Codex Log Viewer can use real aggregate proportions, but raw local messages, private source project names, local exports, and private screenshots must not be added to generated browser data.
+
+## Website artifact size
+
+The generator produces `public/demo-data.json.gz` alongside the canonical
+synthetic JSON. The browser decompresses this asset with `DecompressionStream`
+before importing App, which preserves all records while avoiding a multi-megabyte
+JavaScript data literal. The HTML provides a loading shell; a failed fetch or
+decode shows a reload message. `npm run check:web-demo-data` verifies that the
+compressed data round-trips exactly. The native macOS application is unaffected.

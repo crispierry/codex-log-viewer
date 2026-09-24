@@ -4,6 +4,8 @@ import { resolve } from "node:path";
 const files = [
   "apps/web-demo/src/data/demo-data.generated.json",
   "apps/web-demo/src/App.tsx",
+  "apps/web-demo/src/data/demo-data.ts",
+  "apps/web-demo/src/main.tsx",
   "apps/web-demo/src/styles.css",
   "apps/web-demo/src/types.ts",
   "apps/web-demo/vite.config.ts",
