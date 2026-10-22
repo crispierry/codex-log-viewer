@@ -14,7 +14,7 @@
   },
   "homepage": "https://github.com/crispierry/codex-log-viewer#readme",
   "engines": {
-    "node": ">=24"
+    "node": "24.22.1"
   },
   "packageManager": "npm@11.12.0",
   "workspaces": [

@@ -18,5 +18,8 @@
   "dependencies": {
     "@codex-log-viewer/analytics": "0.1.0",
     "@codex-log-viewer/parser": "0.1.0"
+  },
+  "engines": {
+    "node": "24.22.1"
   }
 }
