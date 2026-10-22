@@ -3406,3 +3406,5 @@ Safe verbatim excerpts from the work-directing request (unrelated private projec
 > Do not merge, deploy or change provider settings.
 >
 > Do not declare production patched merely because repository pins were updated. Continue independent projects when one is blocked.
+
+Hosted verification exposed the mandatory per-PR minor version rule. App metadata now follows the existing version policy at 0.9.1, and the version comparison and task-local native Swift build pass. A local explicit npm audit still reports four existing high advisories in the unchanged Vite dependency chain (vite, nanoid, postcss, source-map-js). The security gate remains blocking; no audit exception or application dependency upgrade was introduced.
