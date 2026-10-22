@@ -3393,7 +3393,7 @@ No raw local logs, private session content, secrets, or private data were added.
 
 Cris requested a cross-project security update, beginning with his website, preserving existing supported majors, dirty work, workers, release budgets and disabled auto-deploy settings; validate and open draft PRs without merging or deploying. The complete work-directing request is retained in the task security handoff; its local paths are redacted here under this worklog's privacy rule.
 
-For Codex Log Viewer, the existing Node 24 target is pinned to 24.22.1 in version/engine metadata and CI/release setup. Package dependencies are unchanged. Clean npm ci, parser/analytics/server/CLI tests and the lint alias (production TypeScript build) passed on macOS arm64 using Node 24.22.1. This changes Node execution requirements; it does not change the native UI, so the app was not relaunched. Packaged/vendor Node runtimes and existing running processes were not modified. Production/runtime adoption remains unverified until a separately authorized release.
+For Codex Log Viewer, the existing Node 24 target is pinned to 24.22.1 in version/engine metadata and CI/release setup. Dependencies include the compatible Vite-chain security fixes. Clean npm ci, parser/analytics/server/CLI tests and the lint alias (production TypeScript build) passed on macOS arm64 using Node 24.22.1. This changes Node execution requirements; it does not change the native UI, so the app was not relaunched. Packaged/vendor Node runtimes and existing running processes were not modified. Production/runtime adoption remains unverified until a separately authorized release.
 
 Safe verbatim excerpts from the work-directing request (unrelated private project details and local paths are omitted from this public worklog):
 
@@ -3407,4 +3407,4 @@ Safe verbatim excerpts from the work-directing request (unrelated private projec
 >
 > Do not declare production patched merely because repository pins were updated. Continue independent projects when one is blocked.
 
-Hosted verification exposed the mandatory per-PR minor version rule. App metadata now follows the existing version policy at 0.9.1, and the version comparison and task-local native Swift build pass. A local explicit npm audit still reports four existing high advisories in the unchanged Vite dependency chain (vite, nanoid, postcss, source-map-js). The security gate remains blocking; no audit exception or application dependency upgrade was introduced.
+Hosted verification exposed the mandatory per-PR minor version rule, now applied at 0.9.2. The scoped security continuation patches Vite 8.1.6 and its affected PostCSS/nanoid/source-map-js chain. Clean installation, explicit npm audit, unit suites, web-demo build and privacy checks pass; no audit exception was introduced. No installed app was changed or relaunched.
