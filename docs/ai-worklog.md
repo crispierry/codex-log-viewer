@@ -3408,3 +3408,10 @@ Safe verbatim excerpts from the work-directing request (unrelated private projec
 > Do not declare production patched merely because repository pins were updated. Continue independent projects when one is blocked.
 
 Hosted verification exposed the mandatory per-PR minor version rule, now applied at 0.9.2. The scoped security continuation patches Vite 8.1.6 and its affected PostCSS/nanoid/source-map-js chain. Clean installation, explicit npm audit, unit suites, web-demo build and privacy checks pass; no audit exception was introduced. No installed app was changed or relaunched.
+
+
+## 2026-10-31: Reconcile outstanding maintenance PRs
+
+Cris requested: "Can you take care of reconciling, merging, closing all of them?" The preceding review covered the outstanding Node maintenance, dependency and merge-ref repair PRs.
+
+The final candidate retains the Node/Vite/PostCSS security fixes, refreshes Node to 24.22.2, aligns React and React DOM, includes compatible icon/plugin and Actions maintenance, and preserves #29's merge-ref detection repair. TypeScript 7 and Node 26 typings are deferred; the supported Node 24 / TypeScript 6 contract remains in place. Original branches and closed PR discussions preserve their unique proposals. Validation and exact candidate results are recorded in PR #38. No release tag or installed-application replacement is requested by this source integration.

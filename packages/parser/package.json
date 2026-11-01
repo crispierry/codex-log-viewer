@@ -15,6 +15,6 @@
     "test": "npm run build && node --test test/*.test.mjs"
   },
   "engines": {
-    "node": "24.22.1"
+    "node": "24.22.2"
   }
 }
