@@ -1,6 +1,6 @@
 {
   "name": "codex-log-viewer",
-  "version": "0.8.0",
+  "version": "0.9.2",
   "private": true,
   "description": "Local-first native macOS app and parser for OpenAI Codex session logs.",
   "license": "MIT",
@@ -14,7 +14,7 @@
   },
   "homepage": "https://github.com/crispierry/codex-log-viewer#readme",
   "engines": {
-    "node": ">=24"
+    "node": "24.22.2"
   },
   "packageManager": "npm@11.12.0",
   "workspaces": [

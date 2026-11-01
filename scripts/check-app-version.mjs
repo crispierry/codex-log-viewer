@@ -86,7 +86,7 @@ function readVersionFromGit(ref) {
 }
 
 function onlyWorkflowFilesChanged(ref) {
-  const raw = execFileSync("git", ["diff", "--name-only", `${ref}...HEAD`], {
+  const raw = execFileSync("git", ["diff", "--name-only", `${ref}...${resolveDiffHead(ref)}`], {
     cwd: repoRoot,
     encoding: "utf8"
   });
@@ -99,6 +99,33 @@ function onlyWorkflowFilesChanged(ref) {
     changedFiles.length > 0 &&
     changedFiles.every((file) => file.startsWith(".github/workflows/"))
   );
+}
+
+function resolveDiffHead(ref) {
+  const parents = execFileSync("git", ["rev-list", "--parents", "-n", "1", "HEAD"], {
+    cwd: repoRoot,
+    encoding: "utf8"
+  })
+    .trim()
+    .split(/\s+/);
+
+  if (parents.length === 3 && isAncestor(ref, parents[1])) {
+    return parents[2];
+  }
+
+  return "HEAD";
+}
+
+function isAncestor(ancestorRef, descendantRef) {
+  try {
+    execFileSync("git", ["merge-base", "--is-ancestor", ancestorRef, descendantRef], {
+      cwd: repoRoot,
+      stdio: "ignore"
+    });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function parseVersion(raw, label) {

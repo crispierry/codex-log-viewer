@@ -12,12 +12,12 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version: 24.22.2
           cache: npm
       - run: npm ci
       - name: Verify app version bump
@@ -31,10 +31,10 @@ jobs:
   macos-app:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version: 24.22.2
           cache: npm
       - run: npm ci
       - run: npm run build:native-engine

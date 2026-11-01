@@ -3387,3 +3387,31 @@ No raw local logs, private session content, secrets, or private data were added.
 - Ran `npm run package:mac`.
 - Ran `npm run smoke:mac-package`.
 - Ran `npm run smoke:mac-ui`.
+
+
+## 2026-10-21: October Node.js security maintenance
+
+Cris requested a cross-project security update, beginning with his website, preserving existing supported majors, dirty work, workers, release budgets and disabled auto-deploy settings; validate and open draft PRs without merging or deploying. The complete work-directing request is retained in the task security handoff; its local paths are redacted here under this worklog's privacy rule.
+
+For Codex Log Viewer, the existing Node 24 target is pinned to 24.22.1 in version/engine metadata and CI/release setup. Dependencies include the compatible Vite-chain security fixes. Clean npm ci, parser/analytics/server/CLI tests and the lint alias (production TypeScript build) passed on macOS arm64 using Node 24.22.1. This changes Node execution requirements; it does not change the native UI, so the app was not relaunched. Packaged/vendor Node runtimes and existing running processes were not modified. Production/runtime adoption remains unverified until a separately authorized release.
+
+Safe verbatim excerpts from the work-directing request (unrelated private project details and local paths are omitted from this public worklog):
+
+> There is a critical Node.js security update. We need to go through all my projects and update their deployed versions
+>
+> Prefer the latest patched stable release within each project’s existing supported major. Do not move everything to Node 26.
+>
+> Never manually replace Node bundled inside ChatGPT, Codex or another application; identify the necessary vendor update instead.
+>
+> Do not merge, deploy or change provider settings.
+>
+> Do not declare production patched merely because repository pins were updated. Continue independent projects when one is blocked.
+
+Hosted verification exposed the mandatory per-PR minor version rule, now applied at 0.9.2. The scoped security continuation patches Vite 8.1.6 and its affected PostCSS/nanoid/source-map-js chain. Clean installation, explicit npm audit, unit suites, web-demo build and privacy checks pass; no audit exception was introduced. No installed app was changed or relaunched.
+
+
+## 2026-10-31: Reconcile outstanding maintenance PRs
+
+Cris requested: "Can you take care of reconciling, merging, closing all of them?" The preceding review covered the outstanding Node maintenance, dependency and merge-ref repair PRs.
+
+The final candidate retains the Node/Vite/PostCSS security fixes, refreshes Node to 24.22.2, aligns React and React DOM, includes compatible icon/plugin and Actions maintenance, and preserves #29's merge-ref detection repair. TypeScript 7 and Node 26 typings are deferred; the supported Node 24 / TypeScript 6 contract remains in place. Original branches and closed PR discussions preserve their unique proposals. Validation and exact candidate results are recorded in PR #38. No release tag or installed-application replacement is requested by this source integration.
