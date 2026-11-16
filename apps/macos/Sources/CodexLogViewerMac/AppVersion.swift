@@ -3,9 +3,9 @@
 
 enum AppVersion {
   static let major = 0
-  static let minor = 9
-  static let patch = 2
-  static let marketingVersion = "0.9.2"
-  static let bundleVersion = "0.9.2"
-  static let displayVersion = "0.9.2"
+  static let minor = 10
+  static let patch = 0
+  static let marketingVersion = "0.10.0"
+  static let bundleVersion = "0.10.0"
+  static let displayVersion = "0.10.0"
 }
